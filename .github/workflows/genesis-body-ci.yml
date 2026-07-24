@@ -54,6 +54,20 @@ jobs:
       - name: Build debug APK and instrumentation tests
         run: ./gradlew --no-daemon --stacktrace --console=plain :app:assembleDebug :app:assembleDebugAndroidTest
 
+      - name: Confirm release signing fails closed without material
+        shell: bash
+        run: |
+          set +e
+          ./gradlew --no-daemon --stacktrace --console=plain \
+            :app:validateReleaseSigning > release-signing-missing.log 2>&1
+          status=$?
+          tail -n 120 release-signing-missing.log
+          if [[ "$status" -eq 0 ]]; then
+            echo "Release signing validation unexpectedly accepted missing material." >&2
+            exit 1
+          fi
+          grep -q "Missing release signing inputs" release-signing-missing.log
+
       - name: Install emulator and managed-device system images
         shell: bash
         run: |
@@ -62,14 +76,57 @@ jobs:
           test -x "$sdkmanager_path"
           yes | "$sdkmanager_path" --licenses > sdk-licenses.log 2>&1 || true
           "$sdkmanager_path" --install \
+            "build-tools;35.0.0" \
             "platform-tools" \
             "emulator" \
             "system-images;android-30;aosp_atd;x86" \
             "system-images;android-35;default;x86_64" > sdk-install.log 2>&1
+          test -x "$ANDROID_HOME/build-tools/35.0.0/apksigner"
           test -x "$ANDROID_HOME/emulator/emulator"
           test -d "$ANDROID_HOME/system-images/android-30/aosp_atd/x86"
           test -d "$ANDROID_HOME/system-images/android-35/default/x86_64"
           "$ANDROID_HOME/emulator/emulator" -version > emulator-version.log 2>&1 || true
+
+      - name: Build and verify release with ephemeral CI certificate
+        shell: bash
+        env:
+          MORIMIL_RELEASE_STORE_FILE: ${{ runner.temp }}/morimil-ci-release.jks
+          MORIMIL_RELEASE_STORE_PASSWORD: morimil-ci-password-v1
+          MORIMIL_RELEASE_KEY_ALIAS: morimil-ci-release
+          MORIMIL_RELEASE_KEY_PASSWORD: morimil-ci-password-v1
+        run: |
+          set -euo pipefail
+          trap 'rm -f "$MORIMIL_RELEASE_STORE_FILE"' EXIT
+
+          keytool -genkeypair \
+            -keystore "$MORIMIL_RELEASE_STORE_FILE" \
+            -storepass "$MORIMIL_RELEASE_STORE_PASSWORD" \
+            -keypass "$MORIMIL_RELEASE_KEY_PASSWORD" \
+            -alias "$MORIMIL_RELEASE_KEY_ALIAS" \
+            -keyalg RSA \
+            -keysize 3072 \
+            -validity 2 \
+            -dname "CN=Morimil CI,O=Morimil CI,C=PE" \
+            -noprompt
+
+          set +e
+          ./gradlew --no-daemon --stacktrace --console=plain \
+            :app:assembleRelease > release-build.log 2>&1
+          status=$?
+          tail -n 180 release-build.log
+          set -e
+          [[ "$status" -eq 0 ]]
+
+          apk="app/build/outputs/apk/release/app-release.apk"
+          apksigner="$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          test -s "$apk"
+          "$apksigner" verify --verbose --print-certs "$apk" | tee release-signature.log
+          fingerprint="$(
+            sed -n 's/^Signer #1 certificate SHA-256 digest: //p' release-signature.log \
+              | head -n 1 \
+              | tr -d ':[:space:]'
+          )"
+          [[ "$fingerprint" =~ ^[0-9a-fA-F]{64}$ ]]
 
       - name: Enable KVM for managed devices
         shell: bash
@@ -98,6 +155,9 @@ jobs:
           if-no-files-found: ignore
           path: |
             unit-test.log
+            release-signing-missing.log
+            release-build.log
+            release-signature.log
             managed-device.log
             sdk-licenses.log
             sdk-install.log
