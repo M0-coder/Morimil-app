@@ -6,6 +6,7 @@ import com.morimil.app.ai.ReasoningConfigStore
 import com.morimil.app.core.memory.MemoryIntegrityCore
 import com.morimil.app.data.genesis.GenesisReader
 import com.morimil.app.data.local.MemoryOrganDatabase
+import com.morimil.app.data.local.MemoryOrganDatabaseEncryption
 import com.morimil.app.data.local.MorimilDatabase
 import com.morimil.app.data.repository.AgentInstanceLifecycleRepository
 import com.morimil.app.data.repository.AgentOrchestrationRepository
@@ -37,7 +38,7 @@ class MorimilAppContainer(context: Context) {
     }
 
     val organDatabase: MemoryOrganDatabase by lazy {
-        MemoryOrganDatabase.getInstance(appContext)
+        MemoryOrganDatabaseEncryption.open(appContext)
     }
 
     val memorySignatureEpochPolicy: SharedPreferencesMemorySignatureEpochPolicy by lazy {
