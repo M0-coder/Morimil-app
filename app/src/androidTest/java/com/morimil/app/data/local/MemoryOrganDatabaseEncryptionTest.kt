@@ -50,7 +50,7 @@ class MemoryOrganDatabaseEncryptionTest {
             )
             .build()
         plaintext.openHelper.writableDatabase.query(
-            "SELECT count(*) FROM sqlite_schema"
+            "SELECT count(*) FROM sqlite_master"
         ).use { cursor ->
             assertTrue(cursor.moveToFirst())
             assertTrue(cursor.getLong(0) > 0L)
@@ -69,7 +69,7 @@ class MemoryOrganDatabaseEncryptionTest {
                 assertEquals("ok", cursor.getString(0).lowercase())
             }
             encrypted.openHelper.writableDatabase.query(
-                "SELECT count(*) FROM sqlite_schema WHERE name = 'knowledge_capsules'"
+                "SELECT count(*) FROM sqlite_master WHERE name = 'knowledge_capsules'"
             ).use { cursor ->
                 assertTrue(cursor.moveToFirst())
                 assertEquals(1L, cursor.getLong(0))
@@ -126,7 +126,7 @@ class MemoryOrganDatabaseEncryptionTest {
                 null
             )
             database.rawQuery(
-                "SELECT count(*) FROM sqlite_schema",
+                "SELECT count(*) FROM sqlite_master",
                 emptyArray<String>()
             ).use { cursor -> cursor.moveToFirst() }
         } catch (_: Throwable) {
