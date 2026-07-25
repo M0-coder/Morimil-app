@@ -72,7 +72,11 @@ class MorimilAppContainer(context: Context) {
         GenesisUltraBirthPreparationCoordinator(
             database = memoryDatabase,
             bodyIdentityRootStore = genesisUltraBodyIdentityRootStore,
-            guardianTrustAnchorStore = genesisUltraGuardianTrustAnchorStore
+            guardianTrustAnchorStore = genesisUltraGuardianTrustAnchorStore,
+            beforeInspect = {
+                genesisUltraCommittedConsentRetirementCoordinator.retireIfCommitted()
+                Unit
+            }
         )
     }
 
