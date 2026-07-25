@@ -40,6 +40,7 @@ class GenesisUltraHostBirthConsentStoreTest {
     private lateinit var guardianStore: GenesisUltraAndroidGuardianTrustAnchorStore
     private lateinit var preparationCoordinator: GenesisUltraBirthPreparationCoordinator
     private lateinit var consentStore: GenesisUltraAndroidHostBirthConsentStore
+    private lateinit var verifiedSeedRelease: GenesisUltraVerifiedRelease
     private var clock: Instant = Instant.parse(CONSENTED_AT)
 
     private val context: Context
@@ -118,7 +119,7 @@ class GenesisUltraHostBirthConsentStoreTest {
         assertEquals(consent.consentDigest, reloaded.consentDigest)
         assertFalse(reloaded.birthCommitAuthorized)
 
-        val differentCandidate = constructedCandidate(0x12, 0x32)
+        val differentCandidate = constructedCandidate(0x12, 0x32, verifiedSeedRelease)
         val mismatch = runCatching {
             newConsentStore().loadForCandidate(differentCandidate, CONSENTED_AT)
         }.exceptionOrNull()
@@ -191,17 +192,15 @@ class GenesisUltraHostBirthConsentStoreTest {
         bodyStore.provisionBeforeBirth()
         val guardian = guardianMaterial()
         pinGuardian(guardian)
-        return constructedCandidate(instanceSeed, possessionSeed, verifiedRelease(guardian))
+        verifiedSeedRelease = verifiedRelease(guardian)
+        return constructedCandidate(instanceSeed, possessionSeed, verifiedSeedRelease)
     }
 
     private suspend fun constructedCandidate(
         instanceSeed: Int,
         possessionSeed: Int,
-        release: GenesisUltraVerifiedRelease? = null
+        release: GenesisUltraVerifiedRelease
     ): GenesisUltraConstructedBirthCandidate {
-        val resolvedRelease = release ?: guardianStore.loadExisting().let {
-            error("A distinct candidate requires the original verified release in this test")
-        }
         return GenesisUltraBirthCandidateConstructionCoordinator(
             preparationCoordinator = preparationCoordinator,
             bodyIdentityRootStore = bodyStore,
@@ -209,7 +208,7 @@ class GenesisUltraHostBirthConsentStoreTest {
             entropySource = entropySource(instanceSeed, possessionSeed)
         ).construct(
             GenesisUltraBirthCandidateConstructionRequest(
-                release = resolvedRelease,
+                release = release,
                 companionName = "Morimil",
                 bornAt = BORN_AT,
                 platformProfile = "android-kotlin"
