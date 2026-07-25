@@ -152,6 +152,11 @@ object HybridAuthorityPresentationStore {
         mutablePresentation.value = HybridAuthorityPresentationV0.unverified()
     }
 
+    @Deprecated("Use resetUnverified")
+    fun resetDisabled() {
+        resetUnverified()
+    }
+
     fun publish(
         finalizationStatus: TriMotorFinalizationStatus,
         authorityDecision: HybridAuthorityDecision?
