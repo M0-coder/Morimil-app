@@ -47,8 +47,8 @@ class FullChainDatabaseMigrationTest {
             )
             .build()
 
-        database.use { migratedDatabase ->
-            val migrated = migratedDatabase.openHelper.writableDatabase
+        try {
+            val migrated = database.openHelper.writableDatabase
             assertEquals(13, migrated.userVersion())
             assertTrue(
                 migrated.tableNames().containsAll(
@@ -81,6 +81,8 @@ class FullChainDatabaseMigrationTest {
                 0,
                 migrated.singleInt("SELECT COUNT(*) FROM genesis_ultra_birth_authorization")
             )
+        } finally {
+            database.close()
         }
     }
 
