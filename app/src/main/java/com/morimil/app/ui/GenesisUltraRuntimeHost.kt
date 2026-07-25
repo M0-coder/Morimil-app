@@ -46,7 +46,7 @@ internal class GenesisUltraRuntimeGateViewModel(
     val state: StateFlow<GenesisUltraRuntimeHostUiState> = _state.asStateFlow()
 
     init {
-        verify()
+        inspectGate()
     }
 
     fun verify() {
