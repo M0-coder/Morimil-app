@@ -135,7 +135,7 @@ internal data class GenesisUltraDurableBirthAuthorization(
         const val SCHEMA_VERSION = "genesis.atomic.birth.authorization.receipt.v0.1"
         private const val AUTHORIZATION_DOMAIN = "genesis.atomic.birth.authorization.v0.1"
         private val SHA256_REF = Regex("^sha256:[a-f0-9]{64}$")
-        private val BODY_ID = Regex("^body_[a-f0-9]{64}$")
+        private val BODY_ID = Regex("^body_[A-Za-z0-9_-]{11,123}$")
         private val FIELDS = setOf(
             "schema_version",
             "candidate_digest",
