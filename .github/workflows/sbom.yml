@@ -1,0 +1,44 @@
+name: SBOM
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sbom-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  generate:
+    name: Generate SPDX SBOM
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Generate SPDX JSON SBOM
+        uses: anchore/sbom-action@v0.24.0
+        with:
+          path: .
+          format: spdx-json
+          output-file: morimil-app.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: morimil-app-sbom-${{ github.sha }}
+          path: morimil-app.spdx.json
+          if-no-files-found: error
+          retention-days: 30
