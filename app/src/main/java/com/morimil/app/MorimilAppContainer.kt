@@ -7,6 +7,7 @@ import com.morimil.app.core.memory.MemoryIntegrityCore
 import com.morimil.app.data.genesis.GenesisReader
 import com.morimil.app.data.genesis.ultra.GenesisUltraAndroidBodyIdentityRootStore
 import com.morimil.app.data.genesis.ultra.GenesisUltraAndroidGuardianTrustAnchorStore
+import com.morimil.app.data.genesis.ultra.GenesisUltraBirthPreparationCoordinator
 import com.morimil.app.data.local.MemoryOrganDatabase
 import com.morimil.app.data.local.MemoryOrganDatabaseEncryption
 import com.morimil.app.data.local.MorimilDatabase
@@ -56,6 +57,15 @@ class MorimilAppContainer(context: Context) {
         GenesisUltraAndroidGuardianTrustAnchorStore(
             context = appContext,
             database = memoryDatabase
+        )
+    }
+
+    /** Inspection only: this coordinator cannot construct or commit a birth. */
+    internal val genesisUltraBirthPreparationCoordinator: GenesisUltraBirthPreparationCoordinator by lazy {
+        GenesisUltraBirthPreparationCoordinator(
+            database = memoryDatabase,
+            bodyIdentityRootStore = genesisUltraBodyIdentityRootStore,
+            guardianTrustAnchorStore = genesisUltraGuardianTrustAnchorStore
         )
     }
 
