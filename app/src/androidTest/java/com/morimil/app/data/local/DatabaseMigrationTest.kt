@@ -19,8 +19,9 @@ class DatabaseMigrationTest {
 
     @Test
     fun morimilDatabaseMigratesFrom7To13WithMemoryEventDefaults() {
-        helper.createDatabase(TEST_DATABASE, 7).use { database ->
-            database.execSQL(
+        val source = helper.createDatabase(TEST_DATABASE, 7)
+        try {
+            source.execSQL(
                 """
                 INSERT INTO memory_events (
                     id,
@@ -55,9 +56,11 @@ class DatabaseMigrationTest {
                 )
                 """.trimIndent()
             )
+        } finally {
+            source.close()
         }
 
-        helper.runMigrationsAndValidate(
+        val migrated = helper.runMigrationsAndValidate(
             TEST_DATABASE,
             13,
             true,
@@ -67,7 +70,8 @@ class DatabaseMigrationTest {
             MorimilDatabase.MIGRATION_10_11,
             MorimilDatabase.MIGRATION_11_12,
             MorimilDatabase.MIGRATION_12_13
-        ).use { migrated ->
+        )
+        try {
             assertEquals(13, migrated.userVersion())
             assertTrue(migrated.tableNames().contains("genesis_ultra_birth_authorization"))
             assertTrue(
@@ -90,6 +94,8 @@ class DatabaseMigrationTest {
                 assertEquals(70, cursor.getInt(3))
                 assertEquals(0, cursor.getInt(4))
             }
+        } finally {
+            migrated.close()
         }
     }
 
