@@ -13,6 +13,7 @@ import com.morimil.app.data.genesis.ultra.GenesisUltraAtomicBirthAuthorizationCo
 import com.morimil.app.data.genesis.ultra.GenesisUltraAtomicBirthExecutionCoordinator
 import com.morimil.app.data.genesis.ultra.GenesisUltraBirthCandidateConstructionCoordinator
 import com.morimil.app.data.genesis.ultra.GenesisUltraBirthPreparationCoordinator
+import com.morimil.app.data.genesis.ultra.GenesisUltraCommittedConsentRetirementCoordinator
 import com.morimil.app.data.genesis.ultra.GenesisUltraHostBirthConsentRecoveryCoordinator
 import com.morimil.app.data.local.MemoryOrganDatabase
 import com.morimil.app.data.local.MemoryOrganDatabaseEncryption
@@ -71,7 +72,11 @@ class MorimilAppContainer(context: Context) {
         GenesisUltraBirthPreparationCoordinator(
             database = memoryDatabase,
             bodyIdentityRootStore = genesisUltraBodyIdentityRootStore,
-            guardianTrustAnchorStore = genesisUltraGuardianTrustAnchorStore
+            guardianTrustAnchorStore = genesisUltraGuardianTrustAnchorStore,
+            beforeInspect = {
+                genesisUltraCommittedConsentRetirementCoordinator.retireIfCommitted()
+                Unit
+            }
         )
     }
 
@@ -100,6 +105,15 @@ class MorimilAppContainer(context: Context) {
                 context = appContext,
                 database = memoryDatabase,
                 consentStore = genesisUltraHostBirthConsentStore
+            )
+        }
+
+    /** Retires the dedicated pre-birth consent residue after an audited durable commit. */
+    internal val genesisUltraCommittedConsentRetirementCoordinator:
+        GenesisUltraCommittedConsentRetirementCoordinator by lazy {
+            GenesisUltraCommittedConsentRetirementCoordinator.production(
+                context = appContext,
+                database = memoryDatabase
             )
         }
 
