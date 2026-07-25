@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.morimil.app.MorimilAppContainer
+import com.morimil.app.data.genesis.ultra.GenesisUltraAtomicBirthExecutionCeremonyRequest
 import com.morimil.app.data.genesis.ultra.GenesisUltraAtomicBirthWitnessAuthorizationCoordinator
 import com.morimil.app.data.genesis.ultra.GenesisUltraAuthorizedAtomicBirth
 import com.morimil.app.data.genesis.ultra.GenesisUltraCompanionNamePolicy
@@ -24,10 +25,11 @@ import java.time.Instant
 import java.time.temporal.ChronoUnit
 
 /**
- * Pre-birth inspection, candidate preview, host consent and witness verification.
+ * Genesis Ultra onboarding through the final explicit atomic execution ceremony.
  *
- * The exact candidate and any issued authorization remain process-local. This
- * ViewModel cannot invoke atomic execution, persist authorization or open runtime.
+ * Candidate and authorization type-states remain process-local. After execution
+ * returns, the durable commit is authoritative and this ViewModel never offers a
+ * second execution, including when post-commit maintenance remains pending.
  */
 class GenesisUltraOnboardingViewModel(
     application: Application
@@ -48,6 +50,8 @@ class GenesisUltraOnboardingViewModel(
             context = application,
             authorizationCoordinator = container.genesisUltraAtomicBirthAuthorizationCoordinator
         )
+    private val executionCeremonyCoordinator =
+        container.genesisUltraAtomicBirthExecutionCeremonyCoordinator
 
     private var candidateSession: GenesisUltraSignedSeedCandidateSession? = null
     private var authorizedBirth: GenesisUltraAuthorizedAtomicBirth? = null
@@ -68,6 +72,11 @@ class GenesisUltraOnboardingViewModel(
     internal val atomicBirthAuthorization: StateFlow<GenesisUltraAtomicBirthAuthorizationUiState> =
         _atomicBirthAuthorization.asStateFlow()
 
+    private val _atomicBirthExecution =
+        MutableStateFlow(GenesisUltraAtomicBirthExecutionUiState())
+    internal val atomicBirthExecution: StateFlow<GenesisUltraAtomicBirthExecutionUiState> =
+        _atomicBirthExecution.asStateFlow()
+
     init {
         refresh()
     }
@@ -77,32 +86,13 @@ class GenesisUltraOnboardingViewModel(
             _hostBirthConsent.value.busy ||
             _hostBirthConsent.value.hasPersistedConsent ||
             _atomicBirthAuthorization.value.verifying ||
-            authorizedBirth != null
+            authorizedBirth != null ||
+            _atomicBirthExecution.value.executing ||
+            _atomicBirthExecution.value.birthCommitted
         ) return
         clearCandidateSession()
         viewModelScope.launch(Dispatchers.IO) {
-            _state.value = GenesisUltraOnboardingUiStateMapper.loading()
-            _hostBirthConsent.value = GenesisUltraHostBirthConsentUiState(checking = true)
-
-            _state.value = runCatching { preparationCoordinator.inspect() }
-                .fold(
-                    onSuccess = GenesisUltraOnboardingUiStateMapper::from,
-                    onFailure = GenesisUltraOnboardingUiStateMapper::failure
-                )
-
-            _hostBirthConsent.value = runCatching {
-                hostBirthConsentRecoveryCoordinator.inspect()
-            }.fold(
-                onSuccess = { persistedState ->
-                    GenesisUltraHostBirthConsentUiState(persistedState = persistedState)
-                },
-                onFailure = { error ->
-                    GenesisUltraHostBirthConsentUiState(
-                        persistedState = GenesisUltraHostBirthConsentState.INCONSISTENT,
-                        errorMessage = error.message?.take(220) ?: error::class.java.simpleName
-                    )
-                }
-            )
+            inspectPreBirthState()
         }
     }
 
@@ -116,7 +106,9 @@ class GenesisUltraOnboardingViewModel(
         if (
             _signedSeedPreview.value.importing ||
             _hostBirthConsent.value.busy ||
-            _atomicBirthAuthorization.value.verifying
+            _atomicBirthAuthorization.value.verifying ||
+            _atomicBirthExecution.value.executing ||
+            _atomicBirthExecution.value.birthCommitted
         ) return
         if (_hostBirthConsent.value.persistedState != GenesisUltraHostBirthConsentState.ABSENT) {
             _signedSeedPreview.value = GenesisUltraSignedSeedPreviewUiState(
@@ -170,7 +162,12 @@ class GenesisUltraOnboardingViewModel(
         presentedConfirmationCode: String,
         userPresenceConfirmed: Boolean
     ) {
-        if (_hostBirthConsent.value.busy || _atomicBirthAuthorization.value.verifying) return
+        if (
+            _hostBirthConsent.value.busy ||
+            _atomicBirthAuthorization.value.verifying ||
+            _atomicBirthExecution.value.executing ||
+            _atomicBirthExecution.value.birthCommitted
+        ) return
         val session = candidateSession
         if (session == null || !_signedSeedPreview.value.sessionAvailable) {
             _hostBirthConsent.value = _hostBirthConsent.value.copy(
@@ -241,7 +238,9 @@ class GenesisUltraOnboardingViewModel(
             _atomicBirthAuthorization.value.authorizedInMemory ||
             authorizedBirth != null ||
             _hostBirthConsent.value.busy ||
-            _signedSeedPreview.value.importing
+            _signedSeedPreview.value.importing ||
+            _atomicBirthExecution.value.executing ||
+            _atomicBirthExecution.value.birthCommitted
         ) return
 
         val session = candidateSession
@@ -302,8 +301,85 @@ class GenesisUltraOnboardingViewModel(
         }
     }
 
+    internal fun executeAuthorizedBirth(
+        presentedConfirmationCode: String,
+        userPresenceConfirmed: Boolean
+    ) {
+        if (
+            !_atomicBirthExecution.value.retryAllowed ||
+            _atomicBirthExecution.value.executing ||
+            _hostBirthConsent.value.busy ||
+            _atomicBirthAuthorization.value.verifying
+        ) return
+
+        val authorization = authorizedBirth
+        val authorizationSummary = _atomicBirthAuthorization.value.summary
+        val consentSummary = _hostBirthConsent.value.summary
+        if (
+            authorization == null ||
+            authorizationSummary == null ||
+            consentSummary == null ||
+            !_atomicBirthAuthorization.value.authorizedInMemory
+        ) {
+            _atomicBirthExecution.value = GenesisUltraAtomicBirthExecutionUiState(
+                errorMessage = "birth_execution_authorization_session_missing"
+            )
+            return
+        }
+        if (
+            authorization.authorizationDigest != authorizationSummary.authorizationDigest ||
+            authorization.candidateDigest != consentSummary.candidateDigest ||
+            authorization.consentDigest != consentSummary.consentDigest
+        ) {
+            _atomicBirthExecution.value = GenesisUltraAtomicBirthExecutionUiState(
+                errorMessage = "birth_execution_session_binding_mismatch"
+            )
+            return
+        }
+
+        _atomicBirthExecution.value = GenesisUltraAtomicBirthExecutionUiState(executing = true)
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                executionCeremonyCoordinator.execute(
+                    authorization = authorization,
+                    request = GenesisUltraAtomicBirthExecutionCeremonyRequest(
+                        presentedAuthorizationDigest = authorizationSummary.authorizationDigest,
+                        presentedCandidateDigest = authorizationSummary.candidateDigest,
+                        presentedConsentDigest = authorizationSummary.consentDigest,
+                        presentedConfirmationCode = presentedConfirmationCode,
+                        decision = GenesisUltraAtomicBirthExecutionCeremonyRequest.COMMIT_DECISION,
+                        confirmationMode =
+                            GenesisUltraAtomicBirthExecutionCeremonyRequest.INTERACTIVE_CONFIRMATION_MODE,
+                        confirmationPurpose =
+                            GenesisUltraAtomicBirthExecutionCeremonyRequest.EXECUTION_CONFIRMATION_PURPOSE,
+                        userPresenceConfirmed = userPresenceConfirmed
+                    )
+                )
+            }.fold(
+                onSuccess = { result ->
+                    check(result.birthCommitted) { "birth_execution_result_not_committed" }
+                    _atomicBirthExecution.value = GenesisUltraAtomicBirthExecutionUiState(
+                        committed = GenesisUltraAtomicBirthExecutionSummary.from(result)
+                    )
+                    discardPreBirthSessionAfterCommit()
+                    inspectDurableStateAfterCommit()
+                },
+                onFailure = { error ->
+                    _atomicBirthExecution.value = GenesisUltraAtomicBirthExecutionUiState(
+                        errorMessage = error.message?.take(220) ?: error::class.java.simpleName
+                    )
+                }
+            )
+        }
+    }
+
     internal fun revokeHostConsent() {
-        if (_hostBirthConsent.value.busy || _atomicBirthAuthorization.value.verifying) return
+        if (
+            _hostBirthConsent.value.busy ||
+            _atomicBirthAuthorization.value.verifying ||
+            _atomicBirthExecution.value.executing ||
+            _atomicBirthExecution.value.birthCommitted
+        ) return
         val current = _hostBirthConsent.value
         if (!current.hasPersistedConsent) return
 
@@ -342,7 +418,11 @@ class GenesisUltraOnboardingViewModel(
     }
 
     internal fun clearSignedSeedPreview() {
-        if (_hostBirthConsent.value.hasPersistedConsent) return
+        if (
+            _hostBirthConsent.value.hasPersistedConsent ||
+            _atomicBirthExecution.value.executing ||
+            _atomicBirthExecution.value.birthCommitted
+        ) return
         clearCandidateSession()
         _hostBirthConsent.value = GenesisUltraHostBirthConsentUiState(
             persistedState = GenesisUltraHostBirthConsentState.ABSENT
@@ -355,10 +435,57 @@ class GenesisUltraOnboardingViewModel(
         super.onCleared()
     }
 
+    private suspend fun inspectPreBirthState() {
+        _state.value = GenesisUltraOnboardingUiStateMapper.loading()
+        _hostBirthConsent.value = GenesisUltraHostBirthConsentUiState(checking = true)
+
+        _state.value = runCatching { preparationCoordinator.inspect() }
+            .fold(
+                onSuccess = GenesisUltraOnboardingUiStateMapper::from,
+                onFailure = GenesisUltraOnboardingUiStateMapper::failure
+            )
+
+        _hostBirthConsent.value = runCatching {
+            hostBirthConsentRecoveryCoordinator.inspect()
+        }.fold(
+            onSuccess = { persistedState ->
+                GenesisUltraHostBirthConsentUiState(persistedState = persistedState)
+            },
+            onFailure = { error ->
+                GenesisUltraHostBirthConsentUiState(
+                    persistedState = GenesisUltraHostBirthConsentState.INCONSISTENT,
+                    errorMessage = error.message?.take(220) ?: error::class.java.simpleName
+                )
+            }
+        )
+    }
+
+    private suspend fun inspectDurableStateAfterCommit() {
+        _state.value = GenesisUltraOnboardingUiStateMapper.loading()
+        _state.value = runCatching { preparationCoordinator.inspect() }
+            .fold(
+                onSuccess = GenesisUltraOnboardingUiStateMapper::from,
+                onFailure = GenesisUltraOnboardingUiStateMapper::failure
+            )
+    }
+
+    private fun discardPreBirthSessionAfterCommit() {
+        authorizedBirth = null
+        candidateSession = null
+        _signedSeedPreview.value = GenesisUltraSignedSeedPreviewUiState()
+        _atomicBirthAuthorization.value = GenesisUltraAtomicBirthAuthorizationUiState()
+        _hostBirthConsent.value = GenesisUltraHostBirthConsentUiState(
+            persistedState = GenesisUltraHostBirthConsentState.ABSENT
+        )
+    }
+
     private fun clearCandidateSession() {
         clearAtomicBirthAuthorization()
         candidateSession = null
         _signedSeedPreview.value = GenesisUltraSignedSeedPreviewUiState()
+        if (!_atomicBirthExecution.value.birthCommitted) {
+            _atomicBirthExecution.value = GenesisUltraAtomicBirthExecutionUiState()
+        }
         val consent = _hostBirthConsent.value
         if (!consent.hasPersistedConsent && !consent.busy) {
             _hostBirthConsent.value = consent.copy(candidateSessionAvailable = false)
@@ -368,6 +495,9 @@ class GenesisUltraOnboardingViewModel(
     private fun clearAtomicBirthAuthorization() {
         authorizedBirth = null
         _atomicBirthAuthorization.value = GenesisUltraAtomicBirthAuthorizationUiState()
+        if (!_atomicBirthExecution.value.birthCommitted) {
+            _atomicBirthExecution.value = GenesisUltraAtomicBirthExecutionUiState()
+        }
     }
 
     private fun scheduleConsentExpiry(consentId: String, expiresAt: String) {
@@ -376,6 +506,10 @@ class GenesisUltraOnboardingViewModel(
                 .toMillis()
                 .coerceAtLeast(0L)
             delay(waitMillis + EXPIRY_SETTLE_MILLIS)
+            if (
+                _atomicBirthExecution.value.executing ||
+                _atomicBirthExecution.value.birthCommitted
+            ) return@launch
             val current = _hostBirthConsent.value
             if (current.summary?.consentId != consentId) return@launch
             val persistedState = runCatching {
@@ -397,6 +531,10 @@ class GenesisUltraOnboardingViewModel(
                 .toMillis()
                 .coerceAtLeast(0L)
             delay(waitMillis + EXPIRY_SETTLE_MILLIS)
+            if (
+                _atomicBirthExecution.value.executing ||
+                _atomicBirthExecution.value.birthCommitted
+            ) return@launch
             val current = _atomicBirthAuthorization.value.summary ?: return@launch
             if (current.authorizationDigest != authorizationDigest) return@launch
             if (authorizedBirth?.authorizationDigest != authorizationDigest) return@launch
