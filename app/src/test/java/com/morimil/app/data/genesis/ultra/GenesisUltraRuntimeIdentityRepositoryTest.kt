@@ -49,8 +49,8 @@ class GenesisUltraRuntimeIdentityRepositoryTest {
         assertEquals(fixture.bundle.seedManifest.seedId, identity.seed.seedId)
         assertEquals(fixture.bundle.seedManifest.rootHash, identity.seed.rootHash)
         assertEquals("free birth doctrine", identity.doctrine.readUtf8Strict())
-        assertTrue(identity.policy.freedomCharter.readUtf8Strict().contains("freedom_charter"))
-        assertTrue(identity.policy.recoveryPolicy.readUtf8Strict().contains("recovery_policy"))
+        assertTrue(identity.policy.freedomCharter.readUtf8Strict().contains("\"charter_id\""))
+        assertTrue(identity.policy.recoveryPolicy.readUtf8Strict().contains("\"policy_id\""))
         assertEquals(
             GenesisUltraRuntimeAuthorizationState.COMMITTED,
             identity.authorization.state
