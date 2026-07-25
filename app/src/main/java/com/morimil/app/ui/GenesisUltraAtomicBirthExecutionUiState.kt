@@ -11,7 +11,7 @@ internal data class GenesisUltraAtomicBirthExecutionSummary(
     val authorizationDigest: String,
     val birthStateDigest: String,
     val receiptDigest: String,
-    val firstPostBirthEventHash: String,
+    val firstPostBirthEventHash: String?,
     val committedAt: String,
     val maintenanceError: String?
 ) {
@@ -30,13 +30,21 @@ internal data class GenesisUltraAtomicBirthExecutionSummary(
         require(SHA256_REF.matches(receiptDigest)) {
             "birth_execution_ui_receipt_digest_invalid"
         }
-        require(EVENT_HASH.matches(firstPostBirthEventHash)) {
+        require(firstPostBirthEventHash == null || EVENT_HASH.matches(firstPostBirthEventHash)) {
             "birth_execution_ui_event_hash_invalid"
         }
-        require(
-            (outcome == GenesisUltraAtomicBirthExecutionOutcome.COMMITTED_CLEAN) ==
-                (maintenanceError == null)
-        ) { "birth_execution_ui_maintenance_state_invalid" }
+        when (outcome) {
+            GenesisUltraAtomicBirthExecutionOutcome.COMMITTED_CLEAN -> {
+                require(maintenanceError == null && firstPostBirthEventHash != null) {
+                    "birth_execution_ui_clean_state_invalid"
+                }
+            }
+            GenesisUltraAtomicBirthExecutionOutcome.COMMITTED_MAINTENANCE_PENDING -> {
+                require(!maintenanceError.isNullOrBlank()) {
+                    "birth_execution_ui_pending_error_missing"
+                }
+            }
+        }
         require(birthCommitted) { "birth_execution_ui_not_committed" }
     }
 
