@@ -25,14 +25,12 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
+          import re
 
           path = Path('app/src/main/java/com/morimil/app/ui/MorimilViewModel.kt')
           source = path.read_text()
           marker = 'container.genesisUltraRuntimeStartupGate.requireReady()'
-          start_marker = '''        viewModelScope.launch(Dispatchers.IO) {
-              when (repository.readLocalBirthState()) {'''.replace('              when', '            when')
-          end_marker = '''        viewModelScope.launch {
-              recentMemoryEvents.collect {'''.replace('              recent', '            recent')
+          pattern = r'''        viewModelScope\.launch\(Dispatchers\.IO\) \{\n            when \(repository\.readLocalBirthState\(\)\) \{.*?\n        \}\n(?=        viewModelScope\.launch \{)'''
           replacement = '''        viewModelScope.launch(Dispatchers.IO) {
               runCatching {
                   container.genesisUltraRuntimeStartupGate.requireReady()
@@ -49,29 +47,16 @@ jobs:
                   )
               }
           }
-          '''.replace('              runCatching', '            runCatching') \
-             .replace('                  container', '                container') \
-             .replace('              }.onSuccess', '            }.onSuccess') \
-             .replace('                  reasoning', '                reasoning') \
-             .replace('                  refreshGenesis', '                refreshGenesis') \
-             .replace('              }.onFailure', '            }.onFailure') \
-             .replace('                  recordInternal', '                recordInternal') \
-             .replace('                      component', '                    component') \
-             .replace('                      message', '                    message') \
-             .replace('                          ?:', '                        ?:') \
-             .replace('                      failureCount', '                    failureCount') \
-             .replace('                      occurredAtMillis', '                    occurredAtMillis') \
-             .replace('                  )', '                )') \
-             .replace('              }\n          }', '            }\n        }')
+          '''
+          replacement = '\n'.join(
+              line[2:] if line.startswith('  ') else line
+              for line in replacement.splitlines()
+          ) + '\n'
 
           if marker not in source:
-              if source.count(start_marker) != 1:
-                  raise SystemExit(
-                      f'expected exactly one legacy startup start, found {source.count(start_marker)}'
-                  )
-              start = source.index(start_marker)
-              end = source.index(end_marker, start)
-              source = source[:start] + replacement + source[end:]
+              source, count = re.subn(pattern, replacement, source, count=1, flags=re.S)
+              if count != 1:
+                  raise SystemExit(f'expected exactly one legacy startup block, found {count}')
               source = source.replace(
                   'import com.morimil.app.MorimilAppContainer\n',
                   'import com.morimil.app.MorimilAppContainer\nimport com.morimil.app.genesisUltraRuntimeStartupGate\n',
