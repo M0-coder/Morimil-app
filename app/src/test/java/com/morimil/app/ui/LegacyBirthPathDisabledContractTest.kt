@@ -13,8 +13,8 @@ class LegacyBirthPathDisabledContractTest {
         ).readText()
 
         assertTrue(source.contains("legacy_local_birth_path_disabled_use_genesis_ultra"))
-        assertFalse(source.contains("installGenesisBundle("))
-        assertFalse(source.contains("birthLocalIdentity("))
+        assertFalse(source.contains("container.genesisReader.installGenesisBundle("))
+        assertFalse(source.contains("container.memoryRepository.birthLocalIdentity("))
         assertFalse(source.contains("GenesisUltraIntegrationGate.requireBirthReady"))
     }
 
