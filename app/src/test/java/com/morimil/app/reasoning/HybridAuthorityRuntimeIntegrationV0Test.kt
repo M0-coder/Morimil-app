@@ -62,7 +62,7 @@ class HybridAuthorityRuntimeIntegrationV0Test {
     }
 
     @Test
-    fun disabledFlagPreservesLegacyVerifierReplacement() = runBlocking {
+    fun disabledFlagPreservesVerifierReplacementButMarksReplyUnverified() = runBlocking {
         var candidateSeenByVerifier: String? = null
         val coordinator = IntrinsicTriMotorCoordinator(
             motors = listOf(
@@ -86,7 +86,7 @@ class HybridAuthorityRuntimeIntegrationV0Test {
         assertEquals("primary draft", candidateSeenByVerifier)
         assertNull(result.authorityDecision)
         assertEquals(
-            TriMotorFinalizationStatus.LEGACY_UNROUTED,
+            TriMotorFinalizationStatus.UNVERIFIED_DIRECT,
             result.finalizationStatus
         )
     }
