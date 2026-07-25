@@ -151,7 +151,7 @@ data class HybridAuthorityRuntimePolicy(
 )
 
 enum class TriMotorFinalizationStatus {
-    LEGACY_UNROUTED,
+    UNVERIFIED_DIRECT,
     ACCEPTED_BY_AUTHORITY,
     ABSTAINED_BY_AUTHORITY
 }

@@ -104,7 +104,7 @@ data class TriMotorReasoningResult(
     val verifierCandidate: String? = null,
     val authorityDecision: HybridAuthorityDecision? = null,
     val finalizationStatus: TriMotorFinalizationStatus =
-        TriMotorFinalizationStatus.LEGACY_UNROUTED
+        TriMotorFinalizationStatus.UNVERIFIED_DIRECT
 )
 
 class IntrinsicTriMotorCoordinator(
@@ -145,7 +145,7 @@ class IntrinsicTriMotorCoordinator(
         val findings = primary.response.findings.toMutableList()
         val primaryCandidate = primary.response.content
         var verifierCandidate: String? = null
-        var legacyReply = primaryCandidate
+        var unverifiedReply = primaryCandidate
 
         if (plan.verificationRequested) {
             val verifier = motorsByRole[ReasoningMotorRole.METACOGNITIVE]
@@ -162,7 +162,7 @@ class IntrinsicTriMotorCoordinator(
                 ).onSuccess { verification ->
                     verifierCandidate = verification.content.takeIf(String::isNotBlank)
                     if (!runtimePolicy.hybridAuthorityRuntimeEnabled && verifierCandidate != null) {
-                        legacyReply = requireNotNull(verifierCandidate)
+                        unverifiedReply = requireNotNull(verifierCandidate)
                     }
                     activated[ReasoningMotorRole.METACOGNITIVE] = verifier.capabilityVersion
                     findings += verification.findings
@@ -185,8 +185,8 @@ class IntrinsicTriMotorCoordinator(
         val finalizationStatus: TriMotorFinalizationStatus
         val finalReply: String
         if (authorityDecision == null) {
-            finalizationStatus = TriMotorFinalizationStatus.LEGACY_UNROUTED
-            finalReply = legacyReply
+            finalizationStatus = TriMotorFinalizationStatus.UNVERIFIED_DIRECT
+            finalReply = unverifiedReply
         } else if (authorityDecision.accepted) {
             finalizationStatus = TriMotorFinalizationStatus.ACCEPTED_BY_AUTHORITY
             finalReply = requireNotNull(authorityDecision.acceptedContent)

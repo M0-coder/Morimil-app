@@ -10,8 +10,8 @@ import java.io.File
 /**
  * Reads the bundled legacy Genesis material for migration analysis.
  *
- * The embedded bundle is non-authoritative and cannot be installed for a new
- * birth. A future Genesis Ultra adapter will replace the installation path.
+ * The embedded bundle is non-authoritative and read-only. It cannot be installed
+ * as a new birth source; canonical birth belongs exclusively to Genesis Ultra.
  */
 class GenesisReader(private val context: Context) {
     private val manifestVerifier = GenesisManifestVerifier(context)
@@ -33,35 +33,6 @@ class GenesisReader(private val context: Context) {
 
     suspend fun readPolicyText(policyRef: String): Result<String> = withContext(Dispatchers.IO) {
         runCatching { readBundledText(policyRef) }
-    }
-
-    suspend fun installGenesisBundle(): Result<GenesisInstalledBundle> = withContext(Dispatchers.IO) {
-        runCatching {
-            GenesisUltraIntegrationGate.requireBirthReady()
-
-            val verification = manifestVerifier.verify()
-            val manifest = JSONObject(readBundledText("genesis_manifest.json"))
-            val files = manifest.getJSONArray("files")
-            val stagingDir = File(context.filesDir, "genesis_staging")
-            val finalDir = File(context.filesDir, "genesis")
-
-            stagingDir.deleteRecursively()
-            require(stagingDir.mkdirs()) { "Could not create Genesis staging directory." }
-
-            copyBundledAsset("genesis_manifest.json", File(stagingDir, "genesis_manifest.json"))
-            repeat(files.length()) { index ->
-                val relativePath = files.getJSONObject(index).getString("path")
-                copyBundledAsset(relativePath, File(stagingDir, relativePath))
-            }
-
-            finalDir.deleteRecursively()
-            require(stagingDir.renameTo(finalDir)) { "Could not install Genesis bundle into private storage." }
-
-            GenesisInstalledBundle(
-                verification = verification,
-                installPath = finalDir.absolutePath
-            )
-        }
     }
 
     suspend fun clearInstalledGenesisBundle(): Result<Unit> = withContext(Dispatchers.IO) {
@@ -87,15 +58,6 @@ class GenesisReader(private val context: Context) {
             .open("$GENESIS_ROOT/$cleanRef")
             .bufferedReader()
             .use { it.readText() }
-    }
-
-    private fun copyBundledAsset(ref: String, target: File) {
-        val cleanRef = ref.trim().removePrefix("/")
-        require(!cleanRef.contains("..")) { "Genesis bundle ref cannot escape assets/genesis." }
-        target.parentFile?.mkdirs()
-        context.assets.open("$GENESIS_ROOT/$cleanRef").use { input ->
-            target.outputStream().use { output -> input.copyTo(output) }
-        }
     }
 
     private fun parseIdentity(root: JSONObject): GenesisIdentity {

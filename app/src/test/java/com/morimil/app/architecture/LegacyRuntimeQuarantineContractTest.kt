@@ -29,9 +29,7 @@ class LegacyRuntimeQuarantineContractTest {
             ),
             LegacySymbolRule(
                 symbol = "installGenesisBundle",
-                allowedProductionPaths = setOf(
-                    "com/morimil/app/data/genesis/GenesisReader.kt"
-                )
+                allowedProductionPaths = emptySet()
             ),
             LegacySymbolRule(
                 symbol = "insertLocalIdentity",

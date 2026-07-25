@@ -49,13 +49,13 @@ internal fun HybridAuthorityStatusSurface(
     modifier: Modifier = Modifier
 ) {
     val containerColor = when (presentation.status) {
-        HybridAuthorityPresentationStatus.DISABLED -> MaterialTheme.colorScheme.surfaceVariant
+        HybridAuthorityPresentationStatus.UNVERIFIED -> MaterialTheme.colorScheme.surfaceVariant
         HybridAuthorityPresentationStatus.ACCEPTED_DETERMINISTIC,
         HybridAuthorityPresentationStatus.ACCEPTED_STRICT_CONSENSUS -> MaterialTheme.colorScheme.secondaryContainer
         HybridAuthorityPresentationStatus.ABSTAINED -> MaterialTheme.colorScheme.errorContainer
     }
     val contentColor = when (presentation.status) {
-        HybridAuthorityPresentationStatus.DISABLED -> MaterialTheme.colorScheme.onSurfaceVariant
+        HybridAuthorityPresentationStatus.UNVERIFIED -> MaterialTheme.colorScheme.onSurfaceVariant
         HybridAuthorityPresentationStatus.ACCEPTED_DETERMINISTIC,
         HybridAuthorityPresentationStatus.ACCEPTED_STRICT_CONSENSUS -> MaterialTheme.colorScheme.onSecondaryContainer
         HybridAuthorityPresentationStatus.ABSTAINED -> MaterialTheme.colorScheme.onErrorContainer

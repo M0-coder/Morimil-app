@@ -2,7 +2,6 @@
 
 import android.content.Context
 import androidx.room.Database
-import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
@@ -350,16 +349,9 @@ abstract class MemoryOrganDatabase : RoomDatabase() {
 
         fun getInstance(context: Context): MemoryOrganDatabase {
             return instance ?: synchronized(this) {
-                instance ?: Room.databaseBuilder(
-                    context.applicationContext,
-                    MemoryOrganDatabase::class.java,
-                    "morimil_memory_organs.db"
-                )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
-                    .build()
+                instance ?: MemoryOrganDatabaseEncryption.open(context)
                     .also { instance = it }
             }
         }
     }
 }
-

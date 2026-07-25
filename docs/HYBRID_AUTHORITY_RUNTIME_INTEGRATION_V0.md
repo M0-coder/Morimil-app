@@ -29,8 +29,9 @@ When disabled:
 
 - the existing activation policy remains unchanged;
 - the metacognitive motor receives the primary candidate;
-- a nonblank verifier reply preserves the legacy replacement behavior;
-- `finalizationStatus` is `LEGACY_UNROUTED`;
+- a nonblank verifier reply may preserve the pre-authority replacement behavior;
+- the final reply is explicitly classified as `UNVERIFIED_DIRECT`;
+- the UI presents it as `UNVERIFIED`, never as a verified route;
 - `authorityDecision` is `null`.
 
 When enabled in explicit research construction:

@@ -15,7 +15,7 @@ import kotlinx.coroutines.flow.asStateFlow
  * excluded. The presentation only exposes the bounded status, route and a fixed explanation.
  */
 enum class HybridAuthorityPresentationStatus {
-    DISABLED,
+    UNVERIFIED,
     ACCEPTED_DETERMINISTIC,
     ACCEPTED_STRICT_CONSENSUS,
     ABSTAINED
@@ -32,12 +32,12 @@ data class HybridAuthorityPresentation(
 object HybridAuthorityPresentationV0 {
     const val VERSION = "morimil.hybrid-authority-presentation.v0"
 
-    fun disabled(): HybridAuthorityPresentation {
+    fun unverified(): HybridAuthorityPresentation {
         return HybridAuthorityPresentation(
-            status = HybridAuthorityPresentationStatus.DISABLED,
-            headline = "Autoridad híbrida desactivada",
-            routeLabel = "ruta normal",
-            explanation = "El gate híbrido no participa en la ejecución normal.",
+            status = HybridAuthorityPresentationStatus.UNVERIFIED,
+            headline = "Respuesta no verificada",
+            routeLabel = "sin autoridad verificadora",
+            explanation = "La salida no fue aceptada por una autoridad determinista o de consenso estricto.",
             authorityVersion = null
         )
     }
@@ -47,9 +47,9 @@ object HybridAuthorityPresentationV0 {
         authorityDecision: HybridAuthorityDecision?
     ): HybridAuthorityPresentation {
         return when (finalizationStatus) {
-            TriMotorFinalizationStatus.LEGACY_UNROUTED -> {
-                require(authorityDecision == null) { "legacy_finalization_must_not_have_authority_decision" }
-                disabled()
+            TriMotorFinalizationStatus.UNVERIFIED_DIRECT -> {
+                require(authorityDecision == null) { "unverified_finalization_must_not_have_authority_decision" }
+                unverified()
             }
 
             TriMotorFinalizationStatus.ACCEPTED_BY_AUTHORITY -> {
@@ -111,7 +111,7 @@ object HybridAuthorityPresentationV0 {
             HybridAuthorityPresentationStatus.ACCEPTED_STRICT_CONSENSUS ->
                 "La salida coincidió bajo consenso estricto."
 
-            HybridAuthorityPresentationStatus.DISABLED,
+            HybridAuthorityPresentationStatus.UNVERIFIED,
             HybridAuthorityPresentationStatus.ABSTAINED ->
                 error("accepted_presentation_status_invalid")
         }
@@ -145,11 +145,16 @@ object HybridAuthorityPresentationV0 {
 
 /** Process-local UI status only. It is not memory, doctrine, policy or audit evidence. */
 object HybridAuthorityPresentationStore {
-    private val mutablePresentation = MutableStateFlow(HybridAuthorityPresentationV0.disabled())
+    private val mutablePresentation = MutableStateFlow(HybridAuthorityPresentationV0.unverified())
     val lastPresentation: StateFlow<HybridAuthorityPresentation> = mutablePresentation.asStateFlow()
 
+    fun resetUnverified() {
+        mutablePresentation.value = HybridAuthorityPresentationV0.unverified()
+    }
+
+    @Deprecated("Use resetUnverified")
     fun resetDisabled() {
-        mutablePresentation.value = HybridAuthorityPresentationV0.disabled()
+        resetUnverified()
     }
 
     fun publish(
