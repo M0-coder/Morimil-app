@@ -1,0 +1,26 @@
+name: F1.3 Temporary Source Export
+
+on:
+  push:
+    branches:
+      - plan-v2/f1-3-runtime-gate
+    paths:
+      - .github/workflows/f1-3-temporary-source-export.yml
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Upload isolated runtime source
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: f1-3-runtime-source
+          path: app/src/main/java/com/morimil/app/ui/MorimilViewModel.kt
+          if-no-files-found: error
+          retention-days: 1
