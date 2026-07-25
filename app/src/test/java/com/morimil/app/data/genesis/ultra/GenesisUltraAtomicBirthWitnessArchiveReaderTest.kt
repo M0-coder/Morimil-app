@@ -13,17 +13,17 @@ import java.util.zip.ZipOutputStream
 
 class GenesisUltraAtomicBirthWitnessArchiveReaderTest {
     @Test
-    fun readsExactBoundWitnessPackageWithDefensiveCopies() {
+    fun readsExactBoundWitnessPackageWithDefensiveCopiesAndLocalTime() {
         val fixture = archiveFixture()
 
         val witness = GenesisUltraAtomicBirthWitnessArchiveReader().read(
             input = ByteArrayInputStream(fixture.archive),
             expectedCandidateDigest = CANDIDATE_DIGEST,
             expectedConsentDigest = CONSENT_DIGEST,
-            expectedEvaluatedAt = EVALUATED_AT
+            evaluatedAt = LOCAL_EVALUATED_AT
         )
 
-        assertEquals(EVALUATED_AT, witness.evaluatedAt)
+        assertEquals(LOCAL_EVALUATED_AT, witness.evaluatedAt)
         assertEquals(
             GenesisUltraAtomicBirthPersistenceValidator.mandatoryArtifactKinds.size,
             witness.copyArtifacts().size
@@ -46,7 +46,7 @@ class GenesisUltraAtomicBirthWitnessArchiveReaderTest {
                 ByteArrayInputStream(fixture.archive),
                 "sha256:" + "c".repeat(64),
                 CONSENT_DIGEST,
-                EVALUATED_AT
+                LOCAL_EVALUATED_AT
             )
         }
         assertEquals("witness_archive_candidate_digest_mismatch", candidateError.message)
@@ -56,14 +56,37 @@ class GenesisUltraAtomicBirthWitnessArchiveReaderTest {
                 ByteArrayInputStream(fixture.archive),
                 CANDIDATE_DIGEST,
                 "sha256:" + "d".repeat(64),
-                EVALUATED_AT
+                LOCAL_EVALUATED_AT
             )
         }
         assertEquals("witness_archive_consent_digest_mismatch", consentError.message)
     }
 
     @Test
-    fun rejectsArchiveEvaluationTimeDifferentFromLocalInstant() {
+    fun rejectsManifestThatAttemptsToSupplyEvaluationTime() {
+        val fixture = archiveFixture()
+        val manifestWithTime = JSONObject(fixture.manifest)
+            .put("evaluated_at", "2020-01-01T00:00:00Z")
+            .toString()
+        val files = fixture.files.toMutableMap().apply {
+            this[GenesisUltraAtomicBirthWitnessArchiveReader.MANIFEST_ENTRY] =
+                manifestWithTime.toByteArray()
+        }
+
+        val error = assertThrows(IllegalArgumentException::class.java) {
+            GenesisUltraAtomicBirthWitnessArchiveReader().read(
+                ByteArrayInputStream(zip(files)),
+                CANDIDATE_DIGEST,
+                CONSENT_DIGEST,
+                LOCAL_EVALUATED_AT
+            )
+        }
+
+        assertTrue(error.message.orEmpty().startsWith("witness_archive_manifest_fields_invalid:"))
+    }
+
+    @Test
+    fun rejectsInvalidLocalEvaluationTime() {
         val fixture = archiveFixture()
 
         val error = assertThrows(IllegalArgumentException::class.java) {
@@ -71,25 +94,23 @@ class GenesisUltraAtomicBirthWitnessArchiveReaderTest {
                 ByteArrayInputStream(fixture.archive),
                 CANDIDATE_DIGEST,
                 CONSENT_DIGEST,
-                "2026-07-25T12:00:01Z"
+                "not-a-time"
             )
         }
 
-        assertEquals("witness_archive_evaluated_at_mismatch", error.message)
+        assertEquals("witness_archive_evaluated_at_invalid", error.message)
     }
 
     @Test
     fun rejectsTraversalInDeclaredArtifactPath() {
-        val fixture = archiveFixture(
-            artifactPathOverride = "../escape.json"
-        )
+        val fixture = archiveFixture(artifactPathOverride = "../escape.json")
 
         val error = assertThrows(IllegalArgumentException::class.java) {
             GenesisUltraAtomicBirthWitnessArchiveReader().read(
                 ByteArrayInputStream(fixture.archive),
                 CANDIDATE_DIGEST,
                 CONSENT_DIGEST,
-                EVALUATED_AT
+                LOCAL_EVALUATED_AT
             )
         }
 
@@ -105,7 +126,7 @@ class GenesisUltraAtomicBirthWitnessArchiveReaderTest {
                 ByteArrayInputStream(fixture.archive),
                 CANDIDATE_DIGEST,
                 CONSENT_DIGEST,
-                EVALUATED_AT
+                LOCAL_EVALUATED_AT
             )
         }
 
@@ -121,7 +142,7 @@ class GenesisUltraAtomicBirthWitnessArchiveReaderTest {
                 ByteArrayInputStream(fixture.archive),
                 CANDIDATE_DIGEST,
                 CONSENT_DIGEST,
-                EVALUATED_AT
+                LOCAL_EVALUATED_AT
             )
         }
 
@@ -136,7 +157,8 @@ class GenesisUltraAtomicBirthWitnessArchiveReaderTest {
             "\"candidate_digest\":\"$CANDIDATE_DIGEST\",\"candidate_digest\":\"$CANDIDATE_DIGEST\""
         )
         val files = fixture.files.toMutableMap().apply {
-            this[GenesisUltraAtomicBirthWitnessArchiveReader.MANIFEST_ENTRY] = duplicateManifest.toByteArray()
+            this[GenesisUltraAtomicBirthWitnessArchiveReader.MANIFEST_ENTRY] =
+                duplicateManifest.toByteArray()
         }
 
         val error = assertThrows(IllegalArgumentException::class.java) {
@@ -144,7 +166,7 @@ class GenesisUltraAtomicBirthWitnessArchiveReaderTest {
                 ByteArrayInputStream(zip(files)),
                 CANDIDATE_DIGEST,
                 CONSENT_DIGEST,
-                EVALUATED_AT
+                LOCAL_EVALUATED_AT
             )
         }
 
@@ -174,7 +196,6 @@ class GenesisUltraAtomicBirthWitnessArchiveReaderTest {
             .put("schema_version", GenesisUltraAtomicBirthWitnessArchiveReader.MANIFEST_SCHEMA)
             .put("candidate_digest", CANDIDATE_DIGEST)
             .put("consent_digest", CONSENT_DIGEST)
-            .put("evaluated_at", EVALUATED_AT)
             .put(
                 "artifacts",
                 JSONArray().apply {
@@ -227,7 +248,7 @@ class GenesisUltraAtomicBirthWitnessArchiveReaderTest {
             signedDomain = "genesis.transaction.journal.signature.v0.1",
             signedDigest = ZERO_SHA256,
             signatureValue = "0".repeat(128),
-            createdAt = EVALUATED_AT,
+            createdAt = LOCAL_EVALUATED_AT,
             publicKeyRef = BODY_KEY_REF
         )
         val withoutDigest = GenesisUltraBirthJournalEntry(
@@ -245,7 +266,7 @@ class GenesisUltraAtomicBirthWitnessArchiveReaderTest {
             candidateStateDigest = null,
             finalizationDigest = null,
             commitMarkerDigest = null,
-            updatedAt = EVALUATED_AT,
+            updatedAt = LOCAL_EVALUATED_AT,
             journalDigest = ZERO_SHA256,
             signature = signatureWithoutDigest
         )
@@ -312,7 +333,7 @@ class GenesisUltraAtomicBirthWitnessArchiveReaderTest {
     )
 
     private companion object {
-        const val EVALUATED_AT = "2026-07-25T12:00:00Z"
+        const val LOCAL_EVALUATED_AT = "2026-07-25T12:00:00Z"
         val CANDIDATE_DIGEST = "sha256:" + "a".repeat(64)
         val CONSENT_DIGEST = "sha256:" + "b".repeat(64)
         val ZERO_SHA256 = "sha256:" + "0".repeat(64)

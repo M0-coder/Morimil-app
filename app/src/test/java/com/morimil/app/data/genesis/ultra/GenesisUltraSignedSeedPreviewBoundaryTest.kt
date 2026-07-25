@@ -25,7 +25,7 @@ class GenesisUltraSignedSeedPreviewBoundaryTest {
     }
 
     @Test
-    fun onboardingCanRecordConsentButCannotAuthorizeOrExecuteBirth() {
+    fun onboardingCanRecordConsentAndVerifyAuthorizationButCannotExecuteBirth() {
         val viewModel = sourceFile(
             "src/main/java/com/morimil/app/ui/GenesisUltraOnboardingViewModel.kt"
         ).readText()
@@ -35,17 +35,19 @@ class GenesisUltraSignedSeedPreviewBoundaryTest {
 
         assertTrue(viewModel.contains("recordExplicitConsent"))
         assertTrue(viewModel.contains("GenesisUltraHostBirthConsentRequest"))
-        assertFalse(viewModel.contains("GenesisUltraAtomicBirthAuthorizationCoordinator"))
+        assertTrue(viewModel.contains("GenesisUltraAtomicBirthWitnessAuthorizationCoordinator"))
+        assertTrue(viewModel.contains("authorizeWitnessArchive"))
         assertFalse(viewModel.contains("GenesisUltraAtomicBirthExecutionCoordinator"))
         assertFalse(viewModel.contains("genesisUltraAtomicBirthExecutionCoordinator"))
         assertFalse(viewModel.contains(".execute("))
-        assertTrue(screen.contains("Consentimiento registrado; falta testimonio del Guardián"))
+        assertTrue(screen.contains("Consentimiento registrado; verifica el testimonio final"))
         assertTrue(screen.contains("birthCommitAuthorized = false"))
+        assertTrue(screen.contains("birthCommitAuthorized = true"))
         assertTrue(screen.contains("Button(\n                enabled = false"))
     }
 
     @Test
-    fun exactCandidateIsKeptOnlyAsPrivateViewModelMemory() {
+    fun exactCandidateAndAuthorizationAreKeptOnlyAsPrivateViewModelMemory() {
         val viewModel = sourceFile(
             "src/main/java/com/morimil/app/ui/GenesisUltraOnboardingViewModel.kt"
         ).readText()
@@ -55,6 +57,7 @@ class GenesisUltraSignedSeedPreviewBoundaryTest {
         ).readText()
 
         assertTrue(viewModel.contains("private var candidateSession"))
+        assertTrue(viewModel.contains("private var authorizedBirth"))
         assertTrue(viewModel.contains("override fun onCleared()"))
         assertTrue(session.contains("internal val constructedCandidate"))
         assertFalse(session.contains("SharedPreferences"))
@@ -78,8 +81,16 @@ class GenesisUltraSignedSeedPreviewBoundaryTest {
 
         val recordFunction = source
             .substringAfter("internal fun recordExplicitHostConsent")
-            .substringBefore("internal fun revokeHostConsent")
+            .substringBefore("internal fun authorizeWitnessArchive")
         assertBeforeLaunch(recordFunction, "recording = true")
+
+        val authorizationFunction = source
+            .substringAfter("internal fun authorizeWitnessArchive")
+            .substringBefore("internal fun revokeHostConsent")
+        assertBeforeLaunch(
+            authorizationFunction,
+            "GenesisUltraAtomicBirthAuthorizationUiState(verifying = true)"
+        )
 
         val revokeFunction = source
             .substringAfter("internal fun revokeHostConsent")
