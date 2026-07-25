@@ -351,8 +351,8 @@ internal class GenesisUltraBirthCandidateConstructionCoordinator(
         const val ENTROPY_BYTES = 32
         const val ED25519_SIGNATURE_BYTES = 64
         const val POSSESSION_VALIDITY_SECONDS = 300L
-        const val ZERO_SHA256 = "sha256:" + "0".repeat(64)
-        const val ZERO_ED25519_SIGNATURE = "0".repeat(128)
+        val ZERO_SHA256 = "sha256:" + "0".repeat(64)
+        val ZERO_ED25519_SIGNATURE = "0".repeat(128)
         val CANONICAL_TIMESTAMP = Regex(
             "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T" +
                 "([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]Z$"
