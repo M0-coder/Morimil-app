@@ -15,9 +15,9 @@ import java.util.zip.ZipInputStream
  * Reads the transport envelope for one final atomic-birth witness package.
  *
  * The transport manifest is not a trust root. It only binds the archive to the
- * exact candidate and consent already held locally and declares the bytes that
- * must later pass the full Body and Guardian signature verifier. No entry is
- * extracted to disk and no caller-controlled path is resolved locally.
+ * exact candidate, consent and locally supplied evaluation instant and declares
+ * the bytes that must later pass the full Body and Guardian signature verifier.
+ * No entry is extracted to disk and no caller-controlled path is resolved locally.
  */
 internal class GenesisUltraAtomicBirthWitnessArchiveReader(
     private val maxEntries: Int = DEFAULT_MAX_ENTRIES,
@@ -33,7 +33,8 @@ internal class GenesisUltraAtomicBirthWitnessArchiveReader(
     fun read(
         input: InputStream,
         expectedCandidateDigest: String,
-        expectedConsentDigest: String
+        expectedConsentDigest: String,
+        expectedEvaluatedAt: String
     ): GenesisUltraAtomicBirthWitnessPackage {
         require(SHA256_REF.matches(expectedCandidateDigest)) {
             "witness_archive_expected_candidate_digest_invalid"
@@ -41,6 +42,7 @@ internal class GenesisUltraAtomicBirthWitnessArchiveReader(
         require(SHA256_REF.matches(expectedConsentDigest)) {
             "witness_archive_expected_consent_digest_invalid"
         }
+        requireCanonicalTimestamp(expectedEvaluatedAt, "witness_archive_expected_evaluated_at_invalid")
 
         val files = readArchiveFiles(input)
         val manifestBytes = files.remove(MANIFEST_ENTRY)
@@ -54,6 +56,9 @@ internal class GenesisUltraAtomicBirthWitnessArchiveReader(
         }
         require(manifest.consentDigest == expectedConsentDigest) {
             "witness_archive_consent_digest_mismatch"
+        }
+        require(manifest.evaluatedAt == expectedEvaluatedAt) {
+            "witness_archive_evaluated_at_mismatch"
         }
 
         val declaredPaths = buildList {
@@ -100,7 +105,7 @@ internal class GenesisUltraAtomicBirthWitnessArchiveReader(
         return GenesisUltraAtomicBirthWitnessPackage(
             artifacts = artifacts,
             journal = journal,
-            evaluatedAt = manifest.evaluatedAt
+            evaluatedAt = expectedEvaluatedAt
         )
     }
 
@@ -234,10 +239,14 @@ internal class GenesisUltraAtomicBirthWitnessArchiveReader(
 
     private fun JSONObject.requiredCanonicalTimestamp(name: String): String {
         val value = requiredText(name, 20, 20)
-        val parsed = runCatching { Instant.parse(value) }
-            .getOrElse { failure -> throw IllegalArgumentException("witness_archive_invalid_$name", failure) }
-        require(parsed.toString() == value) { "witness_archive_invalid_$name" }
+        requireCanonicalTimestamp(value, "witness_archive_invalid_$name")
         return value
+    }
+
+    private fun requireCanonicalTimestamp(value: String, errorCode: String) {
+        val parsed = runCatching { Instant.parse(value) }
+            .getOrElse { failure -> throw IllegalArgumentException(errorCode, failure) }
+        require(parsed.toString() == value) { errorCode }
     }
 
     private fun decodeStrictUtf8(bytes: ByteArray, errorCode: String): String {
