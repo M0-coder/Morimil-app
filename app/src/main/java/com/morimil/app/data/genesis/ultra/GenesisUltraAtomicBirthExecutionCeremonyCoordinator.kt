@@ -58,7 +58,7 @@ internal data class GenesisUltraAtomicBirthExecutionCeremonyResult(
     val authorizationDigest: String,
     val birthStateDigest: String,
     val receiptDigest: String,
-    val firstPostBirthEventHash: String,
+    val firstPostBirthEventHash: String?,
     val committedAt: String,
     val maintenanceError: String?
 ) {
@@ -77,14 +77,22 @@ internal data class GenesisUltraAtomicBirthExecutionCeremonyResult(
         require(SHA256_REF.matches(receiptDigest)) {
             "birth_execution_result_receipt_digest_invalid"
         }
-        require(EVENT_HASH.matches(firstPostBirthEventHash)) {
+        require(firstPostBirthEventHash == null || EVENT_HASH.matches(firstPostBirthEventHash)) {
             "birth_execution_result_event_hash_invalid"
         }
         requireCanonicalTimestamp(committedAt, "birth_execution_result_time_invalid")
-        require(
-            (outcome == GenesisUltraAtomicBirthExecutionOutcome.COMMITTED_CLEAN) ==
-                (maintenanceError == null)
-        ) { "birth_execution_result_maintenance_state_invalid" }
+        when (outcome) {
+            GenesisUltraAtomicBirthExecutionOutcome.COMMITTED_CLEAN -> {
+                require(maintenanceError == null && firstPostBirthEventHash != null) {
+                    "birth_execution_result_clean_state_invalid"
+                }
+            }
+            GenesisUltraAtomicBirthExecutionOutcome.COMMITTED_MAINTENANCE_PENDING -> {
+                require(!maintenanceError.isNullOrBlank()) {
+                    "birth_execution_result_pending_error_missing"
+                }
+            }
+        }
         require(birthCommitted) { "birth_execution_result_not_committed" }
     }
 
@@ -108,6 +116,18 @@ internal data class GenesisUltraAtomicBirthCommittedEvidence(
     val firstPostBirthObservedAt: String
 )
 
+/** Explicitly marks that the transactional executor has already returned. */
+internal data class GenesisUltraAtomicBirthCommittedReturn(
+    val evidence: GenesisUltraAtomicBirthCommittedEvidence?,
+    val postCommitFailure: Throwable?
+) {
+    init {
+        require(evidence != null || postCommitFailure != null) {
+            "birth_execution_committed_return_empty"
+        }
+    }
+}
+
 /**
  * The only onboarding-facing boundary allowed to invoke atomic birth execution.
  *
@@ -121,7 +141,7 @@ internal class GenesisUltraAtomicBirthExecutionCeremonyCoordinator private const
         GenesisUltraAuthorizedAtomicBirth,
         String,
         GenesisUltraCanonicalMemoryAppendRequest
-    ) -> GenesisUltraAtomicBirthCommittedEvidence,
+    ) -> GenesisUltraAtomicBirthCommittedReturn,
     private val retireCommittedConsent: suspend () -> GenesisUltraCommittedConsentRetirementResult,
     private val clock: () -> Instant
 ) {
@@ -137,24 +157,36 @@ internal class GenesisUltraAtomicBirthExecutionCeremonyCoordinator private const
         val committedAt = clock().truncatedTo(ChronoUnit.SECONDS)
         val committedAtText = committedAt.toString()
         authorization.requireUsableAt(committedAtText)
+        val expected = expectedCommit(authorization)
         val memoryRequest = firstPostBirthMemoryRequest(authorization, committedAtText)
 
         // An exception before this call returns is an uncommitted execution failure.
-        // The production executor performs no work after its Room transaction returns.
-        val evidence = executeBirth(
+        val committedReturn = executeBirth(
             authorization,
             committedAtText,
             memoryRequest
         )
 
         val postCommitFailures = mutableListOf<Throwable>()
-        runCatching {
-            requireCommittedEvidence(authorization, memoryRequest, evidence)
-        }.exceptionOrNull()?.let(postCommitFailures::add)
+        committedReturn.postCommitFailure?.let(postCommitFailures::add)
+        val evidence = committedReturn.evidence
+        if (evidence == null) {
+            if (committedReturn.postCommitFailure == null) {
+                postCommitFailures += IllegalStateException("birth_execution_committed_evidence_missing")
+            }
+        } else {
+            runCatching {
+                requireCommittedEvidence(expected, authorization, memoryRequest, evidence)
+            }.exceptionOrNull()?.let(postCommitFailures::add)
+        }
         runCatching {
             retireCommittedConsent()
         }.exceptionOrNull()?.let(postCommitFailures::add)
 
+        val validEventHash = evidence?.firstPostBirthEventHash?.takeIf(EVENT_HASH::matches)
+        if (validEventHash == null) {
+            postCommitFailures += IllegalStateException("birth_execution_committed_event_hash_unavailable")
+        }
         val maintenanceError = postCommitFailures
             .takeIf(List<Throwable>::isNotEmpty)
             ?.joinToString(" | ") { failure ->
@@ -167,13 +199,13 @@ internal class GenesisUltraAtomicBirthExecutionCeremonyCoordinator private const
             } else {
                 GenesisUltraAtomicBirthExecutionOutcome.COMMITTED_MAINTENANCE_PENDING
             },
-            birthId = evidence.birthId,
-            instanceId = evidence.instanceId,
-            companionName = evidence.companionName,
-            authorizationDigest = evidence.authorizationDigest,
-            birthStateDigest = evidence.birthStateDigest,
-            receiptDigest = evidence.receiptDigest,
-            firstPostBirthEventHash = evidence.firstPostBirthEventHash,
+            birthId = expected.birthId,
+            instanceId = expected.instanceId,
+            companionName = expected.companionName,
+            authorizationDigest = authorization.authorizationDigest,
+            birthStateDigest = authorization.birthStateDigest,
+            receiptDigest = authorization.receiptDigest,
+            firstPostBirthEventHash = validEventHash,
             committedAt = committedAtText,
             maintenanceError = maintenanceError
         )
@@ -212,6 +244,23 @@ internal class GenesisUltraAtomicBirthExecutionCeremonyCoordinator private const
         require(request.userPresenceConfirmed) { "birth_execution_user_presence_required" }
     }
 
+    private fun expectedCommit(
+        authorization: GenesisUltraAuthorizedAtomicBirth
+    ): GenesisUltraAtomicBirthExpectedCommit {
+        val bundle = authorization.copyVerifiedBirth().copyPersistenceBundle()
+        require(bundle.birthState.stateDigest == authorization.birthStateDigest) {
+            "birth_execution_expected_state_mismatch"
+        }
+        require(bundle.birthReceipt.receiptDigest == authorization.receiptDigest) {
+            "birth_execution_expected_receipt_mismatch"
+        }
+        return GenesisUltraAtomicBirthExpectedCommit(
+            birthId = bundle.birthState.birthId,
+            instanceId = bundle.instanceIdentity.instanceId,
+            companionName = bundle.instanceIdentity.companionName
+        )
+    }
+
     private fun firstPostBirthMemoryRequest(
         authorization: GenesisUltraAuthorizedAtomicBirth,
         committedAt: String
@@ -240,10 +289,16 @@ internal class GenesisUltraAtomicBirthExecutionCeremonyCoordinator private const
     }
 
     private fun requireCommittedEvidence(
+        expected: GenesisUltraAtomicBirthExpectedCommit,
         authorization: GenesisUltraAuthorizedAtomicBirth,
         request: GenesisUltraCanonicalMemoryAppendRequest,
         evidence: GenesisUltraAtomicBirthCommittedEvidence
     ) {
+        require(
+            evidence.birthId == expected.birthId &&
+                evidence.instanceId == expected.instanceId &&
+                evidence.companionName == expected.companionName
+        ) { "birth_execution_committed_identity_mismatch" }
         require(evidence.authorizationDigest == authorization.authorizationDigest) {
             "birth_execution_committed_authorization_mismatch"
         }
@@ -274,6 +329,7 @@ internal class GenesisUltraAtomicBirthExecutionCeremonyCoordinator private const
         private const val ACTIVATION_ACTOR = "host_confirmed_system"
         private const val ACTIVATION_CONTENT_TYPE =
             "application/vnd.genesis.atomic-birth-authorization+json"
+        private val EVENT_HASH = Regex("^evsha256:[a-f0-9]{64}$")
 
         fun production(
             executionCoordinator: GenesisUltraAtomicBirthExecutionCoordinator,
@@ -287,19 +343,28 @@ internal class GenesisUltraAtomicBirthExecutionCeremonyCoordinator private const
                         activatedAt = activatedAt,
                         firstPostBirthRequest = memoryRequest
                     )
-                    val event = result.firstPostBirthMemory.event
-                    GenesisUltraAtomicBirthCommittedEvidence(
-                        birthId = result.commit.birthId,
-                        instanceId = result.commit.instanceId,
-                        companionName = result.commit.companionName,
-                        authorizationDigest = result.authorization.authorizationDigest,
-                        birthStateDigest = result.commit.birthStateDigest,
-                        receiptDigest = result.commit.receiptDigest,
-                        firstPostBirthEventHash = event.eventHash,
-                        firstPostBirthSequence = event.sequence,
-                        firstPostBirthContentDigest = event.contentDigest,
-                        firstPostBirthProvenanceDigest = event.provenanceDigest,
-                        firstPostBirthObservedAt = event.observedAt
+                    runCatching {
+                        val event = result.firstPostBirthMemory.event
+                        GenesisUltraAtomicBirthCommittedEvidence(
+                            birthId = result.commit.birthId,
+                            instanceId = result.commit.instanceId,
+                            companionName = result.commit.companionName,
+                            authorizationDigest = result.authorization.authorizationDigest,
+                            birthStateDigest = result.commit.birthStateDigest,
+                            receiptDigest = result.commit.receiptDigest,
+                            firstPostBirthEventHash = event.eventHash,
+                            firstPostBirthSequence = event.sequence,
+                            firstPostBirthContentDigest = event.contentDigest,
+                            firstPostBirthProvenanceDigest = event.provenanceDigest,
+                            firstPostBirthObservedAt = event.observedAt
+                        )
+                    }.fold(
+                        onSuccess = { evidence ->
+                            GenesisUltraAtomicBirthCommittedReturn(evidence, null)
+                        },
+                        onFailure = { failure ->
+                            GenesisUltraAtomicBirthCommittedReturn(null, failure)
+                        }
                     )
                 },
                 retireCommittedConsent = retirementCoordinator::retireIfCommitted,
@@ -316,6 +381,27 @@ internal class GenesisUltraAtomicBirthExecutionCeremonyCoordinator private const
             retireCommittedConsent: suspend () -> GenesisUltraCommittedConsentRetirementResult,
             clock: () -> Instant
         ): GenesisUltraAtomicBirthExecutionCeremonyCoordinator {
+            return forCommittedReturnTest(
+                executeBirth = { authorization, activatedAt, request ->
+                    GenesisUltraAtomicBirthCommittedReturn(
+                        evidence = executeBirth(authorization, activatedAt, request),
+                        postCommitFailure = null
+                    )
+                },
+                retireCommittedConsent = retireCommittedConsent,
+                clock = clock
+            )
+        }
+
+        fun forCommittedReturnTest(
+            executeBirth: suspend (
+                GenesisUltraAuthorizedAtomicBirth,
+                String,
+                GenesisUltraCanonicalMemoryAppendRequest
+            ) -> GenesisUltraAtomicBirthCommittedReturn,
+            retireCommittedConsent: suspend () -> GenesisUltraCommittedConsentRetirementResult,
+            clock: () -> Instant
+        ): GenesisUltraAtomicBirthExecutionCeremonyCoordinator {
             return GenesisUltraAtomicBirthExecutionCeremonyCoordinator(
                 executeBirth = executeBirth,
                 retireCommittedConsent = retireCommittedConsent,
@@ -324,6 +410,12 @@ internal class GenesisUltraAtomicBirthExecutionCeremonyCoordinator private const
         }
     }
 }
+
+private data class GenesisUltraAtomicBirthExpectedCommit(
+    val birthId: String,
+    val instanceId: String,
+    val companionName: String
+)
 
 private fun requireCanonicalTimestamp(value: String, errorCode: String): Instant {
     val parsed = runCatching { Instant.parse(value) }
