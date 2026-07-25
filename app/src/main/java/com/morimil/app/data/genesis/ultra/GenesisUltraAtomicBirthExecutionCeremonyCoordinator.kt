@@ -120,7 +120,6 @@ internal class GenesisUltraAtomicBirthExecutionCeremonyCoordinator private const
     private val executeBirth: suspend (
         GenesisUltraAuthorizedAtomicBirth,
         String,
-        Long,
         GenesisUltraCanonicalMemoryAppendRequest
     ) -> GenesisUltraAtomicBirthCommittedEvidence,
     private val retireCommittedConsent: suspend () -> GenesisUltraCommittedConsentRetirementResult,
@@ -145,7 +144,6 @@ internal class GenesisUltraAtomicBirthExecutionCeremonyCoordinator private const
         val evidence = executeBirth(
             authorization,
             committedAtText,
-            committedAt.toEpochMilli(),
             memoryRequest
         )
 
@@ -283,11 +281,10 @@ internal class GenesisUltraAtomicBirthExecutionCeremonyCoordinator private const
             clock: () -> Instant = Instant::now
         ): GenesisUltraAtomicBirthExecutionCeremonyCoordinator {
             return GenesisUltraAtomicBirthExecutionCeremonyCoordinator(
-                executeBirth = { authorization, activatedAt, persistedAtMillis, memoryRequest ->
+                executeBirth = { authorization, activatedAt, memoryRequest ->
                     val result = executionCoordinator.execute(
                         authorization = authorization,
                         activatedAt = activatedAt,
-                        persistedAtMillis = persistedAtMillis,
                         firstPostBirthRequest = memoryRequest
                     )
                     val event = result.firstPostBirthMemory.event
@@ -314,7 +311,6 @@ internal class GenesisUltraAtomicBirthExecutionCeremonyCoordinator private const
             executeBirth: suspend (
                 GenesisUltraAuthorizedAtomicBirth,
                 String,
-                Long,
                 GenesisUltraCanonicalMemoryAppendRequest
             ) -> GenesisUltraAtomicBirthCommittedEvidence,
             retireCommittedConsent: suspend () -> GenesisUltraCommittedConsentRetirementResult,
