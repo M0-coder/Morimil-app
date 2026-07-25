@@ -350,6 +350,33 @@ internal object MorimilDatabaseMigrations {
         db.execSQL("DROP TABLE memory_messages")
     }
 
+    val MIGRATION_12_13 = migration(12, 13) { db ->
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS genesis_ultra_birth_authorization (
+                slotId TEXT NOT NULL,
+                schemaVersion TEXT NOT NULL,
+                candidateDigest TEXT NOT NULL,
+                consentDigest TEXT NOT NULL,
+                birthStateDigest TEXT NOT NULL,
+                receiptDigest TEXT NOT NULL,
+                bodyId TEXT NOT NULL,
+                guardianId TEXT NOT NULL,
+                guardianKeyEpochId TEXT NOT NULL,
+                authorizedAt TEXT NOT NULL,
+                expiresAt TEXT NOT NULL,
+                authorizationDigest TEXT NOT NULL,
+                sourceDigest TEXT NOT NULL,
+                sourceBytes BLOB NOT NULL,
+                PRIMARY KEY(slotId)
+            )
+            """.trimIndent()
+        )
+        db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_genesis_ultra_birth_authorization_candidateDigest ON genesis_ultra_birth_authorization(candidateDigest)")
+        db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_genesis_ultra_birth_authorization_consentDigest ON genesis_ultra_birth_authorization(consentDigest)")
+        db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_genesis_ultra_birth_authorization_authorizationDigest ON genesis_ultra_birth_authorization(authorizationDigest)")
+    }
+
     val ALL: Array<Migration> = arrayOf(
         MIGRATION_1_2,
         MIGRATION_2_3,
@@ -361,6 +388,7 @@ internal object MorimilDatabaseMigrations {
         MIGRATION_8_9,
         MIGRATION_9_10,
         MIGRATION_10_11,
-        MIGRATION_11_12
+        MIGRATION_11_12,
+        MIGRATION_12_13
     )
 }

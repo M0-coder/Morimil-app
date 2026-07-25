@@ -8,7 +8,9 @@ import com.morimil.app.data.genesis.GenesisReader
 import com.morimil.app.data.genesis.ultra.GenesisUltraAndroidBodyIdentityRootStore
 import com.morimil.app.data.genesis.ultra.GenesisUltraAndroidGuardianTrustAnchorStore
 import com.morimil.app.data.genesis.ultra.GenesisUltraAndroidHostBirthConsentStore
+import com.morimil.app.data.genesis.ultra.GenesisUltraAtomicBirthActivationCoordinator
 import com.morimil.app.data.genesis.ultra.GenesisUltraAtomicBirthAuthorizationCoordinator
+import com.morimil.app.data.genesis.ultra.GenesisUltraAtomicBirthExecutionCoordinator
 import com.morimil.app.data.genesis.ultra.GenesisUltraBirthCandidateConstructionCoordinator
 import com.morimil.app.data.genesis.ultra.GenesisUltraBirthPreparationCoordinator
 import com.morimil.app.data.local.MemoryOrganDatabase
@@ -98,6 +100,22 @@ class MorimilAppContainer(context: Context) {
                 bodyIdentityRootStore = genesisUltraBodyIdentityRootStore,
                 guardianTrustAnchorStore = genesisUltraGuardianTrustAnchorStore,
                 hostBirthConsentStore = genesisUltraHostBirthConsentStore
+            )
+        }
+
+    /** Low-level transaction executor; callers use the locally anchored facade below. */
+    private val genesisUltraAtomicBirthActivationCoordinator:
+        GenesisUltraAtomicBirthActivationCoordinator by lazy {
+            GenesisUltraAtomicBirthActivationCoordinator(database = memoryDatabase)
+        }
+
+    /** Executes an authorized birth without accepting caller-injected trust or signing keys. */
+    internal val genesisUltraAtomicBirthExecutionCoordinator:
+        GenesisUltraAtomicBirthExecutionCoordinator by lazy {
+            GenesisUltraAtomicBirthExecutionCoordinator(
+                activationCoordinator = genesisUltraAtomicBirthActivationCoordinator,
+                bodyIdentityRootStore = genesisUltraBodyIdentityRootStore,
+                guardianTrustAnchorStore = genesisUltraGuardianTrustAnchorStore
             )
         }
 

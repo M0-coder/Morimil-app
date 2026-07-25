@@ -18,9 +18,10 @@ import androidx.room.RoomDatabase
         GenesisUltraBirthCommitEntity::class,
         GenesisUltraBirthArtifactEntity::class,
         GenesisUltraBirthJournalEntity::class,
+        GenesisUltraBirthAuthorizationEntity::class,
         GenesisUltraMemoryEventEntity::class
     ],
-    version = 12,
+    version = 13,
     exportSchema = true
 )
 abstract class MorimilDatabase : RoomDatabase() {
@@ -39,16 +40,19 @@ abstract class MorimilDatabase : RoomDatabase() {
         val MIGRATION_4_5 = MorimilDatabaseMigrations.MIGRATION_4_5
         val MIGRATION_5_6 = MorimilDatabaseMigrations.MIGRATION_5_6
         val MIGRATION_6_7 = MorimilDatabaseMigrations.MIGRATION_6_7
-        val MIGRATION_7_8 = MorimilDatabaseMigrations.MIGRATION_7_8
+        val MIGRATION_7_8 = MorimilDatabaseMigrationPlan.MIGRATION_7_8
         val MIGRATION_8_9 = MorimilDatabaseMigrations.MIGRATION_8_9
         val MIGRATION_9_10 = MorimilDatabaseMigrations.MIGRATION_9_10
         val MIGRATION_10_11 = MorimilDatabaseMigrations.MIGRATION_10_11
         val MIGRATION_11_12 = MorimilDatabaseMigrations.MIGRATION_11_12
+        val MIGRATION_12_13 = MorimilDatabaseMigrations.MIGRATION_12_13
 
         fun getInstance(context: Context): MorimilDatabase {
             return instance ?: synchronized(this) {
-                instance ?: MorimilDatabaseEncryption.open(context)
-                    .also { instance = it }
+                instance ?: run {
+                    MorimilDatabaseMigrationPlan.installIntoLegacyRegistry()
+                    MorimilDatabaseEncryption.open(context)
+                }.also { instance = it }
             }
         }
     }

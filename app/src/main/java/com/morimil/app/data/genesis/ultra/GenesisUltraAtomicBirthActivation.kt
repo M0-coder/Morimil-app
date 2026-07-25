@@ -5,9 +5,10 @@ import com.morimil.app.data.local.GenesisUltraBirthCommitEntity
 import com.morimil.app.data.local.MorimilDatabase
 import com.morimil.app.data.repository.MemoryAppendGate
 
-/** Result of one indivisible birth, recovery audit and first canonical append. */
+/** Result of one indivisible authorization, birth, recovery audit and canonical append. */
 internal class GenesisUltraAtomicBirthActivationResult(
     val commit: GenesisUltraBirthCommitEntity,
+    val authorization: GenesisUltraDurableBirthAuthorization,
     val recoveredBirth: GenesisUltraRecoveredAtomicBirth,
     val firstPostBirthMemory: GenesisUltraCanonicalMemoryAppendResult
 )
@@ -44,18 +45,42 @@ internal class GenesisUltraAtomicBirthActivationCoordinator(
         }
         authorization.requireUsableAt(activatedAt)
         val verifiedBirth = authorization.copyVerifiedBirth()
+        val durableAuthorization = GenesisUltraDurableBirthAuthorization.from(authorization)
 
         require(recoveryRequest.bodyRawPublicKey.contentEquals(signer.key.copyRawPublicKey())) {
             "activation_recovery_body_key_mismatch"
         }
+        require(durableAuthorization.bodyId == signer.key.bodyId) {
+            "activation_authorization_body_key_mismatch"
+        }
 
         return MemoryAppendGate.withAppendLock {
             database.withTransaction {
+                val birthDao = database.genesisUltraBirthDao()
+                require(birthDao.countBirthAuthorizations() == 0) {
+                    "activation_birth_authorization_not_absent"
+                }
                 val birthStore = GenesisUltraAtomicBirthStore(database, checkpoint)
                 val commit = birthStore.writeVerifiedInsideTransaction(
                     verifiedBirth = verifiedBirth,
                     persistedAtMillis = persistedAtMillis
                 )
+                birthDao.insertBirthAuthorization(
+                    durableAuthorization.toEntity(GenesisUltraBirthCommitEntity.PRIMARY_SLOT)
+                )
+                val persistedAuthorization = GenesisUltraDurableBirthAuthorization.fromEntity(
+                    requireNotNull(
+                        birthDao.loadBirthAuthorization(GenesisUltraBirthCommitEntity.PRIMARY_SLOT)
+                    ) { "activation_birth_authorization_missing" }
+                )
+                persistedAuthorization.requireMatchesCommit(
+                    commit = commit,
+                    artifacts = birthDao.loadBirthArtifacts(commit.slotId)
+                )
+                require(persistedAuthorization == durableAuthorization) {
+                    "activation_birth_authorization_round_trip_mismatch"
+                }
+
                 val recovered = requireNotNull(recoverCommitted(birthStore, recoveryRequest)) {
                     "activation_recovery_missing_committed_birth"
                 }
@@ -67,7 +92,16 @@ internal class GenesisUltraAtomicBirthActivationCoordinator(
                 require(memory.event.sequence == 1L) {
                     "activation_first_post_birth_sequence_invalid"
                 }
-                GenesisUltraAtomicBirthActivationResult(commit, recovered, memory)
+                require(
+                    GenesisUltraAuthorizedBirthStateAudit(database).readState() ==
+                        GenesisUltraPersistedBirthState.COMMITTED
+                ) { "activation_authorized_birth_audit_failed" }
+                GenesisUltraAtomicBirthActivationResult(
+                    commit = commit,
+                    authorization = persistedAuthorization,
+                    recoveredBirth = recovered,
+                    firstPostBirthMemory = memory
+                )
             }
         }
     }
