@@ -8,6 +8,7 @@ import com.morimil.app.data.genesis.GenesisReader
 import com.morimil.app.data.genesis.ultra.GenesisUltraAndroidBodyIdentityRootStore
 import com.morimil.app.data.genesis.ultra.GenesisUltraAndroidGuardianTrustAnchorStore
 import com.morimil.app.data.genesis.ultra.GenesisUltraAndroidHostBirthConsentStore
+import com.morimil.app.data.genesis.ultra.GenesisUltraAtomicBirthAuthorizationCoordinator
 import com.morimil.app.data.genesis.ultra.GenesisUltraBirthCandidateConstructionCoordinator
 import com.morimil.app.data.genesis.ultra.GenesisUltraBirthPreparationCoordinator
 import com.morimil.app.data.local.MemoryOrganDatabase
@@ -88,6 +89,17 @@ class MorimilAppContainer(context: Context) {
             database = memoryDatabase
         )
     }
+
+    /** Verifies the final witnessed graph and issues the only activation authorization type. */
+    internal val genesisUltraAtomicBirthAuthorizationCoordinator:
+        GenesisUltraAtomicBirthAuthorizationCoordinator by lazy {
+            GenesisUltraAtomicBirthAuthorizationCoordinator(
+                preparationCoordinator = genesisUltraBirthPreparationCoordinator,
+                bodyIdentityRootStore = genesisUltraBodyIdentityRootStore,
+                guardianTrustAnchorStore = genesisUltraGuardianTrustAnchorStore,
+                hostBirthConsentStore = genesisUltraHostBirthConsentStore
+            )
+        }
 
     val memorySignatureEpochPolicy: SharedPreferencesMemorySignatureEpochPolicy by lazy {
         SharedPreferencesMemorySignatureEpochPolicy(appContext)
