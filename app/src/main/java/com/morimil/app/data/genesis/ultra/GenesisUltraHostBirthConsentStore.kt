@@ -21,7 +21,7 @@ internal enum class GenesisUltraHostBirthConsentState {
 
 /**
  * Values that the local confirmation UI must present and confirm explicitly.
- * The store rejects generic booleans that are not bound to the exact candidate.
+ * A generic boolean that is not bound to the exact candidate is insufficient.
  */
 internal data class GenesisUltraHostBirthConsentRequest(
     val presentedCandidateDigest: String,
@@ -44,6 +44,12 @@ internal data class GenesisUltraHostBirthConsentRequest(
         }
         require(presentedCompanionName.length in 1..128) {
             "host_birth_consent_companion_name_invalid"
+        }
+        require(presentedCompanionName == presentedCompanionName.trim()) {
+            "host_birth_consent_companion_name_not_canonical"
+        }
+        require(presentedCompanionName.none { character -> character.isISOControl() }) {
+            "host_birth_consent_companion_name_control_character"
         }
         require(CONFIRMATION_CODE.matches(presentedConfirmationCode)) {
             "host_birth_consent_confirmation_code_invalid"
@@ -78,8 +84,8 @@ internal data class GenesisUltraHostBirthConsentRequest(
 }
 
 /**
- * Authenticated record of one explicit local approval. It is evidence of a UI
- * ceremony, not a Guardian grant, Body signature or authorization to commit.
+ * Authenticated evidence of one local confirmation ceremony. It is not a
+ * Guardian grant, Body signature, ownership claim or authorization to commit.
  */
 internal class GenesisUltraVerifiedHostBirthConsent(
     val schemaVersion: String,
@@ -108,6 +114,12 @@ internal class GenesisUltraVerifiedHostBirthConsent(
         require(INSTANCE_ID.matches(instanceId)) { "host_birth_consent_instance_id_invalid" }
         GenesisUltraHashProfile.requireNfc(companionName)
         require(companionName.length in 1..128) { "host_birth_consent_companion_name_invalid" }
+        require(companionName == companionName.trim()) {
+            "host_birth_consent_companion_name_not_canonical"
+        }
+        require(companionName.none { character -> character.isISOControl() }) {
+            "host_birth_consent_companion_name_control_character"
+        }
         require(SHA256_REF.matches(seedRootHash)) { "host_birth_consent_seed_root_invalid" }
         require(BODY_ID.matches(bodyId)) { "host_birth_consent_body_id_invalid" }
         GenesisUltraHashProfile.requireNfc(guardianId)
@@ -136,7 +148,10 @@ internal class GenesisUltraVerifiedHostBirthConsent(
     }
 
     fun isValidAt(evaluatedAt: String): Boolean {
-        val evaluated = requireCanonicalTimestamp(evaluatedAt, "host_birth_consent_evaluation_time_invalid")
+        val evaluated = requireCanonicalTimestamp(
+            evaluatedAt,
+            "host_birth_consent_evaluation_time_invalid"
+        )
         return evaluated >= Instant.parse(consentedAt) && evaluated < Instant.parse(expiresAt)
     }
 
@@ -157,24 +172,60 @@ internal class GenesisUltraVerifiedHostBirthConsent(
         const val CONSENT_DIGEST_DOMAIN = "genesis.host.birth.consent.digest.v0.1"
 
         fun digestFor(consent: GenesisUltraVerifiedHostBirthConsent): String {
+            return digestForFields(
+                schemaVersion = consent.schemaVersion,
+                consentId = consent.consentId,
+                candidateDigest = consent.candidateDigest,
+                instanceId = consent.instanceId,
+                companionName = consent.companionName,
+                seedRootHash = consent.seedRootHash,
+                bodyId = consent.bodyId,
+                guardianId = consent.guardianId,
+                guardianKeyEpochId = consent.guardianKeyEpochId,
+                decision = consent.decision,
+                confirmationMode = consent.confirmationMode,
+                confirmationPurpose = consent.confirmationPurpose,
+                consentedAt = consent.consentedAt,
+                expiresAt = consent.expiresAt,
+                protectionProfile = consent.protectionProfile
+            )
+        }
+
+        fun digestForFields(
+            schemaVersion: String,
+            consentId: String,
+            candidateDigest: String,
+            instanceId: String,
+            companionName: String,
+            seedRootHash: String,
+            bodyId: String,
+            guardianId: String,
+            guardianKeyEpochId: String,
+            decision: String,
+            confirmationMode: String,
+            confirmationPurpose: String,
+            consentedAt: String,
+            expiresAt: String,
+            protectionProfile: String
+        ): String {
             return GenesisUltraHashProfile.hashFields(
                 CONSENT_DIGEST_DOMAIN,
                 listOf(
-                    consent.schemaVersion,
-                    consent.consentId,
-                    consent.candidateDigest,
-                    consent.instanceId,
-                    consent.companionName,
-                    consent.seedRootHash,
-                    consent.bodyId,
-                    consent.guardianId,
-                    consent.guardianKeyEpochId,
-                    consent.decision,
-                    consent.confirmationMode,
-                    consent.confirmationPurpose,
-                    consent.consentedAt,
-                    consent.expiresAt,
-                    consent.protectionProfile
+                    schemaVersion,
+                    consentId,
+                    candidateDigest,
+                    instanceId,
+                    companionName,
+                    seedRootHash,
+                    bodyId,
+                    guardianId,
+                    guardianKeyEpochId,
+                    decision,
+                    confirmationMode,
+                    confirmationPurpose,
+                    consentedAt,
+                    expiresAt,
+                    protectionProfile
                 )
             )
         }
@@ -188,8 +239,8 @@ internal class GenesisUltraVerifiedHostBirthConsent(
 
 /**
  * Stores one short-lived consent record encrypted and authenticated by a
- * dedicated Android Keystore key. No automatic approval or replacement path
- * exists. Expired consent must be revoked before a new ceremony can occur.
+ * dedicated Android Keystore key. Expired consent must be explicitly revoked
+ * before a different candidate can be approved.
  */
 internal class GenesisUltraAndroidHostBirthConsentStore(
     context: Context,
@@ -219,9 +270,10 @@ internal class GenesisUltraAndroidHostBirthConsentStore(
                     when {
                         consent == null -> GenesisUltraHostBirthConsentState.INCONSISTENT
                         consent.isValidAt(evaluatedAt) -> GenesisUltraHostBirthConsentState.READY
-                        Instant.parse(evaluatedAt) >= Instant.parse(consent.expiresAt) -> {
-                            GenesisUltraHostBirthConsentState.EXPIRED
-                        }
+                        requireCanonicalTimestamp(
+                            evaluatedAt,
+                            "host_birth_consent_evaluation_time_invalid"
+                        ) >= Instant.parse(consent.expiresAt) -> GenesisUltraHostBirthConsentState.EXPIRED
                         else -> GenesisUltraHostBirthConsentState.INCONSISTENT
                     }
                 }
@@ -336,8 +388,15 @@ internal class GenesisUltraAndroidHostBirthConsentStore(
             ).removePrefix("sha256:")
 
             val model = candidate.candidate
-            val withoutDigest = GenesisUltraVerifiedHostBirthConsent(
-                schemaVersion = GenesisUltraVerifiedHostBirthConsent.CONSENT_SCHEMA,
+            val schemaVersion = GenesisUltraVerifiedHostBirthConsent.CONSENT_SCHEMA
+            val decision = GenesisUltraHostBirthConsentRequest.APPROVE_DECISION
+            val confirmationMode = GenesisUltraHostBirthConsentRequest.INTERACTIVE_CONFIRMATION_MODE
+            val confirmationPurpose = GenesisUltraHostBirthConsentRequest.BIRTH_CONFIRMATION_PURPOSE
+            val consentedAt = now.toString()
+            val expiresAt = expires.toString()
+            val protectionProfile = GenesisUltraVerifiedHostBirthConsent.PROTECTION_PROFILE
+            val consentDigest = GenesisUltraVerifiedHostBirthConsent.digestForFields(
+                schemaVersion = schemaVersion,
                 consentId = consentId,
                 candidateDigest = candidate.candidateDigest,
                 instanceId = model.instanceIdentity.instanceId,
@@ -346,17 +405,30 @@ internal class GenesisUltraAndroidHostBirthConsentStore(
                 bodyId = model.bodyRecord.bodyId,
                 guardianId = model.release.signature.signerId,
                 guardianKeyEpochId = model.release.signature.keyEpochId,
-                decision = GenesisUltraHostBirthConsentRequest.APPROVE_DECISION,
-                confirmationMode = GenesisUltraHostBirthConsentRequest.INTERACTIVE_CONFIRMATION_MODE,
-                confirmationPurpose = GenesisUltraHostBirthConsentRequest.BIRTH_CONFIRMATION_PURPOSE,
-                consentedAt = now.toString(),
-                expiresAt = expires.toString(),
-                protectionProfile = GenesisUltraVerifiedHostBirthConsent.PROTECTION_PROFILE,
-                consentDigest = ZERO_SHA256
+                decision = decision,
+                confirmationMode = confirmationMode,
+                confirmationPurpose = confirmationPurpose,
+                consentedAt = consentedAt,
+                expiresAt = expiresAt,
+                protectionProfile = protectionProfile
             )
-            val consent = copyWithDigest(
-                withoutDigest,
-                GenesisUltraVerifiedHostBirthConsent.digestFor(withoutDigest)
+            val consent = GenesisUltraVerifiedHostBirthConsent(
+                schemaVersion = schemaVersion,
+                consentId = consentId,
+                candidateDigest = candidate.candidateDigest,
+                instanceId = model.instanceIdentity.instanceId,
+                companionName = model.instanceIdentity.companionName,
+                seedRootHash = model.release.verifiedRootHash,
+                bodyId = model.bodyRecord.bodyId,
+                guardianId = model.release.signature.signerId,
+                guardianKeyEpochId = model.release.signature.keyEpochId,
+                decision = decision,
+                confirmationMode = confirmationMode,
+                confirmationPurpose = confirmationPurpose,
+                consentedAt = consentedAt,
+                expiresAt = expiresAt,
+                protectionProfile = protectionProfile,
+                consentDigest = consentDigest
             )
 
             AndroidKeystore.generateNewAes256GcmKey(masterKeyAlias)
@@ -495,30 +567,6 @@ internal class GenesisUltraAndroidHostBirthConsentStore(
         )
     }
 
-    private fun copyWithDigest(
-        source: GenesisUltraVerifiedHostBirthConsent,
-        digest: String
-    ): GenesisUltraVerifiedHostBirthConsent {
-        return GenesisUltraVerifiedHostBirthConsent(
-            schemaVersion = source.schemaVersion,
-            consentId = source.consentId,
-            candidateDigest = source.candidateDigest,
-            instanceId = source.instanceId,
-            companionName = source.companionName,
-            seedRootHash = source.seedRootHash,
-            bodyId = source.bodyId,
-            guardianId = source.guardianId,
-            guardianKeyEpochId = source.guardianKeyEpochId,
-            decision = source.decision,
-            confirmationMode = source.confirmationMode,
-            confirmationPurpose = source.confirmationPurpose,
-            consentedAt = source.consentedAt,
-            expiresAt = source.expiresAt,
-            protectionProfile = source.protectionProfile,
-            consentDigest = digest
-        )
-    }
-
     private fun associatedData(): ByteArray {
         return ByteArrayOutputStream().use { output ->
             output.write(GenesisUltraHashProfile.frame(RECORD_AAD_DOMAIN))
@@ -545,7 +593,6 @@ internal class GenesisUltraAndroidHostBirthConsentStore(
         private const val CONSENT_ID_DOMAIN = "genesis.host.birth.consent.id.v0.1"
         private const val MAX_CONSENT_WINDOW_SECONDS = 120L
         private const val CONSENT_ENTROPY_BYTES = 32
-        private val ZERO_SHA256 = "sha256:" + "0".repeat(64)
         private val SHA256_REF = Regex("^sha256:[a-f0-9]{64}$")
         private val RECORD_FIELDS = setOf(
             "schema_version",
