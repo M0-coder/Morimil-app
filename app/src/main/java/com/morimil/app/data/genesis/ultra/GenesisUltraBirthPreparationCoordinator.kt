@@ -48,8 +48,9 @@ internal data class GenesisUltraBirthPreparationAssessment(
         require(!birthCommitAuthorized) {
             "birth_preparation_cannot_authorize_commit"
         }
-        require(candidateConstructionReady ==
-            (status == GenesisUltraBirthPreparationStatus.READY_FOR_SIGNED_CANDIDATE)
+        require(
+            candidateConstructionReady ==
+                (status == GenesisUltraBirthPreparationStatus.READY_FOR_SIGNED_CANDIDATE)
         ) { "birth_preparation_candidate_readiness_mismatch" }
     }
 }
@@ -151,15 +152,20 @@ internal object GenesisUltraBirthPreparationClassifier {
 
 /**
  * Reads the actual Android/Room state needed before candidate construction.
- * It does not provision keys, pin authority, install a Seed, sign evidence or
- * invoke the atomic activation coordinator.
+ *
+ * [beforeInspect] may perform idempotent maintenance derived exclusively from
+ * durable state. Production uses it to retire a pre-birth consent residue after
+ * a consent-bound birth has already committed. It cannot provision identity,
+ * pin authority, install a Seed, sign evidence or activate birth.
  */
 internal class GenesisUltraBirthPreparationCoordinator(
     private val database: MorimilDatabase,
     private val bodyIdentityRootStore: GenesisUltraAndroidBodyIdentityRootStore,
-    private val guardianTrustAnchorStore: GenesisUltraAndroidGuardianTrustAnchorStore
+    private val guardianTrustAnchorStore: GenesisUltraAndroidGuardianTrustAnchorStore,
+    private val beforeInspect: suspend () -> Unit = {}
 ) {
     suspend fun inspect(): GenesisUltraBirthPreparationAssessment {
+        beforeInspect()
         val memoryDao = database.memoryDao()
         val facts = GenesisUltraBirthPreparationFacts(
             persistedBirthState = GenesisUltraAuthorizedBirthStateAudit(database).readState(),
