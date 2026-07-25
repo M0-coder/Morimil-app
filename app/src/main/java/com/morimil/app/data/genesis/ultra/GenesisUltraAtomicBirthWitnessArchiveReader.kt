@@ -164,11 +164,11 @@ internal class GenesisUltraAtomicBirthWitnessArchiveReader(
         require(journal.map(JournalRecord::path).distinct().size == journal.size) {
             "witness_archive_journal_path_duplicate"
         }
-        GenesisUltraAtomicBirthPersistenceValidator.mandatoryArtifactKinds.forEach { kind ->
-            require(artifacts.count { record -> record.kind == kind } == 1) {
-                "witness_archive_artifact_kind_invalid:$kind"
-            }
-        }
+        val artifactKinds = artifacts.map(ArtifactRecord::kind)
+        require(
+            artifactKinds.size == GenesisUltraAtomicBirthPersistenceValidator.mandatoryArtifactKinds.size &&
+                artifactKinds.toSet() == GenesisUltraAtomicBirthPersistenceValidator.mandatoryArtifactKinds
+        ) { "witness_archive_artifact_kind_set_invalid" }
 
         return TransportManifest(
             candidateDigest = candidateDigest,
@@ -180,8 +180,8 @@ internal class GenesisUltraAtomicBirthWitnessArchiveReader(
     }
 
     private fun parseArtifacts(array: JSONArray): List<ArtifactRecord> {
-        require(array.length() >= GenesisUltraAtomicBirthPersistenceValidator.mandatoryArtifactKinds.size) {
-            "witness_archive_artifacts_too_short"
+        require(array.length() == GenesisUltraAtomicBirthPersistenceValidator.mandatoryArtifactKinds.size) {
+            "witness_archive_artifact_count_invalid"
         }
         return List(array.length()) { index ->
             val root = array.get(index)
