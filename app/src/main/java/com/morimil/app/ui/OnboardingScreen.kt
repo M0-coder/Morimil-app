@@ -1,5 +1,7 @@
 package com.morimil.app.ui
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -33,12 +35,21 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.morimil.app.data.genesis.ultra.GenesisUltraSignedSeedCandidatePreview
 
 @Composable
 internal fun OnboardingScreen(viewModel: GenesisUltraOnboardingViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val signedSeedState by viewModel.signedSeedPreview.collectAsStateWithLifecycle()
     var companionName by remember { mutableStateOf("") }
     val nameValidation = viewModel.validateCanonicalCompanionName(companionName)
+    val signedSeedLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            viewModel.previewSignedSeed(uri, companionName)
+        }
+    }
 
     Box(
         modifier = Modifier
@@ -101,9 +112,10 @@ internal fun OnboardingScreen(viewModel: GenesisUltraOnboardingViewModel) {
                     onValueChange = { next ->
                         if (next.length <= 128 && next.none(Char::isISOControl)) {
                             companionName = next
+                            viewModel.clearSignedSeedPreview()
                         }
                     },
-                    enabled = state.canonicalNameInputEnabled,
+                    enabled = state.canonicalNameInputEnabled && !signedSeedState.importing,
                     modifier = Modifier.fillMaxWidth(),
                     placeholder = {
                         Text(
@@ -155,6 +167,43 @@ internal fun OnboardingScreen(viewModel: GenesisUltraOnboardingViewModel) {
                 )
             }
 
+            OutlinedButton(
+                enabled = state.candidateConstructionReady &&
+                    nameValidation.isValid &&
+                    !signedSeedState.importing,
+                modifier = Modifier.fillMaxWidth(),
+                onClick = {
+                    signedSeedLauncher.launch(
+                        arrayOf(
+                            "application/zip",
+                            "application/x-zip-compressed",
+                            "application/octet-stream"
+                        )
+                    )
+                }
+            ) {
+                Text(
+                    when {
+                        signedSeedState.importing -> "Verificando Seed firmado"
+                        signedSeedState.preview != null -> "Verificar otro Seed firmado"
+                        else -> "Seleccionar Seed firmado (.zip)"
+                    }
+                )
+            }
+
+            signedSeedState.preview?.let { preview ->
+                SignedSeedPreviewCard(preview)
+            }
+
+            signedSeedState.errorMessage?.let { message ->
+                Text(
+                    text = "Seed rechazado: $message",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    textAlign = TextAlign.Center
+                )
+            }
+
             Button(
                 enabled = false,
                 colors = ButtonDefaults.buttonColors(
@@ -171,7 +220,9 @@ internal fun OnboardingScreen(viewModel: GenesisUltraOnboardingViewModel) {
                     text = when {
                         state.loading -> "Revisando preparación"
                         !nameValidation.isValid -> "Confirma un nombre canónico"
-                        state.candidateConstructionReady -> "Esperando Seed firmado y testimonio"
+                        signedSeedState.preview != null ->
+                            "Candidato verificado; consentimiento aún bloqueado"
+                        state.candidateConstructionReady -> "Selecciona y verifica un Seed firmado"
                         else -> "Nacimiento Genesis Ultra bloqueado"
                     },
                     modifier = Modifier.padding(vertical = 6.dp)
@@ -179,7 +230,7 @@ internal fun OnboardingScreen(viewModel: GenesisUltraOnboardingViewModel) {
             }
 
             OutlinedButton(
-                enabled = !state.loading,
+                enabled = !state.loading && !signedSeedState.importing,
                 modifier = Modifier.fillMaxWidth(),
                 onClick = viewModel::refresh
             ) {
@@ -222,6 +273,41 @@ private fun StatusCard(title: String, detail: String, status: String) {
             Text(
                 status,
                 style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
+                color = Color(0xFF245C37)
+            )
+        }
+    }
+}
+
+@Composable
+private fun SignedSeedPreviewCard(preview: GenesisUltraSignedSeedCandidatePreview) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        color = Color(0xFFEAF3E7)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text("Candidato firmado verificado", style = MaterialTheme.typography.titleMedium)
+            Text("Compañero: ${preview.companionName}", style = MaterialTheme.typography.bodySmall)
+            Text("Seed: ${preview.seedId}", style = MaterialTheme.typography.bodySmall)
+            Text("Archivos verificados: ${preview.verifiedFileCount}", style = MaterialTheme.typography.bodySmall)
+            Text("Guardián: ${preview.guardianId}", style = MaterialTheme.typography.bodySmall)
+            Text("Instance: ${preview.instanceId}", style = MaterialTheme.typography.bodySmall)
+            Text("Body: ${preview.bodyId}", style = MaterialTheme.typography.bodySmall)
+            Text(
+                "Root: ${preview.seedRootHash}",
+                style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace)
+            )
+            Text(
+                "Candidate: ${preview.candidateDigest}",
+                style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace)
+            )
+            Text(
+                "Vista previa efímera: no es consentimiento, testimonio ni nacimiento.",
+                style = MaterialTheme.typography.bodySmall,
                 color = Color(0xFF245C37)
             )
         }
