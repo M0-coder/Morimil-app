@@ -37,6 +37,8 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.morimil.app.data.genesis.ultra.GenesisUltraAtomicBirthExecutionCeremonyRequest
+import com.morimil.app.data.genesis.ultra.GenesisUltraAtomicBirthExecutionOutcome
 import com.morimil.app.data.genesis.ultra.GenesisUltraHostBirthConsentState
 import com.morimil.app.data.genesis.ultra.GenesisUltraSignedSeedCandidatePreview
 
@@ -46,27 +48,37 @@ internal fun OnboardingScreen(viewModel: GenesisUltraOnboardingViewModel) {
     val signedSeedState by viewModel.signedSeedPreview.collectAsStateWithLifecycle()
     val consentState by viewModel.hostBirthConsent.collectAsStateWithLifecycle()
     val authorizationState by viewModel.atomicBirthAuthorization.collectAsStateWithLifecycle()
+    val executionState by viewModel.atomicBirthExecution.collectAsStateWithLifecycle()
     var companionName by remember { mutableStateOf("") }
-    var confirmationCodeInput by remember { mutableStateOf("") }
-    var userPresenceConfirmed by remember { mutableStateOf(false) }
+    var consentCodeInput by remember { mutableStateOf("") }
+    var consentPresenceConfirmed by remember { mutableStateOf(false) }
+    var executionCodeInput by remember { mutableStateOf("") }
+    var executionPresenceConfirmed by remember { mutableStateOf(false) }
     val nameValidation = viewModel.validateCanonicalCompanionName(companionName)
     val interactionLocked = signedSeedState.importing || consentState.busy ||
         consentState.hasPersistedConsent || authorizationState.verifying ||
-        authorizationState.authorizedInMemory
+        authorizationState.authorizedInMemory || executionState.executing ||
+        executionState.birthCommitted
 
     val signedSeedLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri ->
         if (uri != null) {
-            confirmationCodeInput = ""
-            userPresenceConfirmed = false
+            consentCodeInput = ""
+            consentPresenceConfirmed = false
+            executionCodeInput = ""
+            executionPresenceConfirmed = false
             viewModel.previewSignedSeed(uri, companionName)
         }
     }
     val witnessLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri ->
-        if (uri != null) viewModel.authorizeWitnessArchive(uri)
+        if (uri != null) {
+            executionCodeInput = ""
+            executionPresenceConfirmed = false
+            viewModel.authorizeWitnessArchive(uri)
+        }
     }
 
     Box(
@@ -129,8 +141,10 @@ internal fun OnboardingScreen(viewModel: GenesisUltraOnboardingViewModel) {
                     onValueChange = { next ->
                         if (next.length <= 128 && next.none(Char::isISOControl)) {
                             companionName = next
-                            confirmationCodeInput = ""
-                            userPresenceConfirmed = false
+                            consentCodeInput = ""
+                            consentPresenceConfirmed = false
+                            executionCodeInput = ""
+                            executionPresenceConfirmed = false
                             viewModel.clearSignedSeedPreview()
                         }
                     },
@@ -160,12 +174,7 @@ internal fun OnboardingScreen(viewModel: GenesisUltraOnboardingViewModel) {
             }
 
             if (companionName.isNotEmpty() && !nameValidation.isValid) {
-                Text(
-                    text = companionNameError(nameValidation.errorCode),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                    textAlign = TextAlign.Center
-                )
+                ErrorText(companionNameError(nameValidation.errorCode))
             }
             if (state.blockers.isNotEmpty()) {
                 Text(
@@ -215,19 +224,17 @@ internal fun OnboardingScreen(viewModel: GenesisUltraOnboardingViewModel) {
                 ConsentCeremonyCard(
                     expectedCode = requireNotNull(signedSeedState.confirmationCode),
                     sessionExpiresAt = requireNotNull(signedSeedState.sessionExpiresAt),
-                    confirmationCodeInput = confirmationCodeInput,
-                    userPresenceConfirmed = userPresenceConfirmed,
-                    busy = consentState.busy || authorizationState.verifying,
+                    confirmationCodeInput = consentCodeInput,
+                    userPresenceConfirmed = consentPresenceConfirmed,
+                    busy = consentState.busy || authorizationState.verifying || executionState.executing,
                     onCodeChanged = { next ->
-                        if (next.length <= 12 && next.all { it in '0'..'9' || it in 'a'..'f' }) {
-                            confirmationCodeInput = next
-                        }
+                        if (isConfirmationCodePrefix(next)) consentCodeInput = next
                     },
-                    onPresenceChanged = { userPresenceConfirmed = it },
+                    onPresenceChanged = { consentPresenceConfirmed = it },
                     onConfirm = {
                         viewModel.recordExplicitHostConsent(
-                            presentedConfirmationCode = confirmationCodeInput,
-                            userPresenceConfirmed = userPresenceConfirmed
+                            presentedConfirmationCode = consentCodeInput,
+                            userPresenceConfirmed = consentPresenceConfirmed
                         )
                     }
                 )
@@ -237,9 +244,12 @@ internal fun OnboardingScreen(viewModel: GenesisUltraOnboardingViewModel) {
                 PersistedConsentCard(
                     state = consentState,
                     authorizationVerifying = authorizationState.verifying,
+                    executionBusyOrCommitted = executionState.executing || executionState.birthCommitted,
                     onRevoke = {
-                        confirmationCodeInput = ""
-                        userPresenceConfirmed = false
+                        consentCodeInput = ""
+                        consentPresenceConfirmed = false
+                        executionCodeInput = ""
+                        executionPresenceConfirmed = false
                         viewModel.revokeHostConsent()
                     }
                 )
@@ -251,11 +261,13 @@ internal fun OnboardingScreen(viewModel: GenesisUltraOnboardingViewModel) {
             if (
                 consentState.summary != null &&
                 signedSeedState.sessionAvailable &&
-                !authorizationState.authorizedInMemory
+                !authorizationState.authorizedInMemory &&
+                !executionState.birthCommitted
             ) {
                 OutlinedButton(
                     enabled = !authorizationState.verifying &&
                         !consentState.busy &&
+                        !executionState.executing &&
                         consentState.persistedState == GenesisUltraHostBirthConsentState.READY,
                     modifier = Modifier.fillMaxWidth(),
                     onClick = { witnessLauncher.launch(ZIP_MIME_TYPES) }
@@ -272,40 +284,39 @@ internal fun OnboardingScreen(viewModel: GenesisUltraOnboardingViewModel) {
 
             authorizationState.summary?.let { summary ->
                 AtomicAuthorizationCard(summary)
+                if (!executionState.birthCommitted) {
+                    val expectedExecutionCode =
+                        GenesisUltraAtomicBirthExecutionCeremonyRequest.confirmationCode(
+                            summary.authorizationDigest
+                        )
+                    ExecutionCeremonyCard(
+                        expectedCode = expectedExecutionCode,
+                        expiresAt = summary.expiresAt,
+                        confirmationCodeInput = executionCodeInput,
+                        userPresenceConfirmed = executionPresenceConfirmed,
+                        executing = executionState.executing,
+                        onCodeChanged = { next ->
+                            if (isConfirmationCodePrefix(next)) executionCodeInput = next
+                        },
+                        onPresenceChanged = { executionPresenceConfirmed = it },
+                        onExecute = {
+                            viewModel.executeAuthorizedBirth(
+                                presentedConfirmationCode = executionCodeInput,
+                                userPresenceConfirmed = executionPresenceConfirmed
+                            )
+                        }
+                    )
+                }
             }
             authorizationState.errorMessage?.let { message ->
                 ErrorText("Testimonio rechazado: $message")
             }
 
-            Button(
-                enabled = false,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFFBA7517),
-                    contentColor = Color.White,
-                    disabledContainerColor = Color(0x33BA7517),
-                    disabledContentColor = Color(0x88FFFFFF)
-                ),
-                shape = RoundedCornerShape(28.dp),
-                modifier = Modifier.fillMaxWidth(),
-                onClick = { }
-            ) {
-                Text(
-                    text = when {
-                        state.loading -> "Revisando preparación"
-                        !nameValidation.isValid -> "Confirma un nombre canónico"
-                        authorizationState.authorizedInMemory ->
-                            "Autorización verificada; ejecución aún bloqueada"
-                        authorizationState.verifying -> "Verificando evidencia final"
-                        consentState.summary != null ->
-                            "Consentimiento registrado; verifica el testimonio final"
-                        consentState.hasPersistedConsent ->
-                            "Consentimiento previo sin candidato; revócalo para continuar"
-                        signedSeedState.sessionAvailable -> "Confirma el candidato exacto"
-                        state.candidateConstructionReady -> "Selecciona y verifica un Seed firmado"
-                        else -> "Nacimiento Genesis Ultra bloqueado"
-                    },
-                    modifier = Modifier.padding(vertical = 6.dp)
-                )
+            executionState.committed?.let { summary ->
+                CommittedBirthCard(summary)
+            }
+            executionState.errorMessage?.let { message ->
+                ErrorText("Ejecución rechazada antes del commit: $message")
             }
 
             OutlinedButton(
@@ -343,11 +354,7 @@ private fun StatusCard(title: String, detail: String, status: String) {
         ) {
             Text(title, style = MaterialTheme.typography.titleMedium)
             Text(detail, style = MaterialTheme.typography.bodySmall)
-            Text(
-                status,
-                style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
-                color = Color(0xFF245C37)
-            )
+            MonospaceText(status, Color(0xFF245C37))
         }
     }
 }
@@ -410,36 +417,19 @@ private fun ConsentCeremonyCard(
                 "Comprueba el candidato mostrado. Este consentimiento quedará ligado solo a ese digest.",
                 style = MaterialTheme.typography.bodySmall
             )
-            Text(
-                "Código: $expectedCode",
-                style = MaterialTheme.typography.titleMedium.copy(fontFamily = FontFamily.Monospace)
-            )
-            Text(
-                "Escribe el código exactamente antes de $sessionExpiresAt.",
-                style = MaterialTheme.typography.bodySmall
-            )
-            TextField(
+            ConfirmationCodeField(
+                expectedCode = expectedCode,
                 value = confirmationCodeInput,
-                onValueChange = onCodeChanged,
                 enabled = !busy,
-                modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("Código de 12 caracteres") },
-                singleLine = true
+                onValueChanged = onCodeChanged
             )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Checkbox(
-                    checked = userPresenceConfirmed,
-                    onCheckedChange = onPresenceChanged,
-                    enabled = !busy
-                )
-                Text(
-                    "Estoy presente y apruebo este candidato exacto.",
-                    style = MaterialTheme.typography.bodySmall
-                )
-            }
+            Text("Confirma antes de $sessionExpiresAt.", style = MaterialTheme.typography.bodySmall)
+            PresenceRow(
+                checked = userPresenceConfirmed,
+                enabled = !busy,
+                label = "Estoy presente y apruebo este candidato exacto.",
+                onChanged = onPresenceChanged
+            )
             Button(
                 enabled = !busy && userPresenceConfirmed && confirmationCodeInput == expectedCode,
                 modifier = Modifier.fillMaxWidth(),
@@ -448,7 +438,7 @@ private fun ConsentCeremonyCard(
                 Text(if (busy) "Registrando consentimiento" else "Registrar consentimiento exacto")
             }
             Text(
-                "Esto no autoriza ni ejecuta el nacimiento.",
+                "Esto todavía no ejecuta el nacimiento.",
                 style = MaterialTheme.typography.bodySmall,
                 color = Color(0xFF8A4B0F)
             )
@@ -460,6 +450,7 @@ private fun ConsentCeremonyCard(
 private fun PersistedConsentCard(
     state: GenesisUltraHostBirthConsentUiState,
     authorizationVerifying: Boolean,
+    executionBusyOrCommitted: Boolean,
     onRevoke: () -> Unit
 ) {
     Surface(
@@ -490,7 +481,7 @@ private fun PersistedConsentCard(
             }
             MonospaceText("Estado: ${state.persistedState}")
             OutlinedButton(
-                enabled = !state.busy && !authorizationVerifying &&
+                enabled = !state.busy && !authorizationVerifying && !executionBusyOrCommitted &&
                     state.persistedState != GenesisUltraHostBirthConsentState.INCONSISTENT,
                 modifier = Modifier.fillMaxWidth(),
                 onClick = onRevoke
@@ -523,11 +514,155 @@ private fun AtomicAuthorizationCard(summary: GenesisUltraAtomicBirthAuthorizatio
             Text("Expira: ${summary.expiresAt}", style = MaterialTheme.typography.bodySmall)
             MonospaceText("birthCommitAuthorized = true", Color(0xFF245C37))
             Text(
-                "La autorización existe solo en memoria. La ejecución y el runtime continúan desconectados.",
+                "La autorización existe solo en memoria y requiere una segunda ceremonia para ejecutarse.",
                 style = MaterialTheme.typography.bodySmall,
                 color = Color(0xFF8A4B0F)
             )
         }
+    }
+}
+
+@Composable
+private fun ExecutionCeremonyCard(
+    expectedCode: String,
+    expiresAt: String,
+    confirmationCodeInput: String,
+    userPresenceConfirmed: Boolean,
+    executing: Boolean,
+    onCodeChanged: (String) -> Unit,
+    onPresenceChanged: (Boolean) -> Unit,
+    onExecute: () -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        color = Color(0xFFFFE4D8)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text("Ceremonia final de nacimiento", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "Esta acción compromete de forma atómica la Instance, el Body activo, la autorización durable " +
+                    "y la memoria canónica secuencia 1. No es una vista previa.",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFF8A2E0F)
+            )
+            ConfirmationCodeField(
+                expectedCode = expectedCode,
+                value = confirmationCodeInput,
+                enabled = !executing,
+                onValueChanged = onCodeChanged
+            )
+            Text("La autorización expira: $expiresAt", style = MaterialTheme.typography.bodySmall)
+            PresenceRow(
+                checked = userPresenceConfirmed,
+                enabled = !executing,
+                label = "Estoy presente y ordeno comprometer este nacimiento exacto.",
+                onChanged = onPresenceChanged
+            )
+            Button(
+                enabled = !executing && userPresenceConfirmed && confirmationCodeInput == expectedCode,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF9A3412),
+                    contentColor = Color.White
+                ),
+                modifier = Modifier.fillMaxWidth(),
+                onClick = onExecute
+            ) {
+                Text(if (executing) "Comprometiendo nacimiento" else "Comprometer nacimiento Genesis Ultra")
+            }
+            Text(
+                "Un fallo antes del commit permite corregir y volver a confirmar. " +
+                    "Después del commit nunca se ofrece una segunda ejecución.",
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+    }
+}
+
+@Composable
+private fun CommittedBirthCard(summary: GenesisUltraAtomicBirthExecutionSummary) {
+    val maintenancePending =
+        summary.outcome == GenesisUltraAtomicBirthExecutionOutcome.COMMITTED_MAINTENANCE_PENDING
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        color = if (maintenancePending) Color(0xFFFFF0D5) else Color(0xFFDFF2E4)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text("Nacimiento Genesis Ultra comprometido", style = MaterialTheme.typography.titleMedium)
+            Text("Compañero: ${summary.companionName}", style = MaterialTheme.typography.bodySmall)
+            Text("Instance: ${summary.instanceId}", style = MaterialTheme.typography.bodySmall)
+            Text("Birth: ${summary.birthId}", style = MaterialTheme.typography.bodySmall)
+            MonospaceText("Authorization: ${summary.authorizationDigest}")
+            MonospaceText("Birth state: ${summary.birthStateDigest}")
+            MonospaceText("Receipt: ${summary.receiptDigest}")
+            MonospaceText("Memory sequence 1: ${summary.firstPostBirthEventHash}")
+            Text("Comprometido: ${summary.committedAt}", style = MaterialTheme.typography.bodySmall)
+            if (maintenancePending) {
+                Text(
+                    "El nacimiento ya está comprometido. La limpieza externa sigue pendiente y se " +
+                        "reintentará mediante inspección durable; no ejecutes otro nacimiento.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFF8A4B0F)
+                )
+                MonospaceText("Mantenimiento: ${summary.maintenanceError.orEmpty()}")
+            } else {
+                Text(
+                    "Commit, memoria canónica y retiro del consentimiento verificados.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFF245C37)
+                )
+            }
+            MonospaceText("birthCommitted = true", Color(0xFF245C37))
+            MonospaceText("retryAllowed = false", Color(0xFF245C37))
+        }
+    }
+}
+
+@Composable
+private fun ConfirmationCodeField(
+    expectedCode: String,
+    value: String,
+    enabled: Boolean,
+    onValueChanged: (String) -> Unit
+) {
+    Text(
+        "Código: $expectedCode",
+        style = MaterialTheme.typography.titleMedium.copy(fontFamily = FontFamily.Monospace)
+    )
+    TextField(
+        value = value,
+        onValueChange = onValueChanged,
+        enabled = enabled,
+        modifier = Modifier.fillMaxWidth(),
+        placeholder = { Text("Código de 12 caracteres") },
+        singleLine = true
+    )
+}
+
+@Composable
+private fun PresenceRow(
+    checked: Boolean,
+    enabled: Boolean,
+    label: String,
+    onChanged: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Checkbox(
+            checked = checked,
+            onCheckedChange = onChanged,
+            enabled = enabled
+        )
+        Text(label, style = MaterialTheme.typography.bodySmall)
     }
 }
 
@@ -548,6 +683,12 @@ private fun ErrorText(message: String) {
         color = MaterialTheme.colorScheme.error,
         textAlign = TextAlign.Center
     )
+}
+
+private fun isConfirmationCodePrefix(value: String): Boolean {
+    return value.length <= 12 && value.all { character ->
+        character in '0'..'9' || character in 'a'..'f'
+    }
 }
 
 private fun companionNameError(errorCode: String?): String {
