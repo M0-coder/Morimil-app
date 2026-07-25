@@ -224,22 +224,22 @@ class MorimilViewModel(application: Application) : AndroidViewModel(application)
                     .onFailure { error -> recordInternalRuntimeIssue("organism_health.refresh", error) }
             }
         }
-      viewModelScope.launch(Dispatchers.IO) {
-  runCatching {
-      container.genesisUltraRuntimeStartupGate.requireReady()
-  }.onSuccess {
-      reasoningTranscriptRepository.seedIntroTurnsIfNeeded()
-      refreshGenesis()
-  }.onFailure { error ->
-      recordInternalRuntimeIssue(
-          component = "genesis_ultra_runtime_gate",
-          message = error.message
-              ?: "Genesis Ultra runtime identity could not be verified.",
-          failureCount = 1,
-          occurredAtMillis = System.currentTimeMillis()
-      )
-  }
-}
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                container.genesisUltraRuntimeStartupGate.requireReady()
+            }.onSuccess {
+                reasoningTranscriptRepository.seedIntroTurnsIfNeeded()
+                refreshGenesis()
+            }.onFailure { error ->
+                recordInternalRuntimeIssue(
+                    component = "genesis_ultra_runtime_gate",
+                    message = error.message
+                        ?: "Genesis Ultra runtime identity could not be verified.",
+                    failureCount = 1,
+                    occurredAtMillis = System.currentTimeMillis()
+                )
+            }
+        }
         viewModelScope.launch {
             recentMemoryEvents.collect {
                 refreshChatOrganismStatus()
