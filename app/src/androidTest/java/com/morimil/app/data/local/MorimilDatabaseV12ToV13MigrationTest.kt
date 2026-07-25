@@ -22,12 +22,13 @@ class MorimilDatabaseV12ToV13MigrationTest {
     fun migrate12To13CreatesImmutableBirthAuthorizationReceipt() {
         helper.createDatabase(TEST_DATABASE, 12).close()
 
-        helper.runMigrationsAndValidate(
+        val database = helper.runMigrationsAndValidate(
             TEST_DATABASE,
             13,
             true,
             MorimilDatabase.MIGRATION_12_13
-        ).use { database ->
+        )
+        try {
             assertEquals(13, database.query("PRAGMA user_version").use { cursor ->
                 assertTrue(cursor.moveToFirst())
                 cursor.getInt(0)
@@ -49,6 +50,8 @@ class MorimilDatabaseV12ToV13MigrationTest {
                     cursor.getInt(0)
                 }
             )
+        } finally {
+            database.close()
         }
     }
 
