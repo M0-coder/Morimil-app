@@ -44,8 +44,8 @@ class MorimilDatabaseMigrationTest {
             )
             .build()
 
-        database.use { migratedDatabase ->
-            val migrated = migratedDatabase.openHelper.writableDatabase
+        try {
+            val migrated = database.openHelper.writableDatabase
             assertEquals(13, migrated.userVersion())
             assertTrue(
                 migrated.columnNames("local_instance_identity").containsAll(
@@ -72,6 +72,8 @@ class MorimilDatabaseMigrationTest {
                 0,
                 migrated.singleInt("SELECT COUNT(*) FROM genesis_ultra_birth_authorization")
             )
+        } finally {
+            database.close()
         }
     }
 
