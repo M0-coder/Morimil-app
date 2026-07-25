@@ -5,6 +5,7 @@ import com.morimil.app.ai.ReasoningClient
 import com.morimil.app.ai.ReasoningConfigStore
 import com.morimil.app.core.memory.MemoryIntegrityCore
 import com.morimil.app.data.genesis.GenesisReader
+import com.morimil.app.data.genesis.ultra.GenesisUltraAndroidBodyIdentityRootStore
 import com.morimil.app.data.local.MemoryOrganDatabase
 import com.morimil.app.data.local.MemoryOrganDatabaseEncryption
 import com.morimil.app.data.local.MorimilDatabase
@@ -39,6 +40,14 @@ class MorimilAppContainer(context: Context) {
 
     val organDatabase: MemoryOrganDatabase by lazy {
         MemoryOrganDatabaseEncryption.open(appContext)
+    }
+
+    /** Available to the future Ultra birth coordinator; access remains lazy. */
+    internal val genesisUltraBodyIdentityRootStore: GenesisUltraAndroidBodyIdentityRootStore by lazy {
+        GenesisUltraAndroidBodyIdentityRootStore(
+            context = appContext,
+            database = memoryDatabase
+        )
     }
 
     val memorySignatureEpochPolicy: SharedPreferencesMemorySignatureEpochPolicy by lazy {
