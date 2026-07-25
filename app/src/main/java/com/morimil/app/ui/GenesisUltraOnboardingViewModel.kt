@@ -5,6 +5,8 @@ import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.morimil.app.MorimilAppContainer
+import com.morimil.app.data.genesis.ultra.GenesisUltraAtomicBirthWitnessAuthorizationCoordinator
+import com.morimil.app.data.genesis.ultra.GenesisUltraAuthorizedAtomicBirth
 import com.morimil.app.data.genesis.ultra.GenesisUltraCompanionNamePolicy
 import com.morimil.app.data.genesis.ultra.GenesisUltraCompanionNameValidation
 import com.morimil.app.data.genesis.ultra.GenesisUltraHostBirthConsentRequest
@@ -22,10 +24,10 @@ import java.time.Instant
 import java.time.temporal.ChronoUnit
 
 /**
- * Pre-birth inspection, candidate preview and explicit host consent only.
+ * Pre-birth inspection, candidate preview, host consent and witness verification.
  *
- * The exact candidate remains process-local. This ViewModel cannot accept final
- * Guardian testimony, issue atomic authorization, execute birth or open runtime.
+ * The exact candidate and any issued authorization remain process-local. This
+ * ViewModel cannot invoke atomic execution, persist authorization or open runtime.
  */
 class GenesisUltraOnboardingViewModel(
     application: Application
@@ -41,8 +43,14 @@ class GenesisUltraOnboardingViewModel(
         guardianTrustAnchorStore = container.genesisUltraGuardianTrustAnchorStore,
         candidateConstructionCoordinator = container.genesisUltraBirthCandidateConstructionCoordinator
     )
+    private val witnessAuthorizationCoordinator =
+        GenesisUltraAtomicBirthWitnessAuthorizationCoordinator(
+            context = application,
+            authorizationCoordinator = container.genesisUltraAtomicBirthAuthorizationCoordinator
+        )
 
     private var candidateSession: GenesisUltraSignedSeedCandidateSession? = null
+    private var authorizedBirth: GenesisUltraAuthorizedAtomicBirth? = null
 
     private val _state = MutableStateFlow(GenesisUltraOnboardingUiStateMapper.loading())
     internal val state: StateFlow<GenesisUltraOnboardingUiState> = _state.asStateFlow()
@@ -55,12 +63,22 @@ class GenesisUltraOnboardingViewModel(
     internal val hostBirthConsent: StateFlow<GenesisUltraHostBirthConsentUiState> =
         _hostBirthConsent.asStateFlow()
 
+    private val _atomicBirthAuthorization =
+        MutableStateFlow(GenesisUltraAtomicBirthAuthorizationUiState())
+    internal val atomicBirthAuthorization: StateFlow<GenesisUltraAtomicBirthAuthorizationUiState> =
+        _atomicBirthAuthorization.asStateFlow()
+
     init {
         refresh()
     }
 
     internal fun refresh() {
-        if (_hostBirthConsent.value.busy || _hostBirthConsent.value.hasPersistedConsent) return
+        if (
+            _hostBirthConsent.value.busy ||
+            _hostBirthConsent.value.hasPersistedConsent ||
+            _atomicBirthAuthorization.value.verifying ||
+            authorizedBirth != null
+        ) return
         clearCandidateSession()
         viewModelScope.launch(Dispatchers.IO) {
             _state.value = GenesisUltraOnboardingUiStateMapper.loading()
@@ -95,7 +113,11 @@ class GenesisUltraOnboardingViewModel(
     }
 
     internal fun previewSignedSeed(uri: Uri, companionName: String) {
-        if (_signedSeedPreview.value.importing || _hostBirthConsent.value.busy) return
+        if (
+            _signedSeedPreview.value.importing ||
+            _hostBirthConsent.value.busy ||
+            _atomicBirthAuthorization.value.verifying
+        ) return
         if (_hostBirthConsent.value.persistedState != GenesisUltraHostBirthConsentState.ABSENT) {
             _signedSeedPreview.value = GenesisUltraSignedSeedPreviewUiState(
                 errorMessage = "host_birth_consent_must_be_absent_before_new_candidate"
@@ -148,7 +170,7 @@ class GenesisUltraOnboardingViewModel(
         presentedConfirmationCode: String,
         userPresenceConfirmed: Boolean
     ) {
-        if (_hostBirthConsent.value.busy) return
+        if (_hostBirthConsent.value.busy || _atomicBirthAuthorization.value.verifying) return
         val session = candidateSession
         if (session == null || !_signedSeedPreview.value.sessionAvailable) {
             _hostBirthConsent.value = _hostBirthConsent.value.copy(
@@ -213,11 +235,79 @@ class GenesisUltraOnboardingViewModel(
         }
     }
 
+    internal fun authorizeWitnessArchive(uri: Uri) {
+        if (
+            _atomicBirthAuthorization.value.verifying ||
+            _atomicBirthAuthorization.value.authorizedInMemory ||
+            authorizedBirth != null ||
+            _hostBirthConsent.value.busy ||
+            _signedSeedPreview.value.importing
+        ) return
+
+        val session = candidateSession
+        val consent = _hostBirthConsent.value.summary
+        if (
+            session == null ||
+            consent == null ||
+            _hostBirthConsent.value.persistedState != GenesisUltraHostBirthConsentState.READY
+        ) {
+            _atomicBirthAuthorization.value = GenesisUltraAtomicBirthAuthorizationUiState(
+                errorMessage = "witness_authorization_candidate_or_consent_missing"
+            )
+            return
+        }
+        if (
+            consent.candidateDigest != session.preview.candidateDigest ||
+            !session.isValidAt(canonicalNow())
+        ) {
+            clearAtomicBirthAuthorization()
+            _atomicBirthAuthorization.value = GenesisUltraAtomicBirthAuthorizationUiState(
+                errorMessage = "witness_authorization_candidate_or_consent_expired"
+            )
+            return
+        }
+
+        _atomicBirthAuthorization.value = GenesisUltraAtomicBirthAuthorizationUiState(verifying = true)
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                witnessAuthorizationCoordinator.authorize(
+                    uri = uri,
+                    candidate = session.constructedCandidate,
+                    expectedConsentDigest = consent.consentDigest
+                )
+            }.fold(
+                onSuccess = { authorization ->
+                    check(candidateSession === session) {
+                        "witness_authorization_candidate_session_changed"
+                    }
+                    check(_hostBirthConsent.value.summary?.consentDigest == consent.consentDigest) {
+                        "witness_authorization_consent_session_changed"
+                    }
+                    authorizedBirth = authorization
+                    _atomicBirthAuthorization.value = GenesisUltraAtomicBirthAuthorizationUiState(
+                        summary = GenesisUltraAtomicBirthAuthorizationSummary.from(authorization)
+                    )
+                    scheduleAuthorizationExpiry(
+                        authorization.authorizationDigest,
+                        authorization.expiresAt
+                    )
+                },
+                onFailure = { error ->
+                    authorizedBirth = null
+                    _atomicBirthAuthorization.value = GenesisUltraAtomicBirthAuthorizationUiState(
+                        errorMessage = error.message?.take(220) ?: error::class.java.simpleName
+                    )
+                }
+            )
+        }
+    }
+
     internal fun revokeHostConsent() {
-        if (_hostBirthConsent.value.busy) return
+        if (_hostBirthConsent.value.busy || _atomicBirthAuthorization.value.verifying) return
         val current = _hostBirthConsent.value
         if (!current.hasPersistedConsent) return
 
+        clearAtomicBirthAuthorization()
         _hostBirthConsent.value = current.copy(
             recording = false,
             revoking = true,
@@ -260,17 +350,24 @@ class GenesisUltraOnboardingViewModel(
     }
 
     override fun onCleared() {
+        authorizedBirth = null
         candidateSession = null
         super.onCleared()
     }
 
     private fun clearCandidateSession() {
+        clearAtomicBirthAuthorization()
         candidateSession = null
         _signedSeedPreview.value = GenesisUltraSignedSeedPreviewUiState()
         val consent = _hostBirthConsent.value
         if (!consent.hasPersistedConsent && !consent.busy) {
             _hostBirthConsent.value = consent.copy(candidateSessionAvailable = false)
         }
+    }
+
+    private fun clearAtomicBirthAuthorization() {
+        authorizedBirth = null
+        _atomicBirthAuthorization.value = GenesisUltraAtomicBirthAuthorizationUiState()
     }
 
     private fun scheduleConsentExpiry(consentId: String, expiresAt: String) {
@@ -285,11 +382,29 @@ class GenesisUltraOnboardingViewModel(
                 hostBirthConsentRecoveryCoordinator.inspect()
             }.getOrDefault(GenesisUltraHostBirthConsentState.INCONSISTENT)
             if (persistedState == GenesisUltraHostBirthConsentState.EXPIRED) {
+                clearAtomicBirthAuthorization()
                 _hostBirthConsent.value = GenesisUltraHostBirthConsentUiState(
                     persistedState = persistedState,
                     candidateSessionAvailable = candidateSession != null
                 )
             }
+        }
+    }
+
+    private fun scheduleAuthorizationExpiry(authorizationDigest: String, expiresAt: String) {
+        viewModelScope.launch(Dispatchers.Default) {
+            val waitMillis = Duration.between(Instant.now(), Instant.parse(expiresAt))
+                .toMillis()
+                .coerceAtLeast(0L)
+            delay(waitMillis + EXPIRY_SETTLE_MILLIS)
+            val current = _atomicBirthAuthorization.value.summary ?: return@launch
+            if (current.authorizationDigest != authorizationDigest) return@launch
+            if (authorizedBirth?.authorizationDigest != authorizationDigest) return@launch
+            authorizedBirth = null
+            _atomicBirthAuthorization.value = GenesisUltraAtomicBirthAuthorizationUiState(
+                expired = true,
+                errorMessage = "witness_authorization_expired"
+            )
         }
     }
 
