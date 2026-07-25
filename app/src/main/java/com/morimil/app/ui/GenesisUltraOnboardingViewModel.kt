@@ -111,8 +111,8 @@ class GenesisUltraOnboardingViewModel(
         }
 
         clearCandidateSession()
+        _signedSeedPreview.value = GenesisUltraSignedSeedPreviewUiState(importing = true)
         viewModelScope.launch(Dispatchers.IO) {
-            _signedSeedPreview.value = GenesisUltraSignedSeedPreviewUiState(importing = true)
             runCatching {
                 signedSeedPreviewCoordinator.prepareSession(
                     uri = uri,
@@ -164,12 +164,12 @@ class GenesisUltraOnboardingViewModel(
             return
         }
 
+        _hostBirthConsent.value = GenesisUltraHostBirthConsentUiState(
+            recording = true,
+            persistedState = GenesisUltraHostBirthConsentState.ABSENT,
+            candidateSessionAvailable = true
+        )
         viewModelScope.launch(Dispatchers.IO) {
-            _hostBirthConsent.value = GenesisUltraHostBirthConsentUiState(
-                recording = true,
-                persistedState = GenesisUltraHostBirthConsentState.ABSENT,
-                candidateSessionAvailable = true
-            )
             val preview = session.preview
             runCatching {
                 hostBirthConsentStore.recordExplicitConsent(
@@ -218,12 +218,12 @@ class GenesisUltraOnboardingViewModel(
         val current = _hostBirthConsent.value
         if (!current.hasPersistedConsent) return
 
+        _hostBirthConsent.value = current.copy(
+            recording = false,
+            revoking = true,
+            errorMessage = null
+        )
         viewModelScope.launch(Dispatchers.IO) {
-            _hostBirthConsent.value = current.copy(
-                recording = false,
-                revoking = true,
-                errorMessage = null
-            )
             runCatching {
                 val summary = current.summary
                 if (summary != null && candidateSession != null) {
