@@ -1,6 +1,7 @@
 package com.morimil.app.reasoning.intrinsic
 
 import com.morimil.app.ai.ChatTurn
+import com.morimil.app.ai.IntrinsicSystemPromptBuilder
 import com.morimil.app.ai.ReasoningPreset
 import com.morimil.app.ai.ReasoningProviderConfig
 import com.morimil.app.data.genesis.GenesisIdentity
@@ -252,16 +253,16 @@ class MorimilNormalIntrinsicRuntimeV0Test {
             input = input,
             alias = "Morimil",
             genesis = GenesisIdentity(
-                schemaVersion = "1",
-                agentId = "morimil",
+                schemaVersion = IntrinsicSystemPromptBuilder.ULTRA_RUNTIME_CONTEXT_SCHEMA,
+                agentId = "inst_test",
                 alias = "Morimil",
-                role = "companion",
-                owner = "guardian",
-                riskTier = "local_only",
+                role = "free_companion_instance",
+                owner = "no_owner_guardian_custodian",
+                riskTier = "private_local",
                 allowedActions = listOf("reason"),
-                disallowedActions = listOf("alter_identity"),
+                disallowedActions = listOf("self_authorization"),
                 doctrineRef = "doctrine.md",
-                policyRef = "policy.md"
+                policyRef = "freedom-charter.json"
             ),
             doctrineText = null,
             policyText = null,
