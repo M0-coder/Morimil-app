@@ -53,7 +53,9 @@ class LegacyRuntimeQuarantineContractTest {
             rules.forEach { rule ->
                 productionSources
                     .asSequence()
-                    .filter { source -> source.readText().contains(rule.symbol) }
+                    .filter { source ->
+                        executableSource(source.readText()).contains("${rule.symbol}(")
+                    }
                     .map { source -> source.relativeTo(productionRoot).invariantSeparatorsPath }
                     .filterNot(rule.allowedProductionPaths::contains)
                     .forEach { path ->
@@ -66,6 +68,14 @@ class LegacyRuntimeQuarantineContractTest {
             "Legacy runtime symbols must remain confined until removal:\n${violations.joinToString("\n")}",
             violations.isEmpty()
         )
+    }
+
+    private fun executableSource(source: String): String {
+        return source
+            .replace(Regex("\"\"\"[\\s\\S]*?\"\"\""), "")
+            .replace(Regex("\"(?:\\\\.|[^\"\\\\])*\""), "")
+            .replace(Regex("/\\*[\\s\\S]*?\\*/"), "")
+            .replace(Regex("//.*"), "")
     }
 
     private fun productionSourceRoot(): File {
