@@ -162,7 +162,7 @@ internal class GenesisUltraBirthPreparationCoordinator(
     suspend fun inspect(): GenesisUltraBirthPreparationAssessment {
         val memoryDao = database.memoryDao()
         val facts = GenesisUltraBirthPreparationFacts(
-            persistedBirthState = GenesisUltraAtomicBirthStore(database).readState(),
+            persistedBirthState = GenesisUltraAuthorizedBirthStateAudit(database).readState(),
             bodyIdentityRootState = bodyIdentityRootStore.readState(),
             guardianTrustAnchorState = guardianTrustAnchorStore.readState(),
             legacyLocalIdentityCount = memoryDao.countLocalIdentity(),
