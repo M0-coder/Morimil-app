@@ -10,6 +10,7 @@ import com.morimil.app.data.genesis.ultra.GenesisUltraAndroidGuardianTrustAnchor
 import com.morimil.app.data.genesis.ultra.GenesisUltraAndroidHostBirthConsentStore
 import com.morimil.app.data.genesis.ultra.GenesisUltraAtomicBirthActivationCoordinator
 import com.morimil.app.data.genesis.ultra.GenesisUltraAtomicBirthAuthorizationCoordinator
+import com.morimil.app.data.genesis.ultra.GenesisUltraAtomicBirthExecutionCeremonyCoordinator
 import com.morimil.app.data.genesis.ultra.GenesisUltraAtomicBirthExecutionCoordinator
 import com.morimil.app.data.genesis.ultra.GenesisUltraBirthCandidateConstructionCoordinator
 import com.morimil.app.data.genesis.ultra.GenesisUltraBirthPreparationCoordinator
@@ -141,6 +142,15 @@ class MorimilAppContainer(context: Context) {
                 activationCoordinator = genesisUltraAtomicBirthActivationCoordinator,
                 bodyIdentityRootStore = genesisUltraBodyIdentityRootStore,
                 guardianTrustAnchorStore = genesisUltraGuardianTrustAnchorStore
+            )
+        }
+
+    /** Requires final local presence and owns the only onboarding execution call. */
+    internal val genesisUltraAtomicBirthExecutionCeremonyCoordinator:
+        GenesisUltraAtomicBirthExecutionCeremonyCoordinator by lazy {
+            GenesisUltraAtomicBirthExecutionCeremonyCoordinator.production(
+                executionCoordinator = genesisUltraAtomicBirthExecutionCoordinator,
+                retirementCoordinator = genesisUltraCommittedConsentRetirementCoordinator
             )
         }
 
