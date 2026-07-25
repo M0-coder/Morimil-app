@@ -1,5 +1,6 @@
 package com.morimil.app.data.genesis.ultra
 
+import java.nio.charset.StandardCharsets
 import java.time.Instant
 
 /**
@@ -16,12 +17,36 @@ internal suspend fun GenesisUltraAtomicBirthActivationCoordinator.activate(
 ): GenesisUltraAtomicBirthActivationResult {
     val activatedAt = firstPostBirthRequest.observedAt
     val persistence = verifiedBirth.copyPersistenceBundle()
+    val expiresAt = Instant.parse(activatedAt).plusSeconds(300).toString()
+    val signature = GenesisUltraContractParser.parseSignatureEnvelope(
+        persistence.artifacts.single { artifact -> artifact.artifactKind == "seed_signature" }
+            .payload.toString(StandardCharsets.UTF_8)
+    )
+    val candidateDigest = digest("candidate")
+    val consentDigest = digest("consent")
+    val authorizationDigest = GenesisUltraHashProfile.hashFields(
+        "genesis.atomic.birth.authorization.v0.1",
+        listOf(
+            candidateDigest,
+            consentDigest,
+            persistence.birthState.stateDigest,
+            persistence.birthReceipt.receiptDigest,
+            persistence.birthState.initialBodyId,
+            signature.signerId,
+            signature.keyEpochId,
+            activatedAt,
+            expiresAt
+        )
+    )
     val authorization = testOnlyAtomicBirthAuthorization(
         verifiedBirth = verifiedBirth,
+        candidateDigest = candidateDigest,
+        consentDigest = consentDigest,
         birthStateDigest = persistence.birthState.stateDigest,
         receiptDigest = persistence.birthReceipt.receiptDigest,
+        authorizationDigest = authorizationDigest,
         authorizedAt = activatedAt,
-        expiresAt = Instant.parse(activatedAt).plusSeconds(300).toString()
+        expiresAt = expiresAt
     )
     return activate(
         authorization = authorization,
@@ -35,8 +60,11 @@ internal suspend fun GenesisUltraAtomicBirthActivationCoordinator.activate(
 
 private fun testOnlyAtomicBirthAuthorization(
     verifiedBirth: GenesisUltraVerifiedAtomicBirth,
+    candidateDigest: String,
+    consentDigest: String,
     birthStateDigest: String,
     receiptDigest: String,
+    authorizationDigest: String,
     authorizedAt: String,
     expiresAt: String
 ): GenesisUltraAuthorizedAtomicBirth {
@@ -53,11 +81,11 @@ private fun testOnlyAtomicBirthAuthorization(
     constructor.isAccessible = true
     return constructor.newInstance(
         verifiedBirth,
-        digest("candidate"),
-        digest("consent"),
+        candidateDigest,
+        consentDigest,
         birthStateDigest,
         receiptDigest,
-        digest("authorization"),
+        authorizationDigest,
         authorizedAt,
         expiresAt
     )
