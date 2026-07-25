@@ -18,6 +18,46 @@ val morimilCanvasBundleSha256 = "73b061406d9fff999a859025f497bece4680a896ad19ecc
 val morimilCanvasArchive = layout.buildDirectory.file("downloads/morimil-canvas-$morimilCanvasVersion.zip")
 val morimilCanvasGeneratedAssets = layout.buildDirectory.dir("generated/morimilCanvasAssets")
 
+val releaseStoreFile = providers.gradleProperty("MORIMIL_RELEASE_STORE_FILE")
+    .orElse(providers.environmentVariable("MORIMIL_RELEASE_STORE_FILE"))
+val releaseStorePassword = providers.gradleProperty("MORIMIL_RELEASE_STORE_PASSWORD")
+    .orElse(providers.environmentVariable("MORIMIL_RELEASE_STORE_PASSWORD"))
+val releaseKeyAlias = providers.gradleProperty("MORIMIL_RELEASE_KEY_ALIAS")
+    .orElse(providers.environmentVariable("MORIMIL_RELEASE_KEY_ALIAS"))
+val releaseKeyPassword = providers.gradleProperty("MORIMIL_RELEASE_KEY_PASSWORD")
+    .orElse(providers.environmentVariable("MORIMIL_RELEASE_KEY_PASSWORD"))
+val releaseSigningInputs = linkedMapOf(
+    "MORIMIL_RELEASE_STORE_FILE" to releaseStoreFile,
+    "MORIMIL_RELEASE_STORE_PASSWORD" to releaseStorePassword,
+    "MORIMIL_RELEASE_KEY_ALIAS" to releaseKeyAlias,
+    "MORIMIL_RELEASE_KEY_PASSWORD" to releaseKeyPassword
+)
+val hasCompleteReleaseSigningMaterial = releaseSigningInputs.values.all { provider ->
+    !provider.orNull.isNullOrBlank()
+}
+
+val validateReleaseSigning by tasks.registering {
+    group = "verification"
+    description = "Fails closed unless explicit Morimil Android release-signing material is present."
+
+    doLast {
+        val missing = releaseSigningInputs
+            .filterValues { provider -> provider.orNull.isNullOrBlank() }
+            .keys
+            .sorted()
+        check(missing.isEmpty()) {
+            "Missing release signing inputs: ${missing.joinToString(", ")}. " +
+                "Release builds must never fall back to debug or unsigned signing."
+        }
+
+        val keystorePath = requireNotNull(releaseStoreFile.orNull).trim()
+        val keystore = file(keystorePath)
+        check(keystore.isFile && keystore.length() > 0L) {
+            "MORIMIL_RELEASE_STORE_FILE does not point to a non-empty keystore file."
+        }
+    }
+}
+
 fun sha256(file: File): String {
     val digest = MessageDigest.getInstance("SHA-256")
     file.inputStream().buffered().use { input ->
@@ -120,6 +160,17 @@ android {
     namespace = "com.morimil.app"
     compileSdk = 35
 
+    signingConfigs {
+        create("release") {
+            if (hasCompleteReleaseSigningMaterial) {
+                storeFile = file(requireNotNull(releaseStoreFile.orNull).trim())
+                storePassword = requireNotNull(releaseStorePassword.orNull)
+                keyAlias = requireNotNull(releaseKeyAlias.orNull).trim()
+                keyPassword = requireNotNull(releaseKeyPassword.orNull)
+            }
+        }
+    }
+
     defaultConfig {
         applicationId = "com.morimil.app"
         minSdk = 26
@@ -127,6 +178,12 @@ android {
         versionCode = 8
         versionName = "0.8.0-phase5d"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    buildTypes {
+        getByName("release") {
+            signingConfig = signingConfigs.getByName("release")
+        }
     }
 
     buildFeatures {
@@ -167,6 +224,10 @@ android {
 
 tasks.named("preBuild").configure {
     dependsOn(prepareMorimilCanvasAssets)
+}
+
+tasks.matching { task -> task.name == "preReleaseBuild" }.configureEach {
+    dependsOn(validateReleaseSigning)
 }
 
 ksp {
