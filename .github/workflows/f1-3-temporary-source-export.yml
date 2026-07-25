@@ -1,4 +1,4 @@
-name: F1.3 Temporary Runtime Patch
+name: F1.3 Finalize Temporary Runtime Patch
 
 on:
   pull_request:
@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 jobs:
-  patch:
+  finalize:
     if: >-
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.event.pull_request.head.ref == 'plan-v2/f1-3-runtime-gate'
@@ -20,18 +20,29 @@ jobs:
         with:
           ref: plan-v2/f1-3-runtime-gate
 
-      - name: Apply exact runtime startup patch
+      - name: Normalize runtime gate block
         shell: bash
         run: |
           python - <<'PY'
           from pathlib import Path
-          import re
 
           path = Path('app/src/main/java/com/morimil/app/ui/MorimilViewModel.kt')
-          source = path.read_text()
+          lines = path.read_text().splitlines()
           marker = 'container.genesisUltraRuntimeStartupGate.requireReady()'
-          pattern = r'''        viewModelScope\.launch\(Dispatchers\.IO\) \{\n            when \(repository\.readLocalBirthState\(\)\) \{.*?\n        \}\n(?=        viewModelScope\.launch \{)'''
-          replacement = '''        viewModelScope.launch(Dispatchers.IO) {
+          marker_indexes = [index for index, line in enumerate(lines) if marker in line]
+          if len(marker_indexes) != 1:
+              raise SystemExit(f'expected one runtime gate marker, found {len(marker_indexes)}')
+
+          marker_index = marker_indexes[0]
+          start = next(
+              index for index in range(marker_index, -1, -1)
+              if lines[index].strip() == 'viewModelScope.launch(Dispatchers.IO) {'
+          )
+          end = next(
+              index for index in range(marker_index + 1, len(lines))
+              if lines[index].strip() == 'viewModelScope.launch {'
+          )
+          block = '''        viewModelScope.launch(Dispatchers.IO) {
               runCatching {
                   container.genesisUltraRuntimeStartupGate.requireReady()
               }.onSuccess {
@@ -46,31 +57,11 @@ jobs:
                       occurredAtMillis = System.currentTimeMillis()
                   )
               }
-          }
-          '''
-          replacement = '\n'.join(
-              line[2:] if line.startswith('  ') else line
-              for line in replacement.splitlines()
-          ) + '\n'
+          }'''
+          block_lines = [line[2:] if line.startswith('  ') else line for line in block.splitlines()]
+          lines = lines[:start] + block_lines + lines[end:]
+          final = '\n'.join(lines) + '\n'
 
-          if marker not in source:
-              source, count = re.subn(pattern, replacement, source, count=1, flags=re.S)
-              if count != 1:
-                  raise SystemExit(f'expected exactly one legacy startup block, found {count}')
-              source = source.replace(
-                  'import com.morimil.app.MorimilAppContainer\n',
-                  'import com.morimil.app.MorimilAppContainer\nimport com.morimil.app.genesisUltraRuntimeStartupGate\n',
-                  1
-              )
-              source = source.replace('import com.morimil.app.data.repository.LocalBirthState\n', '')
-              source = source.replace(
-                  '        refreshGenesis()\n        refreshChatOrganismStatus()\n',
-                  '        refreshChatOrganismStatus()\n',
-                  1
-              )
-              path.write_text(source)
-
-          final = path.read_text()
           forbidden = (
               'repository.readLocalBirthState()',
               'LocalBirthState.',
@@ -81,20 +72,18 @@ jobs:
           present = [token for token in forbidden if token in final]
           if present:
               raise SystemExit(f'legacy startup residue remained: {present}')
-          if marker not in final:
-              raise SystemExit('canonical runtime gate marker missing')
+          if final.count(marker) != 1:
+              raise SystemExit('runtime gate marker count invalid')
+          path.write_text(final)
           PY
 
-      - name: Commit patched ViewModel
+      - name: Remove temporary workflow and commit
         shell: bash
         run: |
-          if git diff --quiet -- app/src/main/java/com/morimil/app/ui/MorimilViewModel.kt; then
-            echo "Runtime startup patch already applied."
-            exit 0
-          fi
+          git rm .github/workflows/f1-3-temporary-source-export.yml
           git diff --check
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add app/src/main/java/com/morimil/app/ui/MorimilViewModel.kt
-          git commit -m "feat(runtime): gate ViewModel startup on Genesis Ultra"
+          git commit -m "chore(f1.3): finalize verified runtime startup gate"
           git push origin HEAD:plan-v2/f1-3-runtime-gate
