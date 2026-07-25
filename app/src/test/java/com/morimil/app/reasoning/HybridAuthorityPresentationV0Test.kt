@@ -11,14 +11,15 @@ import org.junit.Test
 
 class HybridAuthorityPresentationV0Test {
     @Test
-    fun legacyRuntimeIsPresentedAsDisabled() {
+    fun directRuntimeIsPresentedAsUnverified() {
         val presentation = HybridAuthorityPresentationV0.from(
-            finalizationStatus = TriMotorFinalizationStatus.LEGACY_UNROUTED,
+            finalizationStatus = TriMotorFinalizationStatus.UNVERIFIED_DIRECT,
             authorityDecision = null
         )
 
-        assertEquals(HybridAuthorityPresentationStatus.DISABLED, presentation.status)
-        assertEquals("ruta normal", presentation.routeLabel)
+        assertEquals(HybridAuthorityPresentationStatus.UNVERIFIED, presentation.status)
+        assertEquals("Respuesta no verificada", presentation.headline)
+        assertEquals("sin autoridad verificadora", presentation.routeLabel)
         assertNull(presentation.authorityVersion)
     }
 
