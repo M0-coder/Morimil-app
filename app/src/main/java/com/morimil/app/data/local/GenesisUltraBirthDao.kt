@@ -16,8 +16,14 @@ interface GenesisUltraBirthDao {
     @Query("SELECT COUNT(*) FROM genesis_ultra_birth_journal")
     suspend fun countBirthJournalEntries(): Int
 
+    @Query("SELECT COUNT(*) FROM genesis_ultra_birth_authorization")
+    suspend fun countBirthAuthorizations(): Int
+
     @Query("SELECT * FROM genesis_ultra_birth_commit WHERE slotId = :slotId LIMIT 1")
     suspend fun loadBirthCommit(slotId: String): GenesisUltraBirthCommitEntity?
+
+    @Query("SELECT * FROM genesis_ultra_birth_authorization WHERE slotId = :slotId LIMIT 1")
+    suspend fun loadBirthAuthorization(slotId: String): GenesisUltraBirthAuthorizationEntity?
 
     @Query("SELECT * FROM genesis_ultra_birth_artifacts WHERE slotId = :slotId ORDER BY relativePath ASC")
     suspend fun loadBirthArtifacts(slotId: String): List<GenesisUltraBirthArtifactEntity>
@@ -31,7 +37,10 @@ interface GenesisUltraBirthDao {
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertBirthJournal(entries: List<GenesisUltraBirthJournalEntity>)
 
-    /** Inserted last inside the Room transaction: this row is the commit marker. */
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insertBirthAuthorization(authorization: GenesisUltraBirthAuthorizationEntity)
+
+    /** Inserted last inside the birth-store segment: this row is the commit marker. */
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertBirthCommit(commit: GenesisUltraBirthCommitEntity)
 }
