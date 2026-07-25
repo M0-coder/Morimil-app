@@ -7,6 +7,7 @@ import com.morimil.app.core.memory.MemoryIntegrityCore
 import com.morimil.app.data.genesis.GenesisReader
 import com.morimil.app.data.genesis.ultra.GenesisUltraAndroidBodyIdentityRootStore
 import com.morimil.app.data.genesis.ultra.GenesisUltraAndroidGuardianTrustAnchorStore
+import com.morimil.app.data.genesis.ultra.GenesisUltraBirthCandidateConstructionCoordinator
 import com.morimil.app.data.genesis.ultra.GenesisUltraBirthPreparationCoordinator
 import com.morimil.app.data.local.MemoryOrganDatabase
 import com.morimil.app.data.local.MemoryOrganDatabaseEncryption
@@ -68,6 +69,16 @@ class MorimilAppContainer(context: Context) {
             guardianTrustAnchorStore = genesisUltraGuardianTrustAnchorStore
         )
     }
+
+    /** Builds a signed in-memory candidate only; it cannot persist or authorize birth. */
+    internal val genesisUltraBirthCandidateConstructionCoordinator:
+        GenesisUltraBirthCandidateConstructionCoordinator by lazy {
+            GenesisUltraBirthCandidateConstructionCoordinator(
+                preparationCoordinator = genesisUltraBirthPreparationCoordinator,
+                bodyIdentityRootStore = genesisUltraBodyIdentityRootStore,
+                guardianTrustAnchorStore = genesisUltraGuardianTrustAnchorStore
+            )
+        }
 
     val memorySignatureEpochPolicy: SharedPreferencesMemorySignatureEpochPolicy by lazy {
         SharedPreferencesMemorySignatureEpochPolicy(appContext)
