@@ -130,4 +130,18 @@ internal object MorimilDatabaseMigrationPlan {
         MorimilDatabaseMigrations.MIGRATION_11_12,
         MorimilDatabaseMigrations.MIGRATION_12_13
     )
+
+    /**
+     * MorimilDatabaseEncryption predates this repaired plan and consumes the
+     * mutable legacy registry. Install the same migration before the singleton
+     * database is opened so production and migration tests cannot diverge.
+     */
+    fun installIntoLegacyRegistry() {
+        val legacy = MorimilDatabaseMigrations.ALL
+        val index = legacy.indexOfFirst { migration ->
+            migration.startVersion == 7 && migration.endVersion == 8
+        }
+        check(index >= 0) { "morimil_database_migration_7_8_slot_missing" }
+        legacy[index] = MIGRATION_7_8
+    }
 }
