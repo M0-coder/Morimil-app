@@ -1,0 +1,35 @@
+# Morimil-app ownership policy
+#
+# Branch protection must require Code Owner review for this file to enforce reviews.
+
+# Default owner
+* @morimilpabfelon-cell
+
+# Repository governance, CI, dependency policy, and release controls
+/.github/ @morimilpabfelon-cell
+/gradle/ @morimilpabfelon-cell
+/gradle.properties @morimilpabfelon-cell
+/settings.gradle.kts @morimilpabfelon-cell
+/build.gradle.kts @morimilpabfelon-cell
+/app/build.gradle.kts @morimilpabfelon-cell
+
+# Genesis Ultra, identity, memory, Room schemas, and migrations
+/app/src/main/java/com/morimil/app/data/ @morimilpabfelon-cell
+/app/src/test/java/com/morimil/app/data/ @morimilpabfelon-cell
+/app/src/androidTest/java/com/morimil/app/data/ @morimilpabfelon-cell
+/app/schemas/ @morimilpabfelon-cell
+
+# Cryptography, secret material, signing, and secure persistence
+/app/src/main/java/com/morimil/app/security/ @morimilpabfelon-cell
+/app/src/test/java/com/morimil/app/security/ @morimilpabfelon-cell
+/app/src/androidTest/java/com/morimil/app/security/ @morimilpabfelon-cell
+
+# Reasoning boundaries and external-provider integration
+/app/src/main/java/com/morimil/app/ai/ @morimilpabfelon-cell
+/app/src/test/java/com/morimil/app/ai/ @morimilpabfelon-cell
+/app/src/androidTest/java/com/morimil/app/ai/ @morimilpabfelon-cell
+
+# Architecture, ADRs, and operating constraints
+/docs/ARCHITECTURE.md @morimilpabfelon-cell
+/docs/ARCHITECTURE_MAP.md @morimilpabfelon-cell
+/docs/adr/ @morimilpabfelon-cell
