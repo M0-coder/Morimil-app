@@ -49,8 +49,10 @@ abstract class MorimilDatabase : RoomDatabase() {
 
         fun getInstance(context: Context): MorimilDatabase {
             return instance ?: synchronized(this) {
-                instance ?: MorimilDatabaseEncryption.open(context)
-                    .also { instance = it }
+                instance ?: run {
+                    MorimilDatabaseMigrationPlan.installIntoLegacyRegistry()
+                    MorimilDatabaseEncryption.open(context)
+                }.also { instance = it }
             }
         }
     }
