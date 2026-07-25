@@ -48,7 +48,7 @@ class GenesisUltraAtomicBirthWitnessArchiveBoundaryTest {
     }
 
     @Test
-    fun onboardingRetainsAuthorizationInMemoryButKeepsBirthButtonDisabled() {
+    fun onboardingRetainsAuthorizationInMemoryAndExecutesOnlyThroughFinalCeremony() {
         val viewModel = sourceFile(
             "src/main/java/com/morimil/app/ui/GenesisUltraOnboardingViewModel.kt"
         ).readText()
@@ -59,11 +59,16 @@ class GenesisUltraAtomicBirthWitnessArchiveBoundaryTest {
         assertTrue(viewModel.contains("private var authorizedBirth"))
         assertTrue(viewModel.contains("authorizeWitnessArchive"))
         assertTrue(viewModel.contains("authorizedBirth = null"))
+        assertTrue(viewModel.contains("genesisUltraAtomicBirthExecutionCeremonyCoordinator"))
+        assertTrue(viewModel.contains("executionCeremonyCoordinator.execute("))
         assertFalse(viewModel.contains("GenesisUltraAtomicBirthExecutionCoordinator"))
         assertFalse(viewModel.contains("genesisUltraAtomicBirthExecutionCoordinator"))
-        assertFalse(viewModel.contains(".execute("))
-        assertTrue(screen.contains("Autorización verificada; ejecución aún bloqueada"))
-        assertTrue(screen.contains("Button(\n                enabled = false"))
+        assertFalse(viewModel.contains("GenesisUltraAtomicBirthActivationCoordinator"))
+        assertTrue(screen.contains("Ceremonia final de nacimiento"))
+        assertTrue(screen.contains("executeAuthorizedBirth("))
+        assertTrue(screen.contains("retryAllowed = false"))
+        assertFalse(screen.contains("Autorización verificada; ejecución aún bloqueada"))
+        assertFalse(screen.contains("Button(\n                enabled = false"))
     }
 
     private fun sourceFile(relativePath: String): File {
