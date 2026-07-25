@@ -7,6 +7,7 @@ import com.morimil.app.core.memory.MemoryIntegrityCore
 import com.morimil.app.data.genesis.GenesisReader
 import com.morimil.app.data.genesis.ultra.GenesisUltraAndroidBodyIdentityRootStore
 import com.morimil.app.data.genesis.ultra.GenesisUltraAndroidGuardianTrustAnchorStore
+import com.morimil.app.data.genesis.ultra.GenesisUltraAndroidHostBirthConsentStore
 import com.morimil.app.data.genesis.ultra.GenesisUltraBirthCandidateConstructionCoordinator
 import com.morimil.app.data.genesis.ultra.GenesisUltraBirthPreparationCoordinator
 import com.morimil.app.data.local.MemoryOrganDatabase
@@ -79,6 +80,14 @@ class MorimilAppContainer(context: Context) {
                 guardianTrustAnchorStore = genesisUltraGuardianTrustAnchorStore
             )
         }
+
+    /** Records only an explicit, candidate-bound host approval; access remains lazy. */
+    internal val genesisUltraHostBirthConsentStore: GenesisUltraAndroidHostBirthConsentStore by lazy {
+        GenesisUltraAndroidHostBirthConsentStore(
+            context = appContext,
+            database = memoryDatabase
+        )
+    }
 
     val memorySignatureEpochPolicy: SharedPreferencesMemorySignatureEpochPolicy by lazy {
         SharedPreferencesMemorySignatureEpochPolicy(appContext)
