@@ -1,6 +1,5 @@
 package com.morimil.app.data.genesis.ultra
 
-import java.nio.charset.StandardCharsets
 import java.time.Instant
 
 /**
@@ -18,10 +17,7 @@ internal suspend fun GenesisUltraAtomicBirthActivationCoordinator.activate(
     val activatedAt = firstPostBirthRequest.observedAt
     val persistence = verifiedBirth.copyPersistenceBundle()
     val expiresAt = Instant.parse(activatedAt).plusSeconds(300).toString()
-    val signature = GenesisUltraContractParser.parseSignatureEnvelope(
-        persistence.artifacts.single { artifact -> artifact.artifactKind == "seed_signature" }
-            .payload.toString(StandardCharsets.UTF_8)
-    )
+    val witness = persistence.birthReceipt.guardianWitness
     val candidateDigest = digest("candidate")
     val consentDigest = digest("consent")
     val authorizationDigest = GenesisUltraHashProfile.hashFields(
@@ -32,8 +28,8 @@ internal suspend fun GenesisUltraAtomicBirthActivationCoordinator.activate(
             persistence.birthState.stateDigest,
             persistence.birthReceipt.receiptDigest,
             persistence.birthState.initialBodyId,
-            signature.signerId,
-            signature.keyEpochId,
+            witness.signerId,
+            witness.keyEpochId,
             activatedAt,
             expiresAt
         )
