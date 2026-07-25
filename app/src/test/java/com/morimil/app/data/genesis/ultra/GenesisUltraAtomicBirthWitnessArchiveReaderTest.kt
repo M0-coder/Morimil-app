@@ -290,25 +290,15 @@ class GenesisUltraAtomicBirthWitnessArchiveReaderTest {
 
     private companion object {
         const val EVALUATED_AT = "2026-07-25T12:00:00Z"
-        const val CANDIDATE_DIGEST = "sha256:" +
-            "a".repeat(64)
-        const val CONSENT_DIGEST = "sha256:" +
-            "b".repeat(64)
-        const val ZERO_SHA256 = "sha256:" +
-            "0".repeat(64)
-        const val PREVIOUS_STATE_DIGEST = "sha256:" +
-            "1".repeat(64)
-        const val BODY_KEY_REF = "sha256:" +
-            "2".repeat(64)
-        const val INSTANCE_ID = "inst_" +
-            "3".repeat(64)
-        const val BODY_ID = "body_" +
-            "4".repeat(64)
-        const val BODY_EPOCH_ID = "epoch_" +
-            "5".repeat(64)
-        const val BIRTH_ID = "birth_" +
-            "6".repeat(64)
-        const val JOURNAL_ID = "journal_" +
-            "7".repeat(64)
+        val CANDIDATE_DIGEST = "sha256:" + "a".repeat(64)
+        val CONSENT_DIGEST = "sha256:" + "b".repeat(64)
+        val ZERO_SHA256 = "sha256:" + "0".repeat(64)
+        val PREVIOUS_STATE_DIGEST = "sha256:" + "1".repeat(64)
+        val BODY_KEY_REF = "sha256:" + "2".repeat(64)
+        val INSTANCE_ID = "inst_" + "3".repeat(64)
+        val BODY_ID = "body_" + "4".repeat(64)
+        val BODY_EPOCH_ID = "epoch_" + "5".repeat(64)
+        val BIRTH_ID = "birth_" + "6".repeat(64)
+        val JOURNAL_ID = "journal_" + "7".repeat(64)
     }
 }
