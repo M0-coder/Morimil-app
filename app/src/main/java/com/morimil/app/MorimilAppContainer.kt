@@ -13,6 +13,7 @@ import com.morimil.app.data.genesis.ultra.GenesisUltraAtomicBirthAuthorizationCo
 import com.morimil.app.data.genesis.ultra.GenesisUltraAtomicBirthExecutionCoordinator
 import com.morimil.app.data.genesis.ultra.GenesisUltraBirthCandidateConstructionCoordinator
 import com.morimil.app.data.genesis.ultra.GenesisUltraBirthPreparationCoordinator
+import com.morimil.app.data.genesis.ultra.GenesisUltraHostBirthConsentRecoveryCoordinator
 import com.morimil.app.data.local.MemoryOrganDatabase
 import com.morimil.app.data.local.MemoryOrganDatabaseEncryption
 import com.morimil.app.data.local.MorimilDatabase
@@ -91,6 +92,16 @@ class MorimilAppContainer(context: Context) {
             database = memoryDatabase
         )
     }
+
+    /** Revokes a persisted consent after its process-local candidate was lost. */
+    internal val genesisUltraHostBirthConsentRecoveryCoordinator:
+        GenesisUltraHostBirthConsentRecoveryCoordinator by lazy {
+            GenesisUltraHostBirthConsentRecoveryCoordinator(
+                context = appContext,
+                database = memoryDatabase,
+                consentStore = genesisUltraHostBirthConsentStore
+            )
+        }
 
     /** Verifies the final witnessed graph and issues the only activation authorization type. */
     internal val genesisUltraAtomicBirthAuthorizationCoordinator:
