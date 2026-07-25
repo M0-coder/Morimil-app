@@ -43,12 +43,20 @@ internal data class GenesisUltraDurableBirthAuthorization(
         require(BODY_ID.matches(bodyId)) { "durable_birth_authorization_body_id_invalid" }
         GenesisUltraHashProfile.requireNfc(guardianId)
         GenesisUltraHashProfile.requireNfc(guardianKeyEpochId)
-        require(guardianId.length in 1..128) { "durable_birth_authorization_guardian_id_invalid" }
+        require(guardianId.length in 1..128) {
+            "durable_birth_authorization_guardian_id_invalid"
+        }
         require(guardianKeyEpochId.length in 16..128) {
             "durable_birth_authorization_guardian_epoch_invalid"
         }
-        val authorized = canonicalTimestamp(authorizedAt, "durable_birth_authorization_time_invalid")
-        val expiry = canonicalTimestamp(expiresAt, "durable_birth_authorization_expiry_invalid")
+        val authorized = canonicalTimestamp(
+            authorizedAt,
+            "durable_birth_authorization_time_invalid"
+        )
+        val expiry = canonicalTimestamp(
+            expiresAt,
+            "durable_birth_authorization_expiry_invalid"
+        )
         require(authorized < expiry) { "durable_birth_authorization_expiry_order_invalid" }
         require(authorizationDigest == digestFor(this)) {
             "durable_birth_authorization_digest_mismatch"
@@ -80,6 +88,12 @@ internal data class GenesisUltraDurableBirthAuthorization(
         )
     }
 
+    /**
+     * Re-links the durable authorization to the exact committed birth receipt.
+     * Cryptographic signature verification already occurred before the authorized
+     * type-state was issued; this restart audit proves that the persisted witness,
+     * identity and commit marker are still the same graph.
+     */
     fun requireMatchesCommit(
         commit: GenesisUltraBirthCommitEntity,
         artifacts: List<GenesisUltraBirthArtifactEntity>
@@ -94,23 +108,28 @@ internal data class GenesisUltraDurableBirthAuthorization(
                 bodyId == commit.activeWriterBodyId
         ) { "durable_birth_authorization_commit_mismatch" }
 
-        val signatureArtifact = artifacts.singleOrNull { artifact ->
-            artifact.artifactKind == "seed_signature"
-        } ?: throw IllegalArgumentException("durable_birth_authorization_seed_signature_missing")
+        val receiptArtifact = artifacts.singleOrNull { artifact ->
+            artifact.artifactKind == "birth_receipt"
+        } ?: throw IllegalArgumentException("durable_birth_authorization_receipt_missing")
         val identityArtifact = artifacts.singleOrNull { artifact ->
             artifact.artifactKind == "instance_identity"
         } ?: throw IllegalArgumentException("durable_birth_authorization_identity_missing")
-        val signature = GenesisUltraContractParser.parseSignatureEnvelope(
-            decodeUtf8Strict(signatureArtifact.payload)
+        val receipt = GenesisUltraAtomicBirthDocumentParser.parseBirthReceipt(
+            decodeUtf8Strict(receiptArtifact.payload)
         )
         val identity = GenesisUltraContractParser.parseInstanceIdentity(
             decodeUtf8Strict(identityArtifact.payload)
         )
+        val witness = receipt.guardianWitness
+
         require(
-            guardianId == signature.signerId &&
-                guardianKeyEpochId == signature.keyEpochId &&
+            receipt.receiptDigest == commit.receiptDigest &&
+                receipt.birthStateDigest == commit.birthStateDigest &&
+                receipt.instanceId == commit.instanceId &&
+                witness.signerType == "guardian" &&
+                guardianId == witness.signerId &&
+                guardianKeyEpochId == witness.keyEpochId &&
                 guardianId == identity.guardianId &&
-                signature.signedDigest == commit.seedRootHash &&
                 identity.instanceId == commit.instanceId
         ) { "durable_birth_authorization_guardian_or_identity_mismatch" }
     }
@@ -150,36 +169,39 @@ internal data class GenesisUltraDurableBirthAuthorization(
             "authorization_digest"
         )
 
-        fun from(authorization: GenesisUltraAuthorizedAtomicBirth): GenesisUltraDurableBirthAuthorization {
+        fun from(
+            authorization: GenesisUltraAuthorizedAtomicBirth
+        ): GenesisUltraDurableBirthAuthorization {
             val bundle = authorization.copyVerifiedBirth().copyPersistenceBundle()
-            val signatureArtifact = bundle.artifacts.singleOrNull { artifact ->
-                artifact.artifactKind == "seed_signature"
-            } ?: throw IllegalArgumentException("durable_birth_authorization_seed_signature_missing")
-            val signature = GenesisUltraContractParser.parseSignatureEnvelope(
-                decodeUtf8Strict(signatureArtifact.payload)
-            )
-            require(signature.signerId == bundle.instanceIdentity.guardianId) {
-                "durable_birth_authorization_guardian_identity_mismatch"
-            }
+            val witness = bundle.birthReceipt.guardianWitness
+            require(
+                witness.signerType == "guardian" &&
+                    witness.signerId == bundle.instanceIdentity.guardianId
+            ) { "durable_birth_authorization_guardian_identity_mismatch" }
+
             return create(
                 candidateDigest = authorization.candidateDigest,
                 consentDigest = authorization.consentDigest,
                 birthStateDigest = authorization.birthStateDigest,
                 receiptDigest = authorization.receiptDigest,
                 bodyId = bundle.birthState.initialBodyId,
-                guardianId = signature.signerId,
-                guardianKeyEpochId = signature.keyEpochId,
+                guardianId = witness.signerId,
+                guardianKeyEpochId = witness.keyEpochId,
                 authorizedAt = authorization.authorizedAt,
                 expiresAt = authorization.expiresAt,
                 authorizationDigest = authorization.authorizationDigest
             )
         }
 
-        fun fromEntity(entity: GenesisUltraBirthAuthorizationEntity): GenesisUltraDurableBirthAuthorization {
+        fun fromEntity(
+            entity: GenesisUltraBirthAuthorizationEntity
+        ): GenesisUltraDurableBirthAuthorization {
             require(entity.slotId == GenesisUltraBirthCommitEntity.PRIMARY_SLOT) {
                 "durable_birth_authorization_slot_invalid"
             }
-            require(entity.sourceBytes.isNotEmpty()) { "durable_birth_authorization_source_empty" }
+            require(entity.sourceBytes.isNotEmpty()) {
+                "durable_birth_authorization_source_empty"
+            }
             require(GenesisUltraHashProfile.sha256(entity.sourceBytes) == entity.sourceDigest) {
                 "durable_birth_authorization_source_digest_mismatch"
             }
