@@ -5,7 +5,6 @@ import com.morimil.app.MorimilAppContainer
 import com.morimil.app.ai.ChatTurn
 import com.morimil.app.ai.ReasoningClient
 import com.morimil.app.data.genesis.GenesisIdentitySource
-import com.morimil.app.data.genesis.GenesisUltraIntegrationGate
 import com.morimil.app.data.local.LocalInstanceIdentityEntity
 import com.morimil.app.data.local.ReasoningTurnAuthor
 import com.morimil.app.data.local.ReasoningTurnEntity
@@ -76,46 +75,17 @@ internal class MorimilChatCoordinator(
         }
     }
 
-    suspend fun bornInstance(alias: String): Result<Unit> = withContext(Dispatchers.IO) {
-        runCatching {
-            GenesisUltraIntegrationGate.requireBirthReady()
-            val genesisSource = _genesisResult.value?.getOrNull()
-                ?: error("Genesis identity not loaded yet.")
-            val genesis = genesisSource.identity
-            require(!container.memoryRepository.hasExistingBirth()) {
-                "This Morimil instance has already been born."
-            }
-            val installedBundle = container.genesisReader.installGenesisBundle().getOrThrow()
-            val sourceOrigin = "${genesisSource.origin.label}:${installedBundle.installPath}"
-            val genesisCoreHash = installedBundle.verification.genesisCoreHash
-            require(genesisCoreHash == genesisSource.manifest.genesisCoreHash) {
-                "Installed Genesis bundle does not match loaded Genesis manifest."
-            }
-
-            try {
-                container.memoryRepository.birthLocalIdentity(
-                    alias,
-                    genesis,
-                    sourceOrigin,
-                    genesisCoreHash,
-                    cachedDoctrineText,
-                    cachedPolicyText
-                )
-                container.memoryRepository.seedInitialStateIfNeeded()
-                container.reasoningTranscriptRepository.seedIntroTurnsIfNeeded()
-                container.agentOrchestrationRepository.seedDefaultOrchestrationIfNeeded()
-                observeTask("rest_cycle.birth") {
-                    container.runRestCycleUseCase()
-                }
-                observeTask("recall.birth") {
-                    container.recallScheduleRepository.seedFromRecentMemoryIfNeeded()
-                }
-                Unit
-            } catch (error: Exception) {
-                container.genesisReader.clearInstalledGenesisBundle()
-                throw error
-            }
-        }
+    /**
+     * Retained only as a fail-closed binary/source compatibility boundary.
+     * Genesis Ultra birth must never install the legacy bundle or call
+     * MemoryRepository.birthLocalIdentity().
+     */
+    suspend fun bornInstance(
+        @Suppress("UNUSED_PARAMETER") alias: String
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        Result.failure(
+            IllegalStateException("legacy_local_birth_path_disabled_use_genesis_ultra")
+        )
     }
 
     fun sendMessage(body: String) {
