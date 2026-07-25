@@ -316,7 +316,9 @@ internal fun OnboardingScreen(viewModel: GenesisUltraOnboardingViewModel) {
                 Text("Revisar estado local")
             }
 
-            state.errorMessage?.let(::ErrorText)
+            state.errorMessage?.let { message ->
+                ErrorText(message)
+            }
             Text(
                 text = "LOCAL / PRIVATE / GENESIS ULTRA",
                 style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
