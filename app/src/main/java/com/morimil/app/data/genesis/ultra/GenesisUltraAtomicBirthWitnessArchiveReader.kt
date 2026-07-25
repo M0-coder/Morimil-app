@@ -14,10 +14,10 @@ import java.util.zip.ZipInputStream
 /**
  * Reads the transport envelope for one final atomic-birth witness package.
  *
- * The transport manifest is not a trust root. It only binds the archive to the
- * exact candidate, consent and locally supplied evaluation instant and declares
- * the bytes that must later pass the full Body and Guardian signature verifier.
- * No entry is extracted to disk and no caller-controlled path is resolved locally.
+ * The transport manifest is not a trust root. It binds only the exact candidate,
+ * consent and declared evidence bytes. The evaluation instant is supplied by the
+ * local verifier and never accepted from the archive. No entry is extracted to
+ * disk and no caller-controlled path is resolved locally.
  */
 internal class GenesisUltraAtomicBirthWitnessArchiveReader(
     private val maxEntries: Int = DEFAULT_MAX_ENTRIES,
@@ -34,7 +34,7 @@ internal class GenesisUltraAtomicBirthWitnessArchiveReader(
         input: InputStream,
         expectedCandidateDigest: String,
         expectedConsentDigest: String,
-        expectedEvaluatedAt: String
+        evaluatedAt: String
     ): GenesisUltraAtomicBirthWitnessPackage {
         require(SHA256_REF.matches(expectedCandidateDigest)) {
             "witness_archive_expected_candidate_digest_invalid"
@@ -42,7 +42,7 @@ internal class GenesisUltraAtomicBirthWitnessArchiveReader(
         require(SHA256_REF.matches(expectedConsentDigest)) {
             "witness_archive_expected_consent_digest_invalid"
         }
-        requireCanonicalTimestamp(expectedEvaluatedAt, "witness_archive_expected_evaluated_at_invalid")
+        requireCanonicalTimestamp(evaluatedAt, "witness_archive_evaluated_at_invalid")
 
         val files = readArchiveFiles(input)
         val manifestBytes = files.remove(MANIFEST_ENTRY)
@@ -56,9 +56,6 @@ internal class GenesisUltraAtomicBirthWitnessArchiveReader(
         }
         require(manifest.consentDigest == expectedConsentDigest) {
             "witness_archive_consent_digest_mismatch"
-        }
-        require(manifest.evaluatedAt == expectedEvaluatedAt) {
-            "witness_archive_evaluated_at_mismatch"
         }
 
         val declaredPaths = buildList {
@@ -105,7 +102,7 @@ internal class GenesisUltraAtomicBirthWitnessArchiveReader(
         return GenesisUltraAtomicBirthWitnessPackage(
             artifacts = artifacts,
             journal = journal,
-            evaluatedAt = expectedEvaluatedAt
+            evaluatedAt = evaluatedAt
         )
     }
 
@@ -159,7 +156,6 @@ internal class GenesisUltraAtomicBirthWitnessArchiveReader(
         require(schemaVersion == MANIFEST_SCHEMA) { "witness_archive_manifest_schema_invalid" }
         val candidateDigest = root.requiredSha256("candidate_digest")
         val consentDigest = root.requiredSha256("consent_digest")
-        val evaluatedAt = root.requiredCanonicalTimestamp("evaluated_at")
         val artifacts = parseArtifacts(root.getJSONArray("artifacts"))
         val journal = parseJournal(root.getJSONArray("journal"))
 
@@ -178,7 +174,6 @@ internal class GenesisUltraAtomicBirthWitnessArchiveReader(
         return TransportManifest(
             candidateDigest = candidateDigest,
             consentDigest = consentDigest,
-            evaluatedAt = evaluatedAt,
             artifacts = artifacts,
             journal = journal
         )
@@ -237,12 +232,6 @@ internal class GenesisUltraAtomicBirthWitnessArchiveReader(
         return value
     }
 
-    private fun JSONObject.requiredCanonicalTimestamp(name: String): String {
-        val value = requiredText(name, 20, 20)
-        requireCanonicalTimestamp(value, "witness_archive_invalid_$name")
-        return value
-    }
-
     private fun requireCanonicalTimestamp(value: String, errorCode: String) {
         val parsed = runCatching { Instant.parse(value) }
             .getOrElse { failure -> throw IllegalArgumentException(errorCode, failure) }
@@ -264,7 +253,6 @@ internal class GenesisUltraAtomicBirthWitnessArchiveReader(
     private data class TransportManifest(
         val candidateDigest: String,
         val consentDigest: String,
-        val evaluatedAt: String,
         val artifacts: List<ArtifactRecord>,
         val journal: List<JournalRecord>
     )
@@ -274,7 +262,7 @@ internal class GenesisUltraAtomicBirthWitnessArchiveReader(
 
     internal companion object {
         const val MANIFEST_ENTRY = "genesis.atomic.birth.witness.manifest.json"
-        const val MANIFEST_SCHEMA = "genesis.atomic.birth.witness.transport.v0.1"
+        const val MANIFEST_SCHEMA = "genesis.atomic.birth.witness.transport.v0.2"
         const val DEFAULT_MAX_ENTRIES = 1024
         const val DEFAULT_MAX_ENTRY_BYTES = 4 * 1024 * 1024
         const val DEFAULT_MAX_TOTAL_BYTES = 64 * 1024 * 1024
@@ -282,7 +270,7 @@ internal class GenesisUltraAtomicBirthWitnessArchiveReader(
         private const val BUFFER_BYTES = 8 * 1024
         private val SHA256_REF = Regex("^sha256:[a-f0-9]{64}$")
         private val MANIFEST_FIELDS = setOf(
-            "schema_version", "candidate_digest", "consent_digest", "evaluated_at", "artifacts", "journal"
+            "schema_version", "candidate_digest", "consent_digest", "artifacts", "journal"
         )
         private val ARTIFACT_FIELDS = setOf("path", "kind", "digest")
         private val JOURNAL_FIELDS = setOf("path", "digest")
