@@ -16,20 +16,20 @@ import kotlinx.coroutines.launch
  * Pre-birth inspection only. This ViewModel cannot construct a candidate,
  * record consent, accept Guardian evidence or execute the atomic birth.
  */
-internal class GenesisUltraOnboardingViewModel(
+class GenesisUltraOnboardingViewModel(
     application: Application
 ) : AndroidViewModel(application) {
     private val preparationCoordinator =
         MorimilAppContainer.from(application).genesisUltraBirthPreparationCoordinator
 
     private val _state = MutableStateFlow(GenesisUltraOnboardingUiStateMapper.loading())
-    val state: StateFlow<GenesisUltraOnboardingUiState> = _state.asStateFlow()
+    internal val state: StateFlow<GenesisUltraOnboardingUiState> = _state.asStateFlow()
 
     init {
         refresh()
     }
 
-    fun refresh() {
+    internal fun refresh() {
         viewModelScope.launch(Dispatchers.IO) {
             _state.value = GenesisUltraOnboardingUiStateMapper.loading()
             _state.value = runCatching { preparationCoordinator.inspect() }
@@ -40,7 +40,7 @@ internal class GenesisUltraOnboardingViewModel(
         }
     }
 
-    fun validateCanonicalCompanionName(
+    internal fun validateCanonicalCompanionName(
         value: String
     ): GenesisUltraCompanionNameValidation {
         return GenesisUltraCompanionNamePolicy.validate(value)
