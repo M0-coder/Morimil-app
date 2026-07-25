@@ -1,4 +1,4 @@
-name: F1.3 Temporary Source Export
+name: F1.3 Temporary Runtime Patch
 
 on:
   pull_request:
@@ -6,19 +6,111 @@ on:
       - main
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  export:
+  patch:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'plan-v2/f1-3-runtime-gate'
     runs-on: ubuntu-24.04
     steps:
-      - name: Checkout repository
+      - name: Checkout branch
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-
-      - name: Upload isolated runtime source
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: f1-3-runtime-source
-          path: app/src/main/java/com/morimil/app/ui/MorimilViewModel.kt
-          if-no-files-found: error
-          retention-days: 1
+          ref: plan-v2/f1-3-runtime-gate
+
+      - name: Apply exact runtime startup patch
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('app/src/main/java/com/morimil/app/ui/MorimilViewModel.kt')
+          source = path.read_text()
+          old = '''        viewModelScope.launch(Dispatchers.IO) {
+              when (repository.readLocalBirthState()) {
+                  LocalBirthState.ABSENT -> Unit
+                  LocalBirthState.COMPLETE -> {
+                      RestCycleScheduler.schedule(application)
+                      refreshRestCycleScheduleStatusOnWorker(application)
+                      repository.seedInitialStateIfNeeded()
+                      reasoningTranscriptRepository.seedIntroTurnsIfNeeded()
+                      agentOrchestrationRepository.seedDefaultOrchestrationIfNeeded()
+                      runObservedInternalTask("rest_cycle.startup") { runRestCycleUseCase() }
+                      runObservedInternalTask("recall.startup") { recallScheduleRepository.seedFromRecentMemoryIfNeeded() }
+                  }
+                  LocalBirthState.INCONSISTENT -> {
+                      recordInternalRuntimeIssue(
+                          component = "birth_state",
+                          message = "Local birth state is incomplete; durable runtime startup is blocked.",
+                          failureCount = 1,
+                          occurredAtMillis = System.currentTimeMillis()
+                      )
+                  }
+              }
+          }
+          '''
+          new = '''        viewModelScope.launch(Dispatchers.IO) {
+              runCatching {
+                  container.genesisUltraRuntimeStartupGate.requireReady()
+              }.onSuccess {
+                  reasoningTranscriptRepository.seedIntroTurnsIfNeeded()
+                  refreshGenesis()
+              }.onFailure { error ->
+                  recordInternalRuntimeIssue(
+                      component = "genesis_ultra_runtime_gate",
+                      message = error.message
+                          ?: "Genesis Ultra runtime identity could not be verified.",
+                      failureCount = 1,
+                      occurredAtMillis = System.currentTimeMillis()
+                  )
+              }
+          }
+          '''
+          marker = 'container.genesisUltraRuntimeStartupGate.requireReady()'
+          if old in source:
+              source = source.replace(
+                  'import com.morimil.app.MorimilAppContainer\n',
+                  'import com.morimil.app.MorimilAppContainer\nimport com.morimil.app.genesisUltraRuntimeStartupGate\n',
+                  1
+              )
+              source = source.replace('import com.morimil.app.data.repository.LocalBirthState\n', '')
+              source = source.replace(old, new, 1)
+              source = source.replace(
+                  '        refreshGenesis()\n        refreshChatOrganismStatus()\n',
+                  '        refreshChatOrganismStatus()\n',
+                  1
+              )
+              path.write_text(source)
+          elif marker not in source:
+              raise SystemExit('expected legacy startup block not found')
+
+          final = path.read_text()
+          forbidden = (
+              'repository.readLocalBirthState()',
+              'LocalBirthState.',
+              'repository.seedInitialStateIfNeeded()',
+              'runObservedInternalTask("rest_cycle.startup")',
+              'runObservedInternalTask("recall.startup")'
+          )
+          present = [token for token in forbidden if token in final]
+          if present:
+              raise SystemExit(f'legacy startup residue remained: {present}')
+          if marker not in final:
+              raise SystemExit('canonical runtime gate marker missing')
+          PY
+
+      - name: Commit patched ViewModel
+        shell: bash
+        run: |
+          if git diff --quiet -- app/src/main/java/com/morimil/app/ui/MorimilViewModel.kt; then
+            echo "Runtime startup patch already applied."
+            exit 0
+          fi
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/src/main/java/com/morimil/app/ui/MorimilViewModel.kt
+          git commit -m "feat(runtime): gate ViewModel startup on Genesis Ultra"
+          git push origin HEAD:plan-v2/f1-3-runtime-gate
