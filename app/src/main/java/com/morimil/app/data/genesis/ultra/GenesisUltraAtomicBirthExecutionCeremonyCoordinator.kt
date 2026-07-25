@@ -113,9 +113,8 @@ internal data class GenesisUltraAtomicBirthCommittedEvidence(
  *
  * A second explicit local ceremony is required after candidate consent and final
  * witness authorization. Execution failure is propagated as an uncommitted
- * failure. Once the executor returns, birth is committed; later maintenance
- * failure is represented as committed-with-maintenance-pending and never as a
- * retryable birth.
+ * failure. Once the executor returns, birth is committed; every later anomaly is
+ * represented as committed-with-maintenance-pending and never as retryable birth.
  */
 internal class GenesisUltraAtomicBirthExecutionCeremonyCoordinator private constructor(
     private val executeBirth: suspend (
@@ -141,23 +140,29 @@ internal class GenesisUltraAtomicBirthExecutionCeremonyCoordinator private const
         authorization.requireUsableAt(committedAtText)
         val memoryRequest = firstPostBirthMemoryRequest(authorization, committedAtText)
 
-        // Any exception before this call returns means the Room transaction did not
-        // expose a committed birth and remains a normal execution failure.
+        // An exception before this call returns is an uncommitted execution failure.
+        // The production executor performs no work after its Room transaction returns.
         val evidence = executeBirth(
             authorization,
             committedAtText,
             committedAt.toEpochMilli(),
             memoryRequest
         )
-        requireCommittedEvidence(authorization, memoryRequest, evidence)
 
-        val maintenanceFailure = runCatching {
+        val postCommitFailures = mutableListOf<Throwable>()
+        runCatching {
+            requireCommittedEvidence(authorization, memoryRequest, evidence)
+        }.exceptionOrNull()?.let(postCommitFailures::add)
+        runCatching {
             retireCommittedConsent()
-        }.exceptionOrNull()
-        val maintenanceError = maintenanceFailure?.let { failure ->
-            val type = failure::class.java.simpleName.ifBlank { "Failure" }
-            "$type:${failure.message.orEmpty().take(180)}"
-        }
+        }.exceptionOrNull()?.let(postCommitFailures::add)
+
+        val maintenanceError = postCommitFailures
+            .takeIf(List<Throwable>::isNotEmpty)
+            ?.joinToString(" | ") { failure ->
+                val type = failure::class.java.simpleName.ifBlank { "Failure" }
+                "$type:${failure.message.orEmpty().take(160)}"
+            }
         return GenesisUltraAtomicBirthExecutionCeremonyResult(
             outcome = if (maintenanceError == null) {
                 GenesisUltraAtomicBirthExecutionOutcome.COMMITTED_CLEAN
