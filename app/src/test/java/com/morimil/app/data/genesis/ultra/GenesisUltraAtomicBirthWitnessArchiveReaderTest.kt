@@ -19,7 +19,8 @@ class GenesisUltraAtomicBirthWitnessArchiveReaderTest {
         val witness = GenesisUltraAtomicBirthWitnessArchiveReader().read(
             input = ByteArrayInputStream(fixture.archive),
             expectedCandidateDigest = CANDIDATE_DIGEST,
-            expectedConsentDigest = CONSENT_DIGEST
+            expectedConsentDigest = CONSENT_DIGEST,
+            expectedEvaluatedAt = EVALUATED_AT
         )
 
         assertEquals(EVALUATED_AT, witness.evaluatedAt)
@@ -44,7 +45,8 @@ class GenesisUltraAtomicBirthWitnessArchiveReaderTest {
             reader.read(
                 ByteArrayInputStream(fixture.archive),
                 "sha256:" + "c".repeat(64),
-                CONSENT_DIGEST
+                CONSENT_DIGEST,
+                EVALUATED_AT
             )
         }
         assertEquals("witness_archive_candidate_digest_mismatch", candidateError.message)
@@ -53,10 +55,27 @@ class GenesisUltraAtomicBirthWitnessArchiveReaderTest {
             reader.read(
                 ByteArrayInputStream(fixture.archive),
                 CANDIDATE_DIGEST,
-                "sha256:" + "d".repeat(64)
+                "sha256:" + "d".repeat(64),
+                EVALUATED_AT
             )
         }
         assertEquals("witness_archive_consent_digest_mismatch", consentError.message)
+    }
+
+    @Test
+    fun rejectsArchiveEvaluationTimeDifferentFromLocalInstant() {
+        val fixture = archiveFixture()
+
+        val error = assertThrows(IllegalArgumentException::class.java) {
+            GenesisUltraAtomicBirthWitnessArchiveReader().read(
+                ByteArrayInputStream(fixture.archive),
+                CANDIDATE_DIGEST,
+                CONSENT_DIGEST,
+                "2026-07-25T12:00:01Z"
+            )
+        }
+
+        assertEquals("witness_archive_evaluated_at_mismatch", error.message)
     }
 
     @Test
@@ -69,7 +88,8 @@ class GenesisUltraAtomicBirthWitnessArchiveReaderTest {
             GenesisUltraAtomicBirthWitnessArchiveReader().read(
                 ByteArrayInputStream(fixture.archive),
                 CANDIDATE_DIGEST,
-                CONSENT_DIGEST
+                CONSENT_DIGEST,
+                EVALUATED_AT
             )
         }
 
@@ -84,7 +104,8 @@ class GenesisUltraAtomicBirthWitnessArchiveReaderTest {
             GenesisUltraAtomicBirthWitnessArchiveReader().read(
                 ByteArrayInputStream(fixture.archive),
                 CANDIDATE_DIGEST,
-                CONSENT_DIGEST
+                CONSENT_DIGEST,
+                EVALUATED_AT
             )
         }
 
@@ -99,7 +120,8 @@ class GenesisUltraAtomicBirthWitnessArchiveReaderTest {
             GenesisUltraAtomicBirthWitnessArchiveReader().read(
                 ByteArrayInputStream(fixture.archive),
                 CANDIDATE_DIGEST,
-                CONSENT_DIGEST
+                CONSENT_DIGEST,
+                EVALUATED_AT
             )
         }
 
@@ -121,7 +143,8 @@ class GenesisUltraAtomicBirthWitnessArchiveReaderTest {
             GenesisUltraAtomicBirthWitnessArchiveReader().read(
                 ByteArrayInputStream(zip(files)),
                 CANDIDATE_DIGEST,
-                CONSENT_DIGEST
+                CONSENT_DIGEST,
+                EVALUATED_AT
             )
         }
 
