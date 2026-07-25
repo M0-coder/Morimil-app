@@ -229,15 +229,16 @@ internal object GenesisUltraRuntimeIdentityProjector {
             state.initialBodyId == receipt.activeWriterBodyId &&
                 state.initialBodyId == bodyRecord.bodyId &&
                 state.initialBodyId == activeRegisteredBody.bodyId &&
-                state.initialBodyId == bodyRoot.bodyId &&
                 bodyRecord.instanceId == identity.instanceId &&
                 bodyRegistry.instanceId == identity.instanceId &&
                 keyEpoch.instanceId == identity.instanceId &&
                 keyEpoch.bodyId == state.initialBodyId
         ) { "runtime_identity_active_body_link_mismatch" }
+
+        // Canonical Body and key-epoch identifiers come from the recovered signed birth graph.
+        // The Android key store uses local identifiers derived from the same public-key fingerprint.
         require(
-            bodyRoot.keyEpochId == keyEpoch.keyEpochId &&
-                bodyRoot.publicKeyRef == keyEpoch.publicKeyFingerprint &&
+            bodyRoot.publicKeyRef == keyEpoch.publicKeyFingerprint &&
                 bodyRoot.publicKeyRef == bodyRecord.publicKeyFingerprint &&
                 bodyRoot.publicKeyRef == activeRegisteredBody.publicKeyFingerprint
         ) { "runtime_identity_active_body_key_mismatch" }
