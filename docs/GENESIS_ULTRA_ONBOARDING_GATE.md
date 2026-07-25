@@ -3,7 +3,7 @@
 ## Purpose
 
 The Android UI must not treat a legacy `LocalInstanceIdentity` row as proof that
-Morimil has been born. Runtime navigation is now derived only from the audited
+Morimil has been born. Runtime navigation is derived only from the audited
 Genesis Ultra preparation state.
 
 ```text
@@ -41,8 +41,19 @@ binary compatibility boundary. It returns
 - create `GenesisCore`;
 - seed legacy memory.
 
+## Signed Seed preview
+
+When Body identity and the Guardian trust anchor are already prepared, the
+onboarding screen can select a signed Seed ZIP. Android verifies the exact
+manifest, payload digests, Seed root and detached Guardian signature, then
+constructs an in-memory candidate bound to the canonical companion name.
+
+Only a non-secret summary is displayed. Changing the name or rechecking local
+state clears the preview. The archive and candidate are not persisted.
+
 ## Remaining work
 
-This gate does not load a signed Seed release, construct the final candidate,
-record host consent, receive Guardian testimony or invoke atomic activation.
-Deliberative and metacognitive motors remain blocked.
+The onboarding gate still does not record host consent, receive the final
+Guardian birth testimony, issue atomic-birth authorization or invoke atomic
+activation. A verified preview cannot open runtime and the birth button remains
+disabled. Deliberative and metacognitive motors remain blocked.
