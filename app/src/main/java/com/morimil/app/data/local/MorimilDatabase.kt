@@ -18,9 +18,10 @@ import androidx.room.RoomDatabase
         GenesisUltraBirthCommitEntity::class,
         GenesisUltraBirthArtifactEntity::class,
         GenesisUltraBirthJournalEntity::class,
+        GenesisUltraBirthAuthorizationEntity::class,
         GenesisUltraMemoryEventEntity::class
     ],
-    version = 12,
+    version = 13,
     exportSchema = true
 )
 abstract class MorimilDatabase : RoomDatabase() {
@@ -44,6 +45,7 @@ abstract class MorimilDatabase : RoomDatabase() {
         val MIGRATION_9_10 = MorimilDatabaseMigrations.MIGRATION_9_10
         val MIGRATION_10_11 = MorimilDatabaseMigrations.MIGRATION_10_11
         val MIGRATION_11_12 = MorimilDatabaseMigrations.MIGRATION_11_12
+        val MIGRATION_12_13 = MorimilDatabaseMigrations.MIGRATION_12_13
 
         fun getInstance(context: Context): MorimilDatabase {
             return instance ?: synchronized(this) {
