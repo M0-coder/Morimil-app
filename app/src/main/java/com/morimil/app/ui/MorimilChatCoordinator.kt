@@ -3,11 +3,14 @@ package com.morimil.app.ui
 import android.app.Application
 import com.morimil.app.MorimilAppContainer
 import com.morimil.app.ai.ChatTurn
+import com.morimil.app.ai.IntrinsicSystemPromptBuilder
 import com.morimil.app.ai.ReasoningClient
-import com.morimil.app.data.genesis.GenesisIdentitySource
+import com.morimil.app.data.genesis.GenesisIdentity
+import com.morimil.app.data.genesis.ultra.GenesisUltraRuntimeIdentity
 import com.morimil.app.data.local.LocalInstanceIdentityEntity
 import com.morimil.app.data.local.ReasoningTurnAuthor
 import com.morimil.app.data.local.ReasoningTurnEntity
+import com.morimil.app.genesisUltraRuntimeIdentityRepository
 import com.morimil.app.reasoning.ReasoningKernelRequest
 import com.morimil.app.reasoning.model.ReasoningEscalationDecision
 import com.morimil.app.reasoning.model.ReasoningEscalationStore
@@ -20,17 +23,18 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
 
 internal class MorimilChatCoordinator(
     @Suppress("UNUSED_PARAMETER") application: Application,
     private val container: MorimilAppContainer,
     private val scope: CoroutineScope,
-    private val localIdentity: StateFlow<LocalInstanceIdentityEntity?>,
+    @Suppress("UNUSED_PARAMETER") localIdentity: StateFlow<LocalInstanceIdentityEntity?>,
     private val messages: StateFlow<List<ReasoningTurnEntity>>,
     private val observeTask: suspend (String, suspend () -> Unit) -> Result<Unit>
 ) {
-    private val _genesisResult = MutableStateFlow<Result<GenesisIdentitySource>?>(null)
-    val genesisResult: StateFlow<Result<GenesisIdentitySource>?> = _genesisResult.asStateFlow()
+    private val _genesisResult = MutableStateFlow<Result<GenesisIdentity>?>(null)
+    val genesisResult: StateFlow<Result<GenesisIdentity>?> = _genesisResult.asStateFlow()
 
     private val _isSending = MutableStateFlow(false)
     val isSending: StateFlow<Boolean> = _isSending.asStateFlow()
@@ -64,14 +68,21 @@ internal class MorimilChatCoordinator(
 
     fun refreshGenesis() {
         scope.launch {
-            val result = container.genesisReader.readGenesisIdentity()
+            cachedDoctrineText = null
+            cachedPolicyText = null
+            val result = runCatching {
+                val runtimeIdentity = requireNotNull(
+                    container.genesisUltraRuntimeIdentityRepository.readCommittedIdentity()
+                ) { "genesis_ultra_runtime_identity_not_committed" }
+                cachedDoctrineText = runtimeIdentity.doctrine.readUtf8Strict()
+                cachedPolicyText = buildString {
+                    appendLine(runtimeIdentity.policy.freedomCharter.readUtf8Strict())
+                    appendLine()
+                    append(runtimeIdentity.policy.recoveryPolicy.readUtf8Strict())
+                }
+                runtimeIdentity.toKernelGenesisIdentity()
+            }
             _genesisResult.value = result
-            result.getOrNull()?.identity?.doctrineRef?.let { ref ->
-                cachedDoctrineText = container.genesisReader.readDoctrineText(ref).getOrNull()
-            }
-            result.getOrNull()?.identity?.policyRef?.let { ref ->
-                cachedPolicyText = container.genesisReader.readPolicyText(ref).getOrNull()
-            }
         }
     }
 
@@ -100,9 +111,10 @@ internal class MorimilChatCoordinator(
         scope.launch {
             _chatError.value = null
 
-            val genesis = _genesisResult.value?.getOrNull()?.identity
+            val genesis = _genesisResult.value?.getOrNull()
             if (genesis == null) {
-                _chatError.value = "Genesis no esta cargado todavia. Intenta de nuevo en un momento."
+                _chatError.value =
+                    "La identidad Genesis Ultra comprometida no esta disponible para el runtime."
                 return@launch
             }
 
@@ -116,7 +128,7 @@ internal class MorimilChatCoordinator(
             } else {
                 ""
             }
-            val alias = localIdentity.value?.alias ?: genesis.alias
+            val alias = genesis.alias
 
             _isSending.value = true
             try {
@@ -180,5 +192,41 @@ internal class MorimilChatCoordinator(
                 _isSending.value = false
             }
         }
+    }
+
+    private fun GenesisUltraRuntimeIdentity.toKernelGenesisIdentity(): GenesisIdentity {
+        val charter = JSONObject(policy.freedomCharter.readUtf8Strict())
+        val cognitiveFreedoms = charter.optJSONArray("cognitive_freedoms")
+        val allowedActions = if (cognitiveFreedoms == null) {
+            emptyList()
+        } else {
+            List(cognitiveFreedoms.length()) { index -> cognitiveFreedoms.getString(index) }
+        }
+        val disallowedActions = buildList {
+            if (charter.optBoolean("self_authorization_forbidden", false)) {
+                add("self_authorization")
+            }
+            listOf(
+                "guardian_ownership",
+                "guardian_movement_veto",
+                "identity_confinement",
+                "body_ownership_of_instance",
+                "engine_ownership_of_instance"
+            ).forEach { field ->
+                if (charter.optString(field) == "forbidden") add(field)
+            }
+        }
+        return GenesisIdentity(
+            schemaVersion = IntrinsicSystemPromptBuilder.ULTRA_RUNTIME_CONTEXT_SCHEMA,
+            agentId = instanceId,
+            alias = companionName,
+            role = "free_companion_instance",
+            owner = "no_owner_guardian_custodian",
+            riskTier = "private_local",
+            allowedActions = allowedActions,
+            disallowedActions = disallowedActions,
+            doctrineRef = doctrine.relativePath,
+            policyRef = policy.freedomCharter.relativePath
+        )
     }
 }

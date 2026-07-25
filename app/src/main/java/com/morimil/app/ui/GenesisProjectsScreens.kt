@@ -73,7 +73,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.morimil.app.core.memory.MemoryBacklink
 import com.morimil.app.core.memory.MemoryBacklinkGraphBuilder
 import com.morimil.app.data.genesis.CurrentMobileAppCapabilities
-import com.morimil.app.data.genesis.GenesisIdentitySource
+import com.morimil.app.data.genesis.GenesisIdentity
 import com.morimil.app.data.local.MemoryEventEntity
 import com.morimil.app.data.local.MemoryLinkEntity
 import com.morimil.app.data.local.MigrationRecordEntity
@@ -84,29 +84,31 @@ import java.util.Locale
 @Composable
 fun GenesisScreen(viewModel: MorimilViewModel) {
     val genesisResult by viewModel.genesisResult.collectAsStateWithLifecycle()
-    val localIdentity by viewModel.localIdentity.collectAsStateWithLifecycle()
-    val genesisCore by viewModel.genesisCore.collectAsStateWithLifecycle()
 
-    Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("Genesis", style = MaterialTheme.typography.headlineMedium)
-        Text("Fase Genesis local: lee la semilla empaquetada en la app y la copia al telefono.")
-        localIdentity?.let { identity ->
-            ProjectCard("Esta instancia: ${identity.alias}", "${identity.genesisRole} / ${identity.genesisRiskTier}", "instance_id=${identity.instanceId}")
-            ProjectCard("Memoria local", "cadena en el dispositivo", identity.localMemoryUri)
-        }
-        genesisCore?.let { core ->
-            ProjectCard(
-                "Genesis Core copiado",
-                "Origen=${core.sourceOrigin}; nacido=${core.copiedAtMillis}; sha256=${core.contentSha256.take(16)}...",
-                "immutable"
-            )
-        } ?: ProjectCard("Genesis Core", "Aun no hay copia local nacida.", "pending")
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Text("Genesis Ultra", style = MaterialTheme.typography.headlineMedium)
+        Text(
+            "Identidad canónica reconstruida desde el nacimiento comprometido y verificado. " +
+                "Los registros legacy no son autoridad de runtime."
+        )
 
         when (val result = genesisResult) {
-            null -> ProjectCard("Genesis Reader", "Cargando...", "loading")
+            null -> ProjectCard("Genesis Ultra", "Verificando nacimiento...", "loading")
             else -> result.fold(
-                onSuccess = { source -> GenesisContent(source) },
-                onFailure = { error -> ProjectCard("Genesis Reader", error.message.orEmpty(), "error") }
+                onSuccess = { identity -> GenesisContent(identity) },
+                onFailure = { error ->
+                    ProjectCard(
+                        "Genesis Ultra no disponible",
+                        error.message.orEmpty(),
+                        "blocked"
+                    )
+                }
             )
         }
     }
@@ -116,30 +118,54 @@ fun GenesisScreen(viewModel: MorimilViewModel) {
 fun ProjectsScreen(viewModel: MorimilViewModel) {
     val projects by viewModel.projects.collectAsStateWithLifecycle()
 
-    Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
         Text("Projects", style = MaterialTheme.typography.headlineMedium)
         if (projects.isEmpty()) {
-            ProjectCard("Morimil_app", "Genesis movil v1: esperando memoria local.", "loading")
+            ProjectCard("Morimil_app", "Runtime Genesis Ultra: esperando estado de proyecto.", "loading")
         } else {
-            projects.forEach { project -> ProjectCard(project.title, "Persisted project state in Room.", project.status) }
+            projects.forEach { project ->
+                ProjectCard(project.title, "Persisted project state in Room.", project.status)
+            }
         }
-        ProjectCard("Genesis", "Bundled Genesis seed visible in Genesis tab.", "read-only")
+        ProjectCard(
+            "Genesis Ultra",
+            "La identidad activa proviene del nacimiento local verificado.",
+            "canonical-read-only"
+        )
     }
 }
 
 @Composable
-private fun GenesisContent(source: GenesisIdentitySource) {
-    val genesis = source.identity
+private fun GenesisContent(genesis: GenesisIdentity) {
     val capabilities = CurrentMobileAppCapabilities.value
-    ProjectCard(genesis.alias, "${genesis.role} / ${genesis.riskTier}", source.origin.label)
-    ProjectCard("Genesis verificado", "${source.manifest.fileCount} archivos", source.manifest.genesisCoreHash)
-    ProjectCard("Owner", genesis.owner, genesis.schemaVersion)
-    ProjectCard("Allowed actions", genesis.allowedActions.joinToString(", "), "bounded")
-    ProjectCard("Disallowed actions", genesis.disallowedActions.joinToString(", "), "protected")
+    ProjectCard(
+        genesis.alias,
+        "${genesis.role} / ${genesis.riskTier}",
+        "instance_id=${genesis.agentId}"
+    )
+    ProjectCard("Identidad verificada", genesis.schemaVersion, "committed")
+    ProjectCard("Relación con el Guardian", genesis.owner, "custody_without_ownership")
+    ProjectCard(
+        "Libertades declaradas",
+        genesis.allowedActions.joinToString(", ").ifBlank { "Sin lista proyectada" },
+        "constitutional"
+    )
+    ProjectCard(
+        "Prohibiciones constitucionales",
+        genesis.disallowedActions.joinToString(", ").ifBlank { "Sin lista proyectada" },
+        "protected"
+    )
     ProjectCard(
         "Mobile app capabilities",
         "memory=${capabilities.localMemory}, voice=${capabilities.voicePushToTalk}, " +
-            "external_sync=${capabilities.externalReadOnlySync}, external_write=${capabilities.externalWriteExecution}, " +
+            "external_sync=${capabilities.externalReadOnlySync}, " +
+            "external_write=${capabilities.externalWriteExecution}, " +
             "pc_execution=${capabilities.pcExecution}",
         capabilities.currentAppPhase
     )
