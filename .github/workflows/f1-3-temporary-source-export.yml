@@ -1,11 +1,9 @@
 name: F1.3 Temporary Source Export
 
 on:
-  push:
+  pull_request:
     branches:
-      - plan-v2/f1-3-runtime-gate
-    paths:
-      - .github/workflows/f1-3-temporary-source-export.yml
+      - main
 
 permissions:
   contents: read
