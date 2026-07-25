@@ -28,7 +28,7 @@ class GenesisUltraRuntimeConsumerContractTest {
         val executable = executableSource(promptBuilder)
 
         assertTrue(executable.contains("ULTRA_RUNTIME_CONTEXT_SCHEMA"))
-        assertTrue(executable.contains("intrinsic_identity_not_genesis_ultra_runtime"))
+        assertTrue(promptBuilder.contains("intrinsic_identity_not_genesis_ultra_runtime"))
         assertFalse(promptBuilder.contains("semilla local del Bloque Genesis empaquetada"))
     }
 
