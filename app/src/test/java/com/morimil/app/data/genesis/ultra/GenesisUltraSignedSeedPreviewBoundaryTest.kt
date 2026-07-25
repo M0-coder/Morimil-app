@@ -16,6 +16,7 @@ class GenesisUltraSignedSeedPreviewBoundaryTest {
         assertTrue(source.contains("GenesisUltraReleaseArchiveReader"))
         assertTrue(source.contains("guardianTrustAnchorStore.verifyRelease"))
         assertTrue(source.contains("candidateConstructionCoordinator.construct"))
+        assertTrue(source.contains("GenesisUltraSignedSeedCandidateSession"))
         assertFalse(source.contains("GenesisUltraAndroidHostBirthConsentStore"))
         assertFalse(source.contains("GenesisUltraAtomicBirthAuthorizationCoordinator"))
         assertFalse(source.contains("GenesisUltraAtomicBirthExecutionCoordinator"))
@@ -24,14 +25,74 @@ class GenesisUltraSignedSeedPreviewBoundaryTest {
     }
 
     @Test
-    fun onboardingKeepsBirthActionDisabledAfterPreview() {
-        val source = sourceFile(
+    fun onboardingCanRecordConsentButCannotAuthorizeOrExecuteBirth() {
+        val viewModel = sourceFile(
+            "src/main/java/com/morimil/app/ui/GenesisUltraOnboardingViewModel.kt"
+        ).readText()
+        val screen = sourceFile(
             "src/main/java/com/morimil/app/ui/OnboardingScreen.kt"
         ).readText()
 
-        assertTrue(source.contains("Candidato verificado; consentimiento aún bloqueado"))
-        assertTrue(source.contains("Vista previa efímera: no es consentimiento, testimonio ni nacimiento."))
-        assertTrue(source.contains("Button(\n                enabled = false"))
+        assertTrue(viewModel.contains("recordExplicitConsent"))
+        assertTrue(viewModel.contains("GenesisUltraHostBirthConsentRequest"))
+        assertFalse(viewModel.contains("GenesisUltraAtomicBirthAuthorizationCoordinator"))
+        assertFalse(viewModel.contains("GenesisUltraAtomicBirthExecutionCoordinator"))
+        assertFalse(viewModel.contains("genesisUltraAtomicBirthExecutionCoordinator"))
+        assertFalse(viewModel.contains(".execute("))
+        assertTrue(screen.contains("Consentimiento registrado; falta testimonio del Guardián"))
+        assertTrue(screen.contains("birthCommitAuthorized = false"))
+        assertTrue(screen.contains("Button(\n                enabled = false"))
+    }
+
+    @Test
+    fun exactCandidateIsKeptOnlyAsPrivateViewModelMemory() {
+        val viewModel = sourceFile(
+            "src/main/java/com/morimil/app/ui/GenesisUltraOnboardingViewModel.kt"
+        ).readText()
+        val session = sourceFile(
+            "src/main/java/com/morimil/app/data/genesis/ultra/" +
+                "GenesisUltraSignedSeedPreviewCoordinator.kt"
+        ).readText()
+
+        assertTrue(viewModel.contains("private var candidateSession"))
+        assertTrue(viewModel.contains("override fun onCleared()"))
+        assertTrue(session.contains("internal val constructedCandidate"))
+        assertFalse(session.contains("SharedPreferences"))
+        assertFalse(session.contains("MorimilDatabase"))
+        assertFalse(session.contains("Serializable"))
+    }
+
+    @Test
+    fun operationLocksArePublishedBeforeLaunchingBackgroundWork() {
+        val source = sourceFile(
+            "src/main/java/com/morimil/app/ui/GenesisUltraOnboardingViewModel.kt"
+        ).readText()
+
+        val previewFunction = source
+            .substringAfter("internal fun previewSignedSeed")
+            .substringBefore("internal fun recordExplicitHostConsent")
+        assertBeforeLaunch(
+            previewFunction,
+            "GenesisUltraSignedSeedPreviewUiState(importing = true)"
+        )
+
+        val recordFunction = source
+            .substringAfter("internal fun recordExplicitHostConsent")
+            .substringBefore("internal fun revokeHostConsent")
+        assertBeforeLaunch(recordFunction, "recording = true")
+
+        val revokeFunction = source
+            .substringAfter("internal fun revokeHostConsent")
+            .substringBefore("internal fun clearSignedSeedPreview")
+        assertBeforeLaunch(revokeFunction, "revoking = true")
+    }
+
+    private fun assertBeforeLaunch(functionSource: String, lockMarker: String) {
+        val lockIndex = functionSource.indexOf(lockMarker)
+        val launchIndex = functionSource.indexOf("viewModelScope.launch")
+        assertTrue("Missing operation lock marker: $lockMarker", lockIndex >= 0)
+        assertTrue("Missing coroutine launch", launchIndex >= 0)
+        assertTrue("Operation lock must be published before launch", lockIndex < launchIndex)
     }
 
     private fun sourceFile(relativePath: String): File {

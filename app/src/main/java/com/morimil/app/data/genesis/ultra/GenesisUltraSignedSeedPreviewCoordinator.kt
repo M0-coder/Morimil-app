@@ -28,10 +28,8 @@ internal data class GenesisUltraSignedSeedCandidatePreview(
         require(GenesisUltraCompanionNamePolicy.validate(companionName).isValid) {
             "seed_preview_companion_name_invalid"
         }
-        require(instanceId.startsWith("inst_") && instanceId.length > 5) {
-            "seed_preview_instance_id_invalid"
-        }
-        require(bodyId.isNotBlank() && bodyId != instanceId) { "seed_preview_body_id_invalid" }
+        require(INSTANCE_ID.matches(instanceId)) { "seed_preview_instance_id_invalid" }
+        require(BODY_ID.matches(bodyId) && bodyId != instanceId) { "seed_preview_body_id_invalid" }
         require(SHA256_REF.matches(candidateDigest)) { "seed_preview_candidate_digest_invalid" }
         require(runCatching { Instant.parse(evaluatedAt) }.isSuccess) {
             "seed_preview_evaluated_at_invalid"
@@ -40,6 +38,67 @@ internal data class GenesisUltraSignedSeedCandidatePreview(
 
     private companion object {
         val SHA256_REF = Regex("^sha256:[a-f0-9]{64}$")
+        val INSTANCE_ID = Regex("^inst_[a-f0-9]{64}$")
+        val BODY_ID = Regex("^body_[a-f0-9]{64}$")
+    }
+}
+
+/**
+ * One exact candidate retained only in process memory for a short confirmation
+ * ceremony. The full candidate is intentionally not serializable and is never
+ * exposed through UI state.
+ */
+internal class GenesisUltraSignedSeedCandidateSession(
+    internal val constructedCandidate: GenesisUltraConstructedBirthCandidate,
+    val preview: GenesisUltraSignedSeedCandidatePreview
+) {
+    val confirmationCode: String =
+        GenesisUltraHostBirthConsentRequest.confirmationCode(preview.candidateDigest)
+    val expiresAt: String = constructedCandidate.candidate.bodyPossession.proof.expiresAt
+    val birthCommitAuthorized: Boolean = false
+
+    init {
+        val candidate = constructedCandidate.candidate
+        require(preview.candidateDigest == constructedCandidate.candidateDigest) {
+            "seed_candidate_session_digest_mismatch"
+        }
+        require(preview.seedId == candidate.release.manifest.seedId) {
+            "seed_candidate_session_seed_id_mismatch"
+        }
+        require(preview.seedRootHash == candidate.release.verifiedRootHash) {
+            "seed_candidate_session_seed_root_mismatch"
+        }
+        require(preview.guardianId == candidate.release.signature.signerId) {
+            "seed_candidate_session_guardian_mismatch"
+        }
+        require(preview.guardianKeyEpochId == candidate.release.signature.keyEpochId) {
+            "seed_candidate_session_guardian_epoch_mismatch"
+        }
+        require(preview.companionName == candidate.instanceIdentity.companionName) {
+            "seed_candidate_session_name_mismatch"
+        }
+        require(preview.instanceId == candidate.instanceIdentity.instanceId) {
+            "seed_candidate_session_instance_mismatch"
+        }
+        require(preview.bodyId == candidate.bodyRecord.bodyId) {
+            "seed_candidate_session_body_mismatch"
+        }
+        require(Instant.parse(preview.evaluatedAt) < Instant.parse(expiresAt)) {
+            "seed_candidate_session_expiry_invalid"
+        }
+        require(!constructedCandidate.birthCommitAuthorized && !birthCommitAuthorized) {
+            "seed_candidate_session_cannot_authorize_birth"
+        }
+    }
+
+    fun isValidAt(evaluatedAt: String): Boolean {
+        val instant = runCatching { Instant.parse(evaluatedAt) }.getOrNull() ?: return false
+        if (instant < Instant.parse(preview.evaluatedAt) || instant >= Instant.parse(expiresAt)) {
+            return false
+        }
+        return GenesisUltraBirthCandidateValidator
+            .assess(constructedCandidate.candidate, evaluatedAt)
+            .structurallyValid
     }
 }
 
@@ -60,10 +119,10 @@ internal class GenesisUltraSignedSeedPreviewCoordinator(
 ) {
     private val contentResolver = context.applicationContext.contentResolver
 
-    suspend fun preview(
+    suspend fun prepareSession(
         uri: Uri,
         companionName: String
-    ): GenesisUltraSignedSeedCandidatePreview {
+    ): GenesisUltraSignedSeedCandidateSession {
         val canonicalName = GenesisUltraCompanionNamePolicy.requireCanonical(companionName)
         require(uri.scheme == ContentResolver.SCHEME_CONTENT) {
             "seed_preview_content_uri_required"
@@ -90,8 +149,7 @@ internal class GenesisUltraSignedSeedPreviewCoordinator(
             )
         )
         val candidate = constructed.candidate
-
-        return GenesisUltraSignedSeedCandidatePreview(
+        val preview = GenesisUltraSignedSeedCandidatePreview(
             seedId = release.manifest.seedId,
             seedRootHash = release.verifiedRootHash,
             verifiedFileCount = release.verifiedFileCount,
@@ -102,6 +160,10 @@ internal class GenesisUltraSignedSeedPreviewCoordinator(
             bodyId = candidate.bodyRecord.bodyId,
             candidateDigest = constructed.candidateDigest,
             evaluatedAt = constructed.evaluatedAt
+        )
+        return GenesisUltraSignedSeedCandidateSession(
+            constructedCandidate = constructed,
+            preview = preview
         )
     }
 }

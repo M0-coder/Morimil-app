@@ -6,6 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
@@ -16,6 +17,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
@@ -35,18 +37,26 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.morimil.app.data.genesis.ultra.GenesisUltraHostBirthConsentState
 import com.morimil.app.data.genesis.ultra.GenesisUltraSignedSeedCandidatePreview
 
 @Composable
 internal fun OnboardingScreen(viewModel: GenesisUltraOnboardingViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val signedSeedState by viewModel.signedSeedPreview.collectAsStateWithLifecycle()
+    val consentState by viewModel.hostBirthConsent.collectAsStateWithLifecycle()
     var companionName by remember { mutableStateOf("") }
+    var confirmationCodeInput by remember { mutableStateOf("") }
+    var userPresenceConfirmed by remember { mutableStateOf(false) }
     val nameValidation = viewModel.validateCanonicalCompanionName(companionName)
+    val interactionLocked = signedSeedState.importing || consentState.busy ||
+        consentState.hasPersistedConsent
     val signedSeedLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri ->
         if (uri != null) {
+            confirmationCodeInput = ""
+            userPresenceConfirmed = false
             viewModel.previewSignedSeed(uri, companionName)
         }
     }
@@ -112,10 +122,12 @@ internal fun OnboardingScreen(viewModel: GenesisUltraOnboardingViewModel) {
                     onValueChange = { next ->
                         if (next.length <= 128 && next.none(Char::isISOControl)) {
                             companionName = next
+                            confirmationCodeInput = ""
+                            userPresenceConfirmed = false
                             viewModel.clearSignedSeedPreview()
                         }
                     },
-                    enabled = state.canonicalNameInputEnabled && !signedSeedState.importing,
+                    enabled = state.canonicalNameInputEnabled && !interactionLocked,
                     modifier = Modifier.fillMaxWidth(),
                     placeholder = {
                         Text(
@@ -170,7 +182,8 @@ internal fun OnboardingScreen(viewModel: GenesisUltraOnboardingViewModel) {
             OutlinedButton(
                 enabled = state.candidateConstructionReady &&
                     nameValidation.isValid &&
-                    !signedSeedState.importing,
+                    !interactionLocked &&
+                    consentState.persistedState == GenesisUltraHostBirthConsentState.ABSENT,
                 modifier = Modifier.fillMaxWidth(),
                 onClick = {
                     signedSeedLauncher.launch(
@@ -192,12 +205,57 @@ internal fun OnboardingScreen(viewModel: GenesisUltraOnboardingViewModel) {
             }
 
             signedSeedState.preview?.let { preview ->
-                SignedSeedPreviewCard(preview)
+                SignedSeedPreviewCard(
+                    preview = preview,
+                    expiresAt = requireNotNull(signedSeedState.sessionExpiresAt)
+                )
             }
 
             signedSeedState.errorMessage?.let { message ->
                 Text(
                     text = "Seed rechazado: $message",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    textAlign = TextAlign.Center
+                )
+            }
+
+            if (signedSeedState.sessionAvailable && !consentState.hasPersistedConsent) {
+                ConsentCeremonyCard(
+                    expectedCode = requireNotNull(signedSeedState.confirmationCode),
+                    sessionExpiresAt = requireNotNull(signedSeedState.sessionExpiresAt),
+                    confirmationCodeInput = confirmationCodeInput,
+                    userPresenceConfirmed = userPresenceConfirmed,
+                    busy = consentState.busy,
+                    onCodeChanged = { next ->
+                        if (next.length <= 12 && next.all { it in '0'..'9' || it in 'a'..'f' }) {
+                            confirmationCodeInput = next
+                        }
+                    },
+                    onPresenceChanged = { userPresenceConfirmed = it },
+                    onConfirm = {
+                        viewModel.recordExplicitHostConsent(
+                            presentedConfirmationCode = confirmationCodeInput,
+                            userPresenceConfirmed = userPresenceConfirmed
+                        )
+                    }
+                )
+            }
+
+            if (consentState.hasPersistedConsent) {
+                PersistedConsentCard(
+                    state = consentState,
+                    onRevoke = {
+                        confirmationCodeInput = ""
+                        userPresenceConfirmed = false
+                        viewModel.revokeHostConsent()
+                    }
+                )
+            }
+
+            consentState.errorMessage?.let { message ->
+                Text(
+                    text = "Consentimiento rechazado: $message",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
                     textAlign = TextAlign.Center
@@ -220,8 +278,11 @@ internal fun OnboardingScreen(viewModel: GenesisUltraOnboardingViewModel) {
                     text = when {
                         state.loading -> "Revisando preparación"
                         !nameValidation.isValid -> "Confirma un nombre canónico"
-                        signedSeedState.preview != null ->
-                            "Candidato verificado; consentimiento aún bloqueado"
+                        consentState.summary != null ->
+                            "Consentimiento registrado; falta testimonio del Guardián"
+                        consentState.hasPersistedConsent ->
+                            "Consentimiento previo sin candidato; revócalo para continuar"
+                        signedSeedState.sessionAvailable -> "Confirma el candidato exacto"
                         state.candidateConstructionReady -> "Selecciona y verifica un Seed firmado"
                         else -> "Nacimiento Genesis Ultra bloqueado"
                     },
@@ -230,7 +291,7 @@ internal fun OnboardingScreen(viewModel: GenesisUltraOnboardingViewModel) {
             }
 
             OutlinedButton(
-                enabled = !state.loading && !signedSeedState.importing,
+                enabled = !state.loading && !interactionLocked,
                 modifier = Modifier.fillMaxWidth(),
                 onClick = viewModel::refresh
             ) {
@@ -280,7 +341,10 @@ private fun StatusCard(title: String, detail: String, status: String) {
 }
 
 @Composable
-private fun SignedSeedPreviewCard(preview: GenesisUltraSignedSeedCandidatePreview) {
+private fun SignedSeedPreviewCard(
+    preview: GenesisUltraSignedSeedCandidatePreview,
+    expiresAt: String
+) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
@@ -305,9 +369,133 @@ private fun SignedSeedPreviewCard(preview: GenesisUltraSignedSeedCandidatePrevie
                 "Candidate: ${preview.candidateDigest}",
                 style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace)
             )
+            Text("Sesión válida hasta: $expiresAt", style = MaterialTheme.typography.bodySmall)
             Text(
-                "Vista previa efímera: no es consentimiento, testimonio ni nacimiento.",
+                "El candidato completo existe solo en memoria y aún no está autorizado.",
                 style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFF245C37)
+            )
+        }
+    }
+}
+
+@Composable
+private fun ConsentCeremonyCard(
+    expectedCode: String,
+    sessionExpiresAt: String,
+    confirmationCodeInput: String,
+    userPresenceConfirmed: Boolean,
+    busy: Boolean,
+    onCodeChanged: (String) -> Unit,
+    onPresenceChanged: (Boolean) -> Unit,
+    onConfirm: () -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        color = Color(0xFFFFF4DE)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text("Consentimiento exacto", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "Comprueba el candidato mostrado. Este consentimiento quedará ligado solo a ese digest.",
+                style = MaterialTheme.typography.bodySmall
+            )
+            Text(
+                "Código: $expectedCode",
+                style = MaterialTheme.typography.titleMedium.copy(fontFamily = FontFamily.Monospace)
+            )
+            Text("Escribe el código exactamente antes de $sessionExpiresAt.", style = MaterialTheme.typography.bodySmall)
+            TextField(
+                value = confirmationCodeInput,
+                onValueChange = onCodeChanged,
+                enabled = !busy,
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = { Text("Código de 12 caracteres") },
+                singleLine = true
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Checkbox(
+                    checked = userPresenceConfirmed,
+                    onCheckedChange = onPresenceChanged,
+                    enabled = !busy
+                )
+                Text(
+                    "Estoy presente y apruebo este candidato exacto.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+            Button(
+                enabled = !busy && userPresenceConfirmed && confirmationCodeInput == expectedCode,
+                modifier = Modifier.fillMaxWidth(),
+                onClick = onConfirm
+            ) {
+                Text(if (busy) "Registrando consentimiento" else "Registrar consentimiento exacto")
+            }
+            Text(
+                "Esto no autoriza ni ejecuta el nacimiento.",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFF8A4B0F)
+            )
+        }
+    }
+}
+
+@Composable
+private fun PersistedConsentCard(
+    state: GenesisUltraHostBirthConsentUiState,
+    onRevoke: () -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        color = Color(0xFFE9E7F4)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            val summary = state.summary
+            Text(
+                if (summary != null) "Consentimiento registrado" else "Consentimiento previo detectado",
+                style = MaterialTheme.typography.titleMedium
+            )
+            if (summary != null) {
+                Text("Compañero: ${summary.companionName}", style = MaterialTheme.typography.bodySmall)
+                Text("Instance: ${summary.instanceId}", style = MaterialTheme.typography.bodySmall)
+                Text("Válido hasta: ${summary.expiresAt}", style = MaterialTheme.typography.bodySmall)
+                Text(
+                    "Consent: ${summary.consentDigest}",
+                    style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace)
+                )
+            } else {
+                Text(
+                    "El proceso anterior terminó y el candidato exacto ya no está en memoria. " +
+                        "Debe revocarse este consentimiento antes de importar otro Seed.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+            Text(
+                "Estado: ${state.persistedState}",
+                style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace)
+            )
+            OutlinedButton(
+                enabled = !state.busy &&
+                    state.persistedState != GenesisUltraHostBirthConsentState.INCONSISTENT,
+                modifier = Modifier.fillMaxWidth(),
+                onClick = onRevoke
+            ) {
+                Text(if (state.revoking) "Revocando" else "Revocar consentimiento antes del nacimiento")
+            }
+            Text(
+                "birthCommitAuthorized = false",
+                style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
                 color = Color(0xFF245C37)
             )
         }
