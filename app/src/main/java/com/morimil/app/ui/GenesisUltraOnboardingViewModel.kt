@@ -7,16 +7,17 @@ import androidx.lifecycle.viewModelScope
 import com.morimil.app.MorimilAppContainer
 import com.morimil.app.data.genesis.ultra.GenesisUltraCompanionNamePolicy
 import com.morimil.app.data.genesis.ultra.GenesisUltraCompanionNameValidation
-import com.morimil.app.data.genesis.ultra.GenesisUltraHostBirthConsentRecoveryCoordinator
 import com.morimil.app.data.genesis.ultra.GenesisUltraHostBirthConsentRequest
 import com.morimil.app.data.genesis.ultra.GenesisUltraHostBirthConsentState
 import com.morimil.app.data.genesis.ultra.GenesisUltraSignedSeedCandidateSession
 import com.morimil.app.data.genesis.ultra.GenesisUltraSignedSeedPreviewCoordinator
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.time.Duration
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 
@@ -33,11 +34,7 @@ class GenesisUltraOnboardingViewModel(
     private val preparationCoordinator = container.genesisUltraBirthPreparationCoordinator
     private val hostBirthConsentStore = container.genesisUltraHostBirthConsentStore
     private val hostBirthConsentRecoveryCoordinator =
-        GenesisUltraHostBirthConsentRecoveryCoordinator(
-            context = application,
-            database = container.memoryDatabase,
-            consentStore = hostBirthConsentStore
-        )
+        container.genesisUltraHostBirthConsentRecoveryCoordinator
     private val signedSeedPreviewCoordinator = GenesisUltraSignedSeedPreviewCoordinator(
         context = application,
         preparationCoordinator = preparationCoordinator,
@@ -54,7 +51,7 @@ class GenesisUltraOnboardingViewModel(
     internal val signedSeedPreview: StateFlow<GenesisUltraSignedSeedPreviewUiState> =
         _signedSeedPreview.asStateFlow()
 
-    private val _hostBirthConsent = MutableStateFlow(GenesisUltraHostBirthConsentUiState(checking = true))
+    private val _hostBirthConsent = MutableStateFlow(GenesisUltraHostBirthConsentUiState())
     internal val hostBirthConsent: StateFlow<GenesisUltraHostBirthConsentUiState> =
         _hostBirthConsent.asStateFlow()
 
@@ -200,6 +197,7 @@ class GenesisUltraOnboardingViewModel(
                         summary = GenesisUltraHostBirthConsentSummary.from(consent),
                         candidateSessionAvailable = true
                     )
+                    scheduleConsentExpiry(consent.consentId, consent.expiresAt)
                 },
                 onFailure = { error ->
                     val persistedState = runCatching {
@@ -275,6 +273,30 @@ class GenesisUltraOnboardingViewModel(
         }
     }
 
+    private fun scheduleConsentExpiry(consentId: String, expiresAt: String) {
+        viewModelScope.launch(Dispatchers.Default) {
+            val waitMillis = Duration.between(Instant.now(), Instant.parse(expiresAt))
+                .toMillis()
+                .coerceAtLeast(0L)
+            delay(waitMillis + EXPIRY_SETTLE_MILLIS)
+            val current = _hostBirthConsent.value
+            if (current.summary?.consentId != consentId) return@launch
+            val persistedState = runCatching {
+                hostBirthConsentRecoveryCoordinator.inspect()
+            }.getOrDefault(GenesisUltraHostBirthConsentState.INCONSISTENT)
+            if (persistedState == GenesisUltraHostBirthConsentState.EXPIRED) {
+                _hostBirthConsent.value = GenesisUltraHostBirthConsentUiState(
+                    persistedState = persistedState,
+                    candidateSessionAvailable = candidateSession != null
+                )
+            }
+        }
+    }
+
     private fun canonicalNow(): String =
         Instant.now().truncatedTo(ChronoUnit.SECONDS).toString()
+
+    private companion object {
+        const val EXPIRY_SETTLE_MILLIS = 250L
+    }
 }
