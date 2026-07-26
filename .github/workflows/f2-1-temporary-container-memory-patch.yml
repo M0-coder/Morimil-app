@@ -1,17 +1,18 @@
 name: F2.1 Temporary Container Memory Patch
 
 on:
-  push:
+  pull_request:
     branches:
-      - plan-v2/f2-1-canonical-memory-repository
-    paths:
-      - .github/workflows/f2-1-temporary-container-memory-patch.yml
+      - main
 
 permissions:
   contents: write
 
 jobs:
   patch:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'plan-v2/f2-1-canonical-memory-repository'
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout branch
