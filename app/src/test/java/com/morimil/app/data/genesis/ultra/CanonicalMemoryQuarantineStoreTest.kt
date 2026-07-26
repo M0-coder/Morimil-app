@@ -35,9 +35,17 @@ class CanonicalMemoryQuarantineStoreTest {
 
     @Test
     fun successfulFullVerificationClearsDerivedQuarantine() = runBlocking {
-        CanonicalMemoryQuarantineStore.verify(stage = "event_chain") {
-            throw IllegalArgumentException("canonical_memory_chain_mismatch:4")
-        }.let { error("verification_should_have_failed") }
+        runCatching {
+            CanonicalMemoryQuarantineStore.verify(stage = "event_chain") {
+                throw IllegalArgumentException("canonical_memory_chain_mismatch:4")
+            }
+        }
+        assertTrue(CanonicalMemoryQuarantineStore.diagnostic.value != null)
+
+        val result = CanonicalMemoryQuarantineStore.verify(stage = "event_chain") { "verified" }
+
+        assertEquals("verified", result)
+        assertNull(CanonicalMemoryQuarantineStore.diagnostic.value)
     }
 
     @Test
