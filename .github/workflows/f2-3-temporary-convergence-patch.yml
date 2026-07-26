@@ -1,0 +1,415 @@
+name: F2.3 Temporary Convergence Patch
+
+on:
+  push:
+    branches:
+      - plan-v2/f2-3-legacy-memory-convergence
+    paths:
+      - .github/workflows/f2-3-temporary-convergence-patch.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: plan-v2/f2-3-legacy-memory-convergence
+
+      - name: Apply exact convergence wiring
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          def replace_once(source: str, old: str, new: str, label: str) -> str:
+              count = source.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected one match, found {count}')
+              return source.replace(old, new, 1)
+
+          def sub_once(source: str, pattern: str, replacement: str, label: str) -> str:
+              updated, count = re.subn(pattern, replacement, source, count=1, flags=re.S)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected one match, found {count}')
+              return updated
+
+          # Fix the resumable coordinator before product wiring.
+          path = Path('app/src/main/java/com/morimil/app/data/genesis/ultra/LegacyMemoryConvergenceCoordinator.kt')
+          source = path.read_text()
+          source = source.replace('        val tipHash = events.lastOrNull()?.eventHash\n', '', 1)
+          old_empty = '''        if (events.isEmpty()) {
+              require(localIdentityCount == 0 && genesisCoreCount == 0) {
+                  block(
+                      identity = identity,
+                      events = events,
+                      dryRunDigest = dryRunDigest,
+                      failureCode = "legacy_convergence_identity_without_memory"
+                  )
+                  "legacy_convergence_identity_without_memory"
+              }
+              val complete = completeState('''
+          new_empty = '''        if (events.isEmpty()) {
+              if (localIdentityCount != 0 || genesisCoreCount != 0) {
+                  block(
+                      identity = identity,
+                      events = events,
+                      dryRunDigest = dryRunDigest,
+                      failureCode = "legacy_convergence_identity_without_memory"
+                  )
+                  error("legacy_convergence_identity_without_memory")
+              }
+              val complete = completeState('''
+          source = replace_once(source, old_empty, new_empty, 'coordinator empty lineage')
+          source = replace_once(
+              source,
+              '                verifyLegacyChain = memoryIntegrityCore::verifyMemoryEventChain,\n',
+              '                verifyLegacyChain = { events ->\n'
+              '                    memoryIntegrityCore.verifyMemoryEventChain(events)\n'
+              '                },\n',
+              'coordinator verifier lambda'
+          )
+          source = replace_once(
+              source,
+              '                loadState = convergenceDao::loadState,\n',
+              '                loadState = { convergenceDao.loadState() },\n',
+              'coordinator state lambda'
+          )
+          path.write_text(source)
+
+          # Inject the sole canonical writer into the application container.
+          path = Path('app/src/main/java/com/morimil/app/MorimilAppContainer.kt')
+          source = path.read_text()
+          source = replace_once(
+              source,
+              '''        MemoryRepository(
+              database = memoryDatabase,
+              memoryIntegrityCore = memoryIntegrityCore,
+              memoryEventSigner = memoryEventSigner
+          )''',
+              '''        MemoryRepository(
+              database = memoryDatabase,
+              memoryIntegrityCore = memoryIntegrityCore,
+              livingMemoryPort = canonicalLivingMemoryPort
+          )''',
+              'container memory repository writer'
+          )
+          source = replace_once(
+              source,
+              '            memoryEventSigner = memoryEventSigner,\n            memoryRepository = memoryRepository\n',
+              '            memoryRepository = memoryRepository\n',
+              'container rest cycle signer removal'
+          )
+          path.write_text(source)
+
+          # Replace the direct rest-cycle legacy append with the canonical port.
+          path = Path('app/src/main/java/com/morimil/app/data/repository/RestCycleRepository.kt')
+          source = path.read_text()
+          source = source.replace('import androidx.room.withTransaction\n', '')
+          source = source.replace('import com.morimil.app.core.memory.MemoryEventSigner\n', '')
+          source = source.replace('import com.morimil.app.data.repository.MemoryAppendGate\n', '')
+          source = replace_once(
+              source,
+              '''    private val memoryIntegrityCore: MemoryIntegrityCore,
+              private val memoryEventSigner: MemoryEventSigner,
+              private val memoryRepository: MemoryRepository''',
+              '''    private val memoryIntegrityCore: MemoryIntegrityCore,
+              private val memoryRepository: MemoryRepository''',
+              'rest cycle constructor'
+          )
+          source = replace_once(
+              source,
+              '        val latestRestCycle = memoryDao.loadLatestRestCycleEvent()\n',
+              '        val latestRestCycle = memoryRepository.loadLatestLivingMemoryEventByType(REST_CYCLE_EVENT_TYPE)\n',
+              'rest cycle latest event reader'
+          )
+          source = replace_once(
+              source,
+              '            now - latestRestCycle.createdAtMillis < REST_CYCLE_MIN_INTERVAL_MILLIS\n',
+              '            now - latestRestCycle.observedAtMillis < REST_CYCLE_MIN_INTERVAL_MILLIS\n',
+              'rest cycle timestamp'
+          )
+          append_pattern = r'''    private suspend fun appendRestCycleEvent\(
+              summary: String,
+              migrationId: String,
+              approvalId: String\?
+          \): RestCycleAppendResult\? \{[\s\S]*?\n    \}\n\n    private suspend fun consolidateAutobiographyFromRestCycle'''
+          append_replacement = '''    private suspend fun appendRestCycleEvent(
+              summary: String,
+              migrationId: String,
+              approvalId: String?
+          ): RestCycleAppendResult? {
+              val genesisCore = requireNotNull(memoryDao.loadGenesisCore()) {
+                  "Cannot run rest cycle without a local Genesis Core."
+              }
+              val localIdentity = memoryDao.loadLocalIdentity()
+              val createdAtMillis = System.currentTimeMillis()
+              val evidenceJson = JSONObject()
+                  .put("schema", "morimil.memory_evidence.v1")
+                  .put("classifier", "local_rest_cycle_v1")
+                  .put("event_type", REST_CYCLE_EVENT_TYPE)
+                  .put("actor", "system")
+                  .put("source", "local_rest_cycle")
+                  .put("memory_kind", "rest_cycle")
+                  .put("user_confirmed", false)
+                  .put("confidence", 90)
+                  .put("migration_id", migrationId)
+                  .put("approval_id", approvalId)
+                  .put("excerpt", summary.take(240))
+                  .toString()
+              val eventHash = memoryRepository.recordSystemMemoryEvent(
+                  eventType = REST_CYCLE_EVENT_TYPE,
+                  body = summary,
+                  importance = 88,
+                  evidenceJson = evidenceJson
+              ) ?: return null
+              return RestCycleAppendResult(
+                  eventHash = eventHash,
+                  instanceId = localIdentity?.instanceId ?: "legacy_instance_read_only",
+                  genesisCoreHash = genesisCore.contentSha256,
+                  createdAtMillis = createdAtMillis
+              )
+          }
+
+          private suspend fun consolidateAutobiographyFromRestCycle'''
+          source = sub_once(source, append_pattern, append_replacement, 'rest cycle canonical append')
+          path.write_text(source)
+
+          # Allow legacy metadata only after durable convergence is complete.
+          path = Path('app/src/main/java/com/morimil/app/runtime/GenesisUltraRuntimeBootstrapCoordinator.kt')
+          source = path.read_text()
+          source = replace_once(
+              source,
+              'import com.morimil.app.data.local.AgentProfileEntity\n',
+              'import com.morimil.app.data.local.AgentProfileEntity\n'
+              'import com.morimil.app.data.local.LegacyMemoryConvergenceEntity\n',
+              'bootstrap convergence import'
+          )
+          source = replace_once(
+              source,
+              '''    val canonicalMemoryEventCount: Int,
+              val healthState: GenesisUltraRuntimeSubsystemState,''',
+              '''    val canonicalMemoryEventCount: Int,
+              val legacyMemoryConverged: Boolean,
+              val healthState: GenesisUltraRuntimeSubsystemState,''',
+              'bootstrap report convergence field'
+          )
+          source = replace_once(
+              source,
+              '        require(legacyCounts.isEmpty) { "runtime_bootstrap_legacy_rows_present" }\n',
+              '        require(legacyCounts.isEmpty || legacyMemoryConverged) {\n'
+              '            "runtime_bootstrap_legacy_rows_not_converged"\n'
+              '        }\n',
+              'bootstrap report legacy invariant'
+          )
+          source = replace_once(
+              source,
+              '''    private val seedOrchestration: suspend (
+              GenesisUltraRuntimeIdentity,
+              Long
+          ) -> GenesisUltraRuntimeOrchestrationSeed,
+              private val countCanonicalMemoryEvents: suspend () -> Int
+          ) {''',
+              '''    private val seedOrchestration: suspend (
+              GenesisUltraRuntimeIdentity,
+              Long
+          ) -> GenesisUltraRuntimeOrchestrationSeed,
+              private val countCanonicalMemoryEvents: suspend () -> Int,
+              private val isLegacyMemoryConverged: suspend (String) -> Boolean
+          ) {''',
+              'bootstrap constructor convergence dependency'
+          )
+          bootstrap_pattern = r'''    suspend fun bootstrap\(
+              identity: GenesisUltraRuntimeIdentity,
+              nowMillis: Long = System.currentTimeMillis\(\)
+          \): GenesisUltraRuntimeBootstrapReport \{[\s\S]*?\n    \}\n\n    internal companion object'''
+          bootstrap_replacement = '''    suspend fun bootstrap(
+              identity: GenesisUltraRuntimeIdentity,
+              nowMillis: Long = System.currentTimeMillis()
+          ): GenesisUltraRuntimeBootstrapReport {
+              val before = inspectLegacyCounts()
+              val convergedBefore = before.isEmpty || isLegacyMemoryConverged(identity.instanceId)
+              require(convergedBefore) { "runtime_bootstrap_legacy_identity_conflict" }
+
+              val projection = writeRuntimeProjection(identity, nowMillis)
+              val orchestration = seedOrchestration(identity, nowMillis)
+              val canonicalMemoryEventCount = countCanonicalMemoryEvents()
+
+              val after = inspectLegacyCounts()
+              val convergedAfter = after.isEmpty || isLegacyMemoryConverged(identity.instanceId)
+              require(convergedAfter) { "runtime_bootstrap_created_unconverged_legacy_identity" }
+
+              return GenesisUltraRuntimeBootstrapReport(
+                  instanceId = identity.instanceId,
+                  companionName = identity.companionName,
+                  workspaceId = projection.workspaceId,
+                  projectId = projection.projectId,
+                  agentProfileCount = orchestration.agentProfileCount,
+                  orchestratorDeviceCount = orchestration.orchestratorDeviceCount,
+                  canonicalMemoryEventCount = canonicalMemoryEventCount,
+                  legacyMemoryConverged = convergedAfter,
+                  healthState = GenesisUltraRuntimeSubsystemState.READY,
+                  restCycleState = GenesisUltraRuntimeSubsystemState.WAITING_FOR_CANONICAL_MEMORY_ADAPTER,
+                  recallState = GenesisUltraRuntimeSubsystemState.WAITING_FOR_CANONICAL_MEMORY_ADAPTER,
+                  legacyCounts = after
+              )
+          }
+
+          internal companion object'''
+          source = sub_once(source, bootstrap_pattern, bootstrap_replacement, 'bootstrap method')
+          source = replace_once(
+              source,
+              '''                countCanonicalMemoryEvents = {
+                  memoryDatabase.genesisUltraMemoryDao().countAll()
+              }
+          )''',
+              '''                countCanonicalMemoryEvents = {
+                  memoryDatabase.genesisUltraMemoryDao().countAll()
+              },
+              isLegacyMemoryConverged = { instanceId ->
+                  val state = memoryDatabase.legacyMemoryConvergenceDao().loadState()
+                  state?.instanceId == instanceId &&
+                      state.status == LegacyMemoryConvergenceEntity.STATUS_COMPLETE &&
+                      state.activeWriter == LegacyMemoryConvergenceEntity.WRITER_GENESIS_ULTRA &&
+                      state.legacyReadOnly &&
+                      state.failureCode == null
+              }
+          )''',
+              'bootstrap production convergence state'
+          )
+          source = replace_once(
+              source,
+              '''        fun forTest(
+              inspectLegacyCounts: suspend () -> GenesisUltraRuntimeLegacyCounts,
+              writeRuntimeProjection: suspend (
+                  GenesisUltraRuntimeIdentity,
+                  Long
+              ) -> GenesisUltraRuntimeProjection,
+              seedOrchestration: suspend (
+                  GenesisUltraRuntimeIdentity,
+                  Long
+              ) -> GenesisUltraRuntimeOrchestrationSeed,
+              countCanonicalMemoryEvents: suspend () -> Int
+          ): GenesisUltraRuntimeBootstrapCoordinator {''',
+              '''        fun forTest(
+              inspectLegacyCounts: suspend () -> GenesisUltraRuntimeLegacyCounts,
+              writeRuntimeProjection: suspend (
+                  GenesisUltraRuntimeIdentity,
+                  Long
+              ) -> GenesisUltraRuntimeProjection,
+              seedOrchestration: suspend (
+                  GenesisUltraRuntimeIdentity,
+                  Long
+              ) -> GenesisUltraRuntimeOrchestrationSeed,
+              countCanonicalMemoryEvents: suspend () -> Int,
+              isLegacyMemoryConverged: suspend (String) -> Boolean
+          ): GenesisUltraRuntimeBootstrapCoordinator {''',
+              'bootstrap test factory signature'
+          )
+          source = replace_once(
+              source,
+              '''                seedOrchestration = seedOrchestration,
+              countCanonicalMemoryEvents = countCanonicalMemoryEvents
+          )''',
+              '''                seedOrchestration = seedOrchestration,
+              countCanonicalMemoryEvents = countCanonicalMemoryEvents,
+              isLegacyMemoryConverged = isLegacyMemoryConverged
+          )''',
+              'bootstrap test factory wiring'
+          )
+          path.write_text(source)
+
+          # Update bootstrap tests for the new convergence dependency and error name.
+          path = Path('app/src/test/java/com/morimil/app/runtime/GenesisUltraRuntimeBootstrapCoordinatorTest.kt')
+          source = path.read_text()
+          source = source.replace(
+              '            countCanonicalMemoryEvents = { 1 }\n',
+              '            countCanonicalMemoryEvents = { 1 },\n'
+              '            isLegacyMemoryConverged = { false }\n'
+          )
+          source = source.replace(
+              '            countCanonicalMemoryEvents = { 0 }\n',
+              '            countCanonicalMemoryEvents = { 0 },\n'
+              '            isLegacyMemoryConverged = { false }\n'
+          )
+          source = source.replace(
+              'runtime_bootstrap_created_legacy_identity',
+              'runtime_bootstrap_created_unconverged_legacy_identity'
+          )
+          insertion = '''
+              @Test
+              fun completedConvergenceAllowsReadOnlyLegacyMetadata() = runBlocking {
+                  val identity = validIdentity()
+                  val coordinator = GenesisUltraRuntimeBootstrapCoordinator.forTest(
+                      inspectLegacyCounts = { GenesisUltraRuntimeLegacyCounts(1, 1) },
+                      writeRuntimeProjection = { received, _ ->
+                          GenesisUltraRuntimeProjection(
+                              workspaceId = received.instanceId,
+                              projectId = "morimil_app:${received.instanceId}"
+                          )
+                      },
+                      seedOrchestration = { _, _ -> GenesisUltraRuntimeOrchestrationSeed(7, 4) },
+                      countCanonicalMemoryEvents = { 3 },
+                      isLegacyMemoryConverged = { instanceId -> instanceId == identity.instanceId }
+                  )
+
+                  val report = coordinator.bootstrap(identity)
+
+                  assertTrue(report.legacyMemoryConverged)
+                  assertEquals(1, report.legacyCounts.localIdentityCount)
+                  assertEquals(1, report.legacyCounts.genesisCoreCount)
+              }
+
+          '''
+          marker = '    @Test\n    fun startupGateBootstrapsOnlyAfterIdentityIsFullyVerified()'
+          source = replace_once(source, marker, insertion + marker, 'bootstrap converged legacy test')
+          path.write_text(source)
+
+          # Advance all historical migration suites to the current database version.
+          migration_files = [
+              Path('app/src/androidTest/java/com/morimil/app/data/local/DatabaseMigrationTest.kt'),
+              Path('app/src/androidTest/java/com/morimil/app/data/local/FullChainDatabaseMigrationTest.kt'),
+              Path('app/src/androidTest/java/com/morimil/app/data/local/MorimilDatabaseMigrationTest.kt'),
+              Path('app/src/androidTest/java/com/morimil/app/data/local/MorimilDatabaseV12ToV14MigrationTest.kt'),
+          ]
+          for path in migration_files:
+              source = path.read_text()
+              source = source.replace('To14', 'To15').replace('to14', 'to15')
+              source = source.replace('CurrentV14', 'CurrentV15')
+              source = source.replace('v14', 'v15')
+              source = source.replace(
+                  '            14,\n            true,',
+                  '            15,\n            true,'
+              )
+              source = source.replace(
+                  '                MorimilDatabase.MIGRATION_13_14\n',
+                  '                MorimilDatabase.MIGRATION_13_14,\n'
+                  '                MorimilDatabase.MIGRATION_14_15\n'
+              )
+              source = source.replace(
+                  '            MorimilDatabase.MIGRATION_13_14\n',
+                  '            MorimilDatabase.MIGRATION_13_14,\n'
+                  '            MorimilDatabase.MIGRATION_14_15\n'
+              )
+              source = source.replace('assertEquals(14,', 'assertEquals(15,')
+              path.write_text(source)
+
+          old_path = Path('app/src/androidTest/java/com/morimil/app/data/local/MorimilDatabaseV12ToV14MigrationTest.kt')
+          new_path = Path('app/src/androidTest/java/com/morimil/app/data/local/MorimilDatabaseV12ToV15MigrationTest.kt')
+          old_path.rename(new_path)
+          PY
+          git diff --check
+
+      - name: Commit permanent changes and remove temporary workflow
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/f2-3-temporary-convergence-patch.yml
+          git add -A
+          git commit -m "feat(memory): complete legacy writer convergence wiring"
+          git push origin HEAD:plan-v2/f2-3-legacy-memory-convergence
