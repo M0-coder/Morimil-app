@@ -175,7 +175,7 @@ class MorimilAppContainer(context: Context) {
         MemoryRepository(
             database = memoryDatabase,
             memoryIntegrityCore = memoryIntegrityCore,
-            memoryEventSigner = memoryEventSigner
+            livingMemoryPort = canonicalLivingMemoryPort
         )
     }
 
@@ -188,7 +188,6 @@ class MorimilAppContainer(context: Context) {
             database = memoryDatabase,
             organDatabase = organDatabase,
             memoryIntegrityCore = memoryIntegrityCore,
-            memoryEventSigner = memoryEventSigner,
             memoryRepository = memoryRepository
         )
     }

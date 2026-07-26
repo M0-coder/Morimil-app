@@ -18,7 +18,7 @@ class DatabaseMigrationTest {
     )
 
     @Test
-    fun morimilDatabaseMigratesFrom7To14WithMemoryDefaultsAndCanonicalPayloadStore() {
+    fun morimilDatabaseMigratesFrom7To15WithMemoryDefaultsAndCanonicalPayloadStore() {
         val source = helper.createDatabase(TEST_DATABASE, 7)
         try {
             source.execSQL(
@@ -62,7 +62,7 @@ class DatabaseMigrationTest {
 
         val migrated = helper.runMigrationsAndValidate(
             TEST_DATABASE,
-            14,
+            15,
             true,
             MorimilDatabase.MIGRATION_7_8,
             MorimilDatabase.MIGRATION_8_9,
@@ -70,10 +70,11 @@ class DatabaseMigrationTest {
             MorimilDatabase.MIGRATION_10_11,
             MorimilDatabase.MIGRATION_11_12,
             MorimilDatabase.MIGRATION_12_13,
-            MorimilDatabase.MIGRATION_13_14
+            MorimilDatabase.MIGRATION_13_14,
+            MorimilDatabase.MIGRATION_14_15
         )
         try {
-            assertEquals(14, migrated.userVersion())
+            assertEquals(15, migrated.userVersion())
             assertTrue(migrated.tableNames().contains("genesis_ultra_birth_authorization"))
             assertTrue(migrated.tableNames().contains("genesis_ultra_memory_payloads"))
             assertTrue(
@@ -141,6 +142,6 @@ class DatabaseMigrationTest {
     }
 
     private companion object {
-        const val TEST_DATABASE = "morimil-v7-v14-focused-migration-test"
+        const val TEST_DATABASE = "morimil-v7-v15-focused-migration-test"
     }
 }

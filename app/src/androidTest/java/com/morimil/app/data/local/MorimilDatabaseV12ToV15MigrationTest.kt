@@ -19,18 +19,19 @@ class MorimilDatabaseV12ToV14MigrationTest {
     )
 
     @Test
-    fun migrate12To14CreatesAuthorizationAndCanonicalPayloadStoreWithoutBackfill() {
+    fun migrate12To15CreatesAuthorizationAndCanonicalPayloadStoreWithoutBackfill() {
         helper.createDatabase(TEST_DATABASE, 12).close()
 
         val database = helper.runMigrationsAndValidate(
             TEST_DATABASE,
-            14,
+            15,
             true,
             MorimilDatabase.MIGRATION_12_13,
-            MorimilDatabase.MIGRATION_13_14
+            MorimilDatabase.MIGRATION_13_14,
+            MorimilDatabase.MIGRATION_14_15
         )
         try {
-            assertEquals(14, database.query("PRAGMA user_version").use { cursor ->
+            assertEquals(15, database.query("PRAGMA user_version").use { cursor ->
                 assertTrue(cursor.moveToFirst())
                 cursor.getInt(0)
             })
@@ -90,6 +91,6 @@ class MorimilDatabaseV12ToV14MigrationTest {
     }
 
     private companion object {
-        const val TEST_DATABASE = "morimil-v12-v14-migration-test"
+        const val TEST_DATABASE = "morimil-v12-v15-migration-test"
     }
 }

@@ -4,6 +4,7 @@ import androidx.room.withTransaction
 import com.morimil.app.core.orchestration.AgentCapabilityPolicy
 import com.morimil.app.data.genesis.ultra.GenesisUltraRuntimeIdentity
 import com.morimil.app.data.local.AgentProfileEntity
+import com.morimil.app.data.local.LegacyMemoryConvergenceEntity
 import com.morimil.app.data.local.MemoryOrganDatabase
 import com.morimil.app.data.local.MorimilDatabase
 import com.morimil.app.data.local.OrchestratorDeviceEntity
@@ -52,6 +53,7 @@ internal data class GenesisUltraRuntimeBootstrapReport(
     val agentProfileCount: Int,
     val orchestratorDeviceCount: Int,
     val canonicalMemoryEventCount: Int,
+    val legacyMemoryConverged: Boolean,
     val healthState: GenesisUltraRuntimeSubsystemState,
     val restCycleState: GenesisUltraRuntimeSubsystemState,
     val recallState: GenesisUltraRuntimeSubsystemState,
@@ -63,7 +65,9 @@ internal data class GenesisUltraRuntimeBootstrapReport(
         require(workspaceId == instanceId) { "runtime_bootstrap_workspace_not_canonical" }
         require(projectId.endsWith(instanceId)) { "runtime_bootstrap_project_not_canonical" }
         require(canonicalMemoryEventCount >= 0) { "runtime_bootstrap_canonical_memory_count_invalid" }
-        require(legacyCounts.isEmpty) { "runtime_bootstrap_legacy_rows_present" }
+        require(legacyCounts.isEmpty || legacyMemoryConverged) {
+            "runtime_bootstrap_legacy_rows_not_converged"
+        }
         require(healthState == GenesisUltraRuntimeSubsystemState.READY) {
             "runtime_bootstrap_health_not_ready"
         }
@@ -87,21 +91,24 @@ internal class GenesisUltraRuntimeBootstrapCoordinator private constructor(
         GenesisUltraRuntimeIdentity,
         Long
     ) -> GenesisUltraRuntimeOrchestrationSeed,
-    private val countCanonicalMemoryEvents: suspend () -> Int
+    private val countCanonicalMemoryEvents: suspend () -> Int,
+    private val isLegacyMemoryConverged: suspend (String) -> Boolean = { false }
 ) {
     suspend fun bootstrap(
         identity: GenesisUltraRuntimeIdentity,
         nowMillis: Long = System.currentTimeMillis()
     ): GenesisUltraRuntimeBootstrapReport {
         val before = inspectLegacyCounts()
-        require(before.isEmpty) { "runtime_bootstrap_legacy_identity_conflict" }
+        val convergedBefore = before.isEmpty || isLegacyMemoryConverged(identity.instanceId)
+        require(convergedBefore) { "runtime_bootstrap_legacy_identity_conflict" }
 
         val projection = writeRuntimeProjection(identity, nowMillis)
         val orchestration = seedOrchestration(identity, nowMillis)
         val canonicalMemoryEventCount = countCanonicalMemoryEvents()
 
         val after = inspectLegacyCounts()
-        require(after.isEmpty) { "runtime_bootstrap_created_legacy_identity" }
+        val convergedAfter = after.isEmpty || isLegacyMemoryConverged(identity.instanceId)
+        require(convergedAfter) { "runtime_bootstrap_created_unconverged_legacy_identity" }
 
         return GenesisUltraRuntimeBootstrapReport(
             instanceId = identity.instanceId,
@@ -111,6 +118,7 @@ internal class GenesisUltraRuntimeBootstrapCoordinator private constructor(
             agentProfileCount = orchestration.agentProfileCount,
             orchestratorDeviceCount = orchestration.orchestratorDeviceCount,
             canonicalMemoryEventCount = canonicalMemoryEventCount,
+            legacyMemoryConverged = convergedAfter,
             healthState = GenesisUltraRuntimeSubsystemState.READY,
             restCycleState = GenesisUltraRuntimeSubsystemState.WAITING_FOR_CANONICAL_MEMORY_ADAPTER,
             recallState = GenesisUltraRuntimeSubsystemState.WAITING_FOR_CANONICAL_MEMORY_ADAPTER,
@@ -181,7 +189,15 @@ internal class GenesisUltraRuntimeBootstrapCoordinator private constructor(
                     )
                 },
                 countCanonicalMemoryEvents = {
-                    memoryDatabase.genesisUltraMemoryDao().countAll()
+          memoryDatabase.genesisUltraMemoryDao().countAll()
+      },
+                isLegacyMemoryConverged = { instanceId ->
+                    val state = memoryDatabase.legacyMemoryConvergenceDao().loadState()
+                    state?.instanceId == instanceId &&
+                        state.status == LegacyMemoryConvergenceEntity.STATUS_COMPLETE &&
+                        state.activeWriter == LegacyMemoryConvergenceEntity.WRITER_GENESIS_ULTRA &&
+                        state.legacyReadOnly &&
+                        state.failureCode == null
                 }
             )
         }
@@ -196,13 +212,15 @@ internal class GenesisUltraRuntimeBootstrapCoordinator private constructor(
                 GenesisUltraRuntimeIdentity,
                 Long
             ) -> GenesisUltraRuntimeOrchestrationSeed,
-            countCanonicalMemoryEvents: suspend () -> Int
+            countCanonicalMemoryEvents: suspend () -> Int,
+            isLegacyMemoryConverged: suspend (String) -> Boolean = { false }
         ): GenesisUltraRuntimeBootstrapCoordinator {
             return GenesisUltraRuntimeBootstrapCoordinator(
                 inspectLegacyCounts = inspectLegacyCounts,
                 writeRuntimeProjection = writeRuntimeProjection,
                 seedOrchestration = seedOrchestration,
-                countCanonicalMemoryEvents = countCanonicalMemoryEvents
+                countCanonicalMemoryEvents = countCanonicalMemoryEvents,
+                isLegacyMemoryConverged = isLegacyMemoryConverged
             )
         }
 

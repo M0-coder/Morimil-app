@@ -23,7 +23,7 @@ class FullChainDatabaseMigrationTest {
     }
 
     @Test
-    fun morimilDatabaseMigratesFrom1To14ThroughFullChain() {
+    fun morimilDatabaseMigratesFrom1To15ThroughFullChain() {
         createVersion1Database()
 
         val database = Room.databaseBuilder(
@@ -44,13 +44,14 @@ class FullChainDatabaseMigrationTest {
                 MorimilDatabase.MIGRATION_10_11,
                 MorimilDatabase.MIGRATION_11_12,
                 MorimilDatabase.MIGRATION_12_13,
-                MorimilDatabase.MIGRATION_13_14
+                MorimilDatabase.MIGRATION_13_14,
+                MorimilDatabase.MIGRATION_14_15
             )
             .build()
 
         try {
             val migrated = database.openHelper.writableDatabase
-            assertEquals(14, migrated.userVersion())
+            assertEquals(15, migrated.userVersion())
             assertTrue(
                 migrated.tableNames().containsAll(
                     setOf(
@@ -182,6 +183,6 @@ class FullChainDatabaseMigrationTest {
     }
 
     private companion object {
-        const val TEST_DATABASE = "morimil-v1-v14-full-chain-test"
+        const val TEST_DATABASE = "morimil-v1-v15-full-chain-test"
     }
 }
