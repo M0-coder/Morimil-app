@@ -67,21 +67,27 @@ jobs:
 
           path = Path('app/src/main/java/com/morimil/app/MorimilAppContainer.kt')
           source = path.read_text()
-          old = '''            database = memoryDatabase,
-              memoryIntegrityCore = memoryIntegrityCore,
-              memoryEventSigner = memoryEventSigner
-          '''
-          new = '''            database = memoryDatabase,
-              memoryIntegrityCore = memoryIntegrityCore,
-              livingMemoryPort = canonicalLivingMemoryPort
-          '''
-          if source.count(old) != 1:
-              raise SystemExit(f'container memory writer structural match={source.count(old)}')
-          source = source.replace(old, new, 1)
-          signer_line = '            memoryEventSigner = memoryEventSigner,\n'
-          if source.count(signer_line) != 1:
-              raise SystemExit(f'container rest signer match={source.count(signer_line)}')
-          source = source.replace(signer_line, '', 1)
+          pattern = re.compile(
+              r'(MemoryRepository\(\s*'
+              r'database = memoryDatabase,\s*'
+              r'memoryIntegrityCore = memoryIntegrityCore,\s*)'
+              r'memoryEventSigner = memoryEventSigner'
+          )
+          source, count = pattern.subn(
+              r'\1livingMemoryPort = canonicalLivingMemoryPort',
+              source,
+              count=1
+          )
+          if count != 1:
+              raise SystemExit(f'container memory writer structural match={count}')
+          source, count = re.subn(
+              r'\n\s*memoryEventSigner = memoryEventSigner,',
+              '',
+              source,
+              count=1
+          )
+          if count != 1:
+              raise SystemExit(f'container rest signer match={count}')
           path.write_text(source)
           PY
 
