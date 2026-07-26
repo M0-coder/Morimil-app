@@ -1,4 +1,0 @@
-Traceback (most recent call last):
-  File "/home/runner/work/Morimil-app/Morimil-app/scripts/f3_1_apply_outbox_wiring.py", line 197, in <module>
-    raise RuntimeError(f"migration lists: expected 4, found {migration_count}")
-RuntimeError: migration lists: expected 4, found 3

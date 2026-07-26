@@ -225,7 +225,7 @@ class MorimilAppContainer(context: Context) {
     val projectVaultRepository: ProjectVaultRepository by lazy {
         ProjectVaultRepository(
             organDatabase = organDatabase,
-            memoryRepository = memoryRepository
+            commitPort = canonicalProjectVaultCommitPort
         )
     }
 

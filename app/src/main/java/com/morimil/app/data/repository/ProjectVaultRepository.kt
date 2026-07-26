@@ -85,12 +85,14 @@ class ProjectVaultRepository(
                 updatedAtMillis = nowMillis,
                 completedAtMillis = nowMillis
             )
-            buildOperation(
+            val operation = buildOperation(
                 operationType = ProjectVaultOutboxEntity.OPERATION_COMPLETE,
                 desiredVault = desired,
                 note = finalSummary,
                 nowMillis = nowMillis
-            ).also(outboxDao::insert)
+            )
+            outboxDao.insert(operation)
+            operation
         } ?: return false
         dispatchOperation(operation.operationId)
         return true
@@ -112,12 +114,14 @@ class ProjectVaultRepository(
                 healthStatus = HEALTH_ARCHIVED,
                 updatedAtMillis = nowMillis
             )
-            buildOperation(
+            val operation = buildOperation(
                 operationType = ProjectVaultOutboxEntity.OPERATION_ARCHIVE,
                 desiredVault = desired,
                 note = reason,
                 nowMillis = nowMillis
-            ).also(outboxDao::insert)
+            )
+            outboxDao.insert(operation)
+            operation
         } ?: return false
         dispatchOperation(operation.operationId)
         return true
@@ -242,7 +246,7 @@ class ProjectVaultRepository(
     private suspend fun applyLocalTransition(operation: ProjectVaultOutboxEntity) {
         val payload = JSONObject(operation.payloadJson)
         val desired = decodeVault(payload.getJSONObject("vault"))
-        check(desired.vaultId == operation.vaultId) {
+        if (desired.vaultId != operation.vaultId) {
             throw ProjectVaultOutboxConflict("project_vault_outbox_payload_vault_mismatch")
         }
         when (operation.operationType) {
@@ -267,17 +271,18 @@ class ProjectVaultRepository(
                 ) {
                     return
                 }
-                check(
-                    dao.completeProjectVault(
-                        vaultId = operation.vaultId,
-                        status = STATUS_COMPLETED,
-                        healthStatus = HEALTH_COMPLETED,
-                        progressPercent = 100,
-                        roadmapSummary = desired.roadmapSummary,
-                        updatedAtMillis = desired.updatedAtMillis,
-                        completedAtMillis = requireNotNull(desired.completedAtMillis)
-                    ) == 1
-                ) { throw ProjectVaultOutboxConflict("project_vault_outbox_complete_conflict") }
+                val updated = dao.completeProjectVault(
+                    vaultId = operation.vaultId,
+                    status = STATUS_COMPLETED,
+                    healthStatus = HEALTH_COMPLETED,
+                    progressPercent = 100,
+                    roadmapSummary = desired.roadmapSummary,
+                    updatedAtMillis = desired.updatedAtMillis,
+                    completedAtMillis = requireNotNull(desired.completedAtMillis)
+                )
+                if (updated != 1) {
+                    throw ProjectVaultOutboxConflict("project_vault_outbox_complete_conflict")
+                }
             }
 
             ProjectVaultOutboxEntity.OPERATION_ARCHIVE -> {
@@ -290,14 +295,15 @@ class ProjectVaultRepository(
                 ) {
                     return
                 }
-                check(
-                    dao.archiveProjectVault(
-                        vaultId = operation.vaultId,
-                        status = STATUS_ARCHIVED,
-                        healthStatus = HEALTH_ARCHIVED,
-                        updatedAtMillis = desired.updatedAtMillis
-                    ) == 1
-                ) { throw ProjectVaultOutboxConflict("project_vault_outbox_archive_conflict") }
+                val updated = dao.archiveProjectVault(
+                    vaultId = operation.vaultId,
+                    status = STATUS_ARCHIVED,
+                    healthStatus = HEALTH_ARCHIVED,
+                    updatedAtMillis = desired.updatedAtMillis
+                )
+                if (updated != 1) {
+                    throw ProjectVaultOutboxConflict("project_vault_outbox_archive_conflict")
+                }
             }
 
             else -> throw ProjectVaultOutboxConflict("project_vault_outbox_operation_unknown")
