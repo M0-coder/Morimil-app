@@ -1,5 +1,6 @@
 package com.morimil.app.data.genesis.ultra
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -42,6 +43,8 @@ internal object CanonicalMemoryQuarantineStore {
             val result = block()
             _diagnostic.value = null
             result
+        } catch (error: CancellationException) {
+            throw error
         } catch (error: CanonicalMemoryQuarantinedException) {
             throw error
         } catch (error: Throwable) {
@@ -54,7 +57,7 @@ internal object CanonicalMemoryQuarantineStore {
         error: Throwable,
         detectedAtMillis: Long = System.currentTimeMillis()
     ): Throwable {
-        if (error is CanonicalMemoryQuarantinedException) return error
+        if (error is CancellationException || error is CanonicalMemoryQuarantinedException) return error
         return if (isIntegrityFailure(error)) {
             quarantine(stage, error, detectedAtMillis)
         } else {
