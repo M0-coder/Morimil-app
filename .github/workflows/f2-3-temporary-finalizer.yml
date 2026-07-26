@@ -49,7 +49,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git rm .github/workflows/f2-3-temporary-finalizer.yml
           git rm tools/f2_3_prepatch.py tools/f2_3_finalize.py
-          git rm -f f2-3-patch-error.txt f2-3-finalizer-error.txt
+          rm -f f2-3-patch-error.txt f2-3-finalizer-error.txt
           git add -A
           git commit -m "feat(memory): complete legacy writer convergence wiring"
           git push origin HEAD:plan-v2/f2-3-legacy-memory-convergence
