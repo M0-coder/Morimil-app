@@ -1,6 +1,5 @@
 package com.morimil.app.data.repository
 
-import com.morimil.app.core.memory.MemoryEventSigner
 import com.morimil.app.core.memory.MemoryIntegrityCore
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -26,13 +25,12 @@ class MemoryOrganRepositoryContractTest {
     }
 
     @Test
-    fun criticalRuntimeRepositoriesRequireSharedIntegrityAndSigningDependencies() {
+    fun criticalRuntimeRepositoriesRequireIntegrityAndTheCanonicalWriterPort() {
         assertConstructorRequiresMemoryIntegrityCore(MemoryOrganRepository::class.java)
         assertConstructorRequiresMemoryIntegrityCore(MemoryOrganReconciliationRepository::class.java)
         assertConstructorRequiresMemoryIntegrityCore(MemoryRepository::class.java)
         assertConstructorRequiresMemoryIntegrityCore(RestCycleRepository::class.java)
-        assertConstructorRequiresMemoryEventSigner(MemoryRepository::class.java)
-        assertConstructorRequiresMemoryEventSigner(RestCycleRepository::class.java)
+        assertConstructorRequiresLivingMemoryPort(MemoryRepository::class.java)
     }
 
     private fun assertConstructorRequiresMemoryIntegrityCore(type: Class<*>) {
@@ -47,14 +45,14 @@ class MemoryOrganRepositoryContractTest {
         )
     }
 
-    private fun assertConstructorRequiresMemoryEventSigner(type: Class<*>) {
+    private fun assertConstructorRequiresLivingMemoryPort(type: Class<*>) {
         val constructors = type.constructors
         val constructorParameterTypes = constructors.flatMap { constructor -> constructor.parameterTypes.toList() }
 
-        assertTrue(constructorParameterTypes.contains(MemoryEventSigner::class.java))
+        assertTrue(constructorParameterTypes.contains(LivingMemoryPort::class.java))
         assertFalse(
             constructors.any { constructor ->
-                constructor.parameterTypes.none { parameter -> parameter == MemoryEventSigner::class.java }
+                constructor.parameterTypes.none { parameter -> parameter == LivingMemoryPort::class.java }
             }
         )
     }
