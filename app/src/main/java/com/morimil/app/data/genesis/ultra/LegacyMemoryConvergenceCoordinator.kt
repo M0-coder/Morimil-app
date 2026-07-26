@@ -106,14 +106,14 @@ internal class LegacyMemoryConvergenceCoordinator private constructor(
         error("legacy_convergence_identity_without_memory")
     }
     val complete = completeState(
-                identity = identity,
-                events = events,
-                dryRunDigest = dryRunDigest,
-                importedCount = 0
-            )
-            saveState(complete)
-            return report(LegacyMemoryConvergenceOutcome.NO_LEGACY_MEMORY, complete)
-        }
+        identity = identity,
+        events = events,
+        dryRunDigest = dryRunDigest,
+        importedCount = 0
+    )
+    saveState(complete)
+    return report(LegacyMemoryConvergenceOutcome.NO_LEGACY_MEMORY, complete)
+}
 
         if (!verifyLegacyChain(events)) {
             block(
