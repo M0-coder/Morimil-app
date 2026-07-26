@@ -1,0 +1,266 @@
+name: F2.2 Temporary Quarantine Patch
+
+on:
+  push:
+    branches:
+      - plan-v2/f2-2-canonical-memory-quarantine
+    paths:
+      - .github/workflows/f2-2-temporary-quarantine-patch.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: plan-v2/f2-2-canonical-memory-quarantine
+
+      - name: Apply exact F2.2 wiring
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          def replace_once(source: str, old: str, new: str, label: str) -> str:
+              count = source.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected one match, found {count}')
+              return source.replace(old, new, 1)
+
+          repo_path = Path('app/src/main/java/com/morimil/app/data/genesis/ultra/CanonicalMemoryRepository.kt')
+          repo = repo_path.read_text()
+          session_marker = '        val session = prepareSession()\n'
+          first = repo.find(session_marker)
+          if first < 0:
+              raise SystemExit('canonical repository append session marker missing')
+          repo = repo[:first] + '        readVerifiedSnapshot()\n' + repo[first:]
+          read_pattern = re.compile(
+              r'    suspend fun readVerifiedSnapshot\(\): CanonicalMemorySnapshot \{[\s\S]*?\n'
+              r'    \}\n\n    suspend fun buildVerifiedContext'
+          )
+          read_replacement = '''    suspend fun readVerifiedSnapshot(): CanonicalMemorySnapshot {
+              val session = prepareSession()
+              return CanonicalMemoryQuarantineStore.verify(
+                  stage = "verified_snapshot",
+                  clockMillis = clockMillis
+              ) {
+                  val recovered = requireNotNull(
+                      GenesisUltraAtomicBirthStore(database).recoverVerifiedBirth(session.recoveryRequest)
+                  ) { "canonical_memory_birth_not_committed" }
+                  val stream = canonicalStore.recoverStream(
+                      recoveredBirth = recovered,
+                      trustedBodyKey = session.signer.key
+                  )
+                  val events = stream.copyPostBirthEvents()
+                  val payloads = payloadDao.loadAscending(session.identity.instanceId)
+                  require(payloadDao.countAll() == payloadDao.countForInstance(session.identity.instanceId)) {
+                      "canonical_memory_foreign_instance_payloads"
+                  }
+                  val eventHashes = events.map { event -> event.eventHash }.toSet()
+                  require(payloads.all { payload -> payload.eventHash in eventHashes }) {
+                      "canonical_memory_payload_without_verified_event"
+                  }
+                  val payloadByEventHash = payloads.associateBy { payload -> payload.eventHash }
+                  require(payloadByEventHash.size == payloads.size) {
+                      "canonical_memory_payload_event_hash_duplicate"
+                  }
+                  val records = events.map { event ->
+                      val payload = payloadByEventHash[event.eventHash]
+                      if (payload != null) {
+                          requirePayloadMatchesEvent(payload, event)
+                          CanonicalMemoryRecord(
+                              event = event,
+                              contentBytes = payload.contentBytes,
+                              provenanceBytes = payload.provenanceBytes,
+                              provenanceType = payload.provenanceType
+                          )
+                      } else {
+                          requireActivationMetadataEvent(event, session.identity)
+                          CanonicalMemoryRecord(
+                              event = event,
+                              contentBytes = null,
+                              provenanceBytes = null,
+                              provenanceType = METADATA_ONLY,
+                              metadataSummary =
+                                  "Genesis Ultra activation confirmed; " +
+                                      "authorization_digest=${event.contentDigest}; " +
+                                      "receipt_digest=${event.provenanceDigest}."
+                          )
+                      }
+                  }
+                  CanonicalMemorySnapshot(
+                      instanceId = session.identity.instanceId,
+                      companionName = session.identity.companionName,
+                      birthRoot = stream.livingRoot.event,
+                      records = records
+                  )
+              }
+          }
+
+          suspend fun buildVerifiedContext'''
+          repo, count = read_pattern.subn(read_replacement, repo, count=1)
+          if count != 1:
+              raise SystemExit(f'canonical repository read method: expected one match, found {count}')
+          repo_path.write_text(repo)
+
+          kernel_path = Path('app/src/main/java/com/morimil/app/reasoning/ReasoningKernel.kt')
+          kernel = kernel_path.read_text()
+          kernel = replace_once(
+              kernel,
+              'import com.morimil.app.data.genesis.GenesisIdentity\n',
+              'import com.morimil.app.data.genesis.GenesisIdentity\n'
+              'import com.morimil.app.data.genesis.ultra.CanonicalMemoryQuarantinedException\n',
+              'kernel quarantine import'
+          )
+          old_catch = '''        }.getOrElse { error ->
+              val message = error.message ?: error::class.java.simpleName
+              val errorState = state.withError(message)
+              ReasoningKernelResult(
+                  state = errorState,
+                  morimilReply = null,
+                  auxiliaryAdvisory = null,
+                  errorMessage = message
+              )
+          }'''
+          new_catch = '''        }.getOrElse { error ->
+              if (error is CanonicalMemoryQuarantinedException) {
+                  val diagnostic = error.diagnostic
+                  val message = diagnostic.visibleMessage()
+                  val quarantineState = state.copy(
+                      executionOrigin = ReasoningExecutionOrigin.PENDING,
+                      memoryContextSummary = "quarantined",
+                      policyDecision = "canonical_memory_quarantine_abstention"
+                  ).withTrace(
+                      "memory_quarantine_abstention",
+                      "code=${diagnostic.code} stage=${diagnostic.stage} " +
+                          "sequence=${diagnostic.sequence ?: "unknown"} prompt_built=false"
+                  ).withError(message)
+                  ReasoningKernelResult(
+                      state = quarantineState,
+                      morimilReply = null,
+                      auxiliaryAdvisory = null,
+                      errorMessage = message
+                  )
+              } else {
+                  val message = error.message ?: error::class.java.simpleName
+                  val errorState = state.withError(message)
+                  ReasoningKernelResult(
+                      state = errorState,
+                      morimilReply = null,
+                      auxiliaryAdvisory = null,
+                      errorMessage = message
+                  )
+              }
+          }'''
+          kernel = replace_once(kernel, old_catch, new_catch, 'kernel error boundary')
+          kernel_path.write_text(kernel)
+
+          vm_path = Path('app/src/main/java/com/morimil/app/ui/MorimilViewModel.kt')
+          vm = vm_path.read_text()
+          vm = replace_once(
+              vm,
+              'import com.morimil.app.MorimilAppContainer\n',
+              'import com.morimil.app.MorimilAppContainer\n'
+              'import com.morimil.app.canonicalMemoryRepository\n',
+              'viewmodel canonical repository import'
+          )
+          vm = replace_once(
+              vm,
+              'import com.morimil.app.data.local.AgentProfileEntity\n',
+              'import com.morimil.app.data.genesis.ultra.CanonicalMemoryQuarantineStore\n'
+              'import com.morimil.app.data.local.AgentProfileEntity\n',
+              'viewmodel quarantine import'
+          )
+          vm = replace_once(
+              vm,
+              '                val memoryVerified = repository.auditLivingMemoryChain()\n',
+              '                container.canonicalMemoryRepository.readVerifiedSnapshot()\n'
+              '                val memoryVerified = true\n',
+              'canonical integrity audit'
+          )
+          marker = '    init {\n'
+          collector = '''    init {
+              viewModelScope.launch(Dispatchers.IO) {
+                  CanonicalMemoryQuarantineStore.diagnostic.collect { diagnostic ->
+                      if (diagnostic == null) {
+                          clearInternalRuntimeIssue(CANONICAL_MEMORY_QUARANTINE_COMPONENT)
+                      } else {
+                          recordInternalRuntimeIssue(
+                              component = CANONICAL_MEMORY_QUARANTINE_COMPONENT,
+                              message = diagnostic.visibleMessage(),
+                              failureCount = 1,
+                              occurredAtMillis = diagnostic.detectedAtMillis
+                          )
+                      }
+                      refreshChatOrganismStatus()
+                      runCatching { refreshOrganismHealthOnWorker() }
+                          .onFailure { error -> recordInternalRuntimeIssue("organism_health.refresh", error) }
+                  }
+              }
+          '''
+          vm = replace_once(vm, marker, collector, 'quarantine diagnostic collector')
+          quarantine_marker = '        val hasQuarantine = recentMemoryEvents.value.any { event ->\n'
+          replacement = '''        val canonicalQuarantine = CanonicalMemoryQuarantineStore.diagnostic.value != null
+              val hasQuarantine = canonicalQuarantine || recentMemoryEvents.value.any { event ->
+          '''
+          if vm.count(quarantine_marker) != 2:
+              raise SystemExit(f'viewmodel quarantine markers: expected two, found {vm.count(quarantine_marker)}')
+          vm = vm.replace(quarantine_marker, replacement)
+          vm = replace_once(
+              vm,
+              '            hasQuarantine -> "memoria: cuarentena"\n',
+              '            canonicalQuarantine -> "memoria canónica: cuarentena"\n'
+              '            hasQuarantine -> "memoria: cuarentena"\n',
+              'chat canonical quarantine label'
+          )
+          vm = replace_once(
+              vm,
+              '        const val MEMORY_INTEGRITY_QUARANTINE_EVENT_TYPE = "memory_integrity.quarantine"\n',
+              '        const val MEMORY_INTEGRITY_QUARANTINE_EVENT_TYPE = "memory_integrity.quarantine"\n'
+              '        const val CANONICAL_MEMORY_QUARANTINE_COMPONENT = "canonical_memory.quarantine"\n',
+              'viewmodel quarantine component'
+          )
+          vm_path.write_text(vm)
+
+          test_path = Path('app/src/androidTest/java/com/morimil/app/data/genesis/ultra/GenesisUltraAtomicBirthStoreTest.kt')
+          test = test_path.read_text()
+          old_tamper = '''        val failure = runCatching {
+              memoryStore.recoverStream(recovered, bodyMemoryKey())
+          }.exceptionOrNull()
+
+          assertTrue(failure is IllegalArgumentException)
+          assertTrue(failure?.message?.contains("canonical_memory_signature_invalid:1") == true)'''
+          new_tamper = '''        CanonicalMemoryQuarantineStore.clearForTest()
+          val failure = runCatching {
+              CanonicalMemoryQuarantineStore.verify(stage = "event_chain") {
+                  memoryStore.recoverStream(recovered, bodyMemoryKey())
+              }
+          }.exceptionOrNull()
+
+          assertTrue(failure is CanonicalMemoryQuarantinedException)
+          val diagnostic = CanonicalMemoryQuarantineStore.diagnostic.value
+          assertEquals("canonical_memory_signature_invalid", diagnostic?.code)
+          assertEquals(1L, diagnostic?.sequence)
+          assertTrue(diagnostic?.visibleMessage()?.contains("entró al prompt") == true)'''
+          test = replace_once(test, old_tamper, new_tamper, 'tampered event quarantine test')
+          test_path.write_text(test)
+          PY
+          git diff --check
+
+      - name: Commit permanent changes and remove temporary workflow
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/f2-2-temporary-quarantine-patch.yml
+          git add app/src/main/java/com/morimil/app/data/genesis/ultra/CanonicalMemoryRepository.kt
+          git add app/src/main/java/com/morimil/app/reasoning/ReasoningKernel.kt
+          git add app/src/main/java/com/morimil/app/ui/MorimilViewModel.kt
+          git add app/src/androidTest/java/com/morimil/app/data/genesis/ultra/GenesisUltraAtomicBirthStoreTest.kt
+          git commit -m "feat(memory): quarantine corrupted canonical chains"
+          git push origin HEAD:plan-v2/f2-2-canonical-memory-quarantine
