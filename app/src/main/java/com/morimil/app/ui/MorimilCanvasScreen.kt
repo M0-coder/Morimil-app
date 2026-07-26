@@ -171,15 +171,19 @@ fun MorimilCanvasScreen() {
                     factory = { webContext ->
                         WebView(webContext).apply {
                             activeWebView = this
+                            // WEBVIEW_JS_BOUNDARY: LOCAL_CANVAS_ISSUE_127
                             settings.javaScriptEnabled = true
                             settings.domStorageEnabled = true
                             settings.cacheMode = WebSettings.LOAD_DEFAULT
                             settings.allowFileAccess = false
                             settings.allowContentAccess = false
+                            settings.allowFileAccessFromFileURLs = false
+                            settings.allowUniversalAccessFromFileURLs = false
                             settings.javaScriptCanOpenWindowsAutomatically = false
                             settings.setSupportMultipleWindows(false)
                             settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
                             settings.mediaPlaybackRequiresUserGesture = true
+                            settings.safeBrowsingEnabled = true
 
                             webViewClient = object : WebViewClient() {
                                 override fun shouldInterceptRequest(
