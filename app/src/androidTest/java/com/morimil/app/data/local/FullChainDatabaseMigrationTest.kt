@@ -23,7 +23,7 @@ class FullChainDatabaseMigrationTest {
     }
 
     @Test
-    fun morimilDatabaseMigratesFrom1To13ThroughFullChain() {
+    fun morimilDatabaseMigratesFrom1To14ThroughFullChain() {
         createVersion1Database()
 
         val database = Room.databaseBuilder(
@@ -43,13 +43,14 @@ class FullChainDatabaseMigrationTest {
                 MorimilDatabase.MIGRATION_9_10,
                 MorimilDatabase.MIGRATION_10_11,
                 MorimilDatabase.MIGRATION_11_12,
-                MorimilDatabase.MIGRATION_12_13
+                MorimilDatabase.MIGRATION_12_13,
+                MorimilDatabase.MIGRATION_13_14
             )
             .build()
 
         try {
             val migrated = database.openHelper.writableDatabase
-            assertEquals(13, migrated.userVersion())
+            assertEquals(14, migrated.userVersion())
             assertTrue(
                 migrated.tableNames().containsAll(
                     setOf(
@@ -65,7 +66,8 @@ class FullChainDatabaseMigrationTest {
                         "genesis_ultra_birth_artifacts",
                         "genesis_ultra_birth_journal",
                         "genesis_ultra_memory_events",
-                        "genesis_ultra_birth_authorization"
+                        "genesis_ultra_birth_authorization",
+                        "genesis_ultra_memory_payloads"
                     )
                 )
             )
@@ -80,6 +82,10 @@ class FullChainDatabaseMigrationTest {
             assertEquals(
                 0,
                 migrated.singleInt("SELECT COUNT(*) FROM genesis_ultra_birth_authorization")
+            )
+            assertEquals(
+                0,
+                migrated.singleInt("SELECT COUNT(*) FROM genesis_ultra_memory_payloads")
             )
         } finally {
             database.close()
@@ -176,6 +182,6 @@ class FullChainDatabaseMigrationTest {
     }
 
     private companion object {
-        const val TEST_DATABASE = "morimil-v1-v13-full-chain-test"
+        const val TEST_DATABASE = "morimil-v1-v14-full-chain-test"
     }
 }
