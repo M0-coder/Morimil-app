@@ -193,8 +193,8 @@ if version_count != 3:
     raise RuntimeError(f"migration test versions: expected 3, found {version_count}")
 text = text.replace("assertEquals(7, migrated.userVersion())", "assertEquals(8, migrated.userVersion())")
 migration_count = text.count("MemoryOrganDatabase.MIGRATION_6_7")
-if migration_count != 4:
-    raise RuntimeError(f"migration lists: expected 4, found {migration_count}")
+if migration_count != 3:
+    raise RuntimeError(f"migration lists: expected 3, found {migration_count}")
 text = text.replace(
     "MemoryOrganDatabase.MIGRATION_6_7",
     "MemoryOrganDatabase.MIGRATION_6_7,\n                MemoryOrganDatabaseMigrationV8.MIGRATION_7_8",
