@@ -1,0 +1,44 @@
+name: F2.3 Temporary Patch Launcher
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/f2-3-temporary-patch-launcher.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout working branch
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: plan-v2/f2-3-legacy-memory-convergence
+
+      - name: Extract and run the exact patch
+        shell: bash
+        run: |
+          awk '
+            /^          python - <<.PY./ { capture=1; next }
+            capture && /^          PY$/ { capture=0; exit }
+            capture { sub(/^          /, ""); print }
+          ' .github/workflows/f2-3-temporary-convergence-patch.yml > /tmp/f2_3_patch.py
+          test -s /tmp/f2_3_patch.py
+          python /tmp/f2_3_patch.py
+          git diff --check
+
+      - name: Commit permanent changes and remove launchers
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/f2-3-temporary-convergence-patch.yml
+          git rm .github/workflows/f2-3-temporary-patch-launcher.yml
+          git add -A
+          git commit -m "feat(memory): complete legacy writer convergence wiring"
+          git push origin HEAD:plan-v2/f2-3-legacy-memory-convergence
