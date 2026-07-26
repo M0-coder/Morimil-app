@@ -2,17 +2,16 @@ package com.morimil.app.data.genesis.ultra
 
 import com.morimil.app.data.local.ReasoningTurnAuthor
 import com.morimil.app.data.local.ReasoningTurnEntity
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
-import kotlin.test.assertFalse
-import kotlin.test.assertNotNull
-import kotlin.test.assertTrue
-import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
 
 class ConversationMemoryPromotionCoordinatorTest {
     @Test
-    fun previewDoesNotWriteAndApprovalAppendsExactGuardianConfirmedCandidate() = runTest {
+    fun previewDoesNotWriteAndApprovalAppendsExactGuardianConfirmedCandidate() = runBlocking {
         val authority = authority()
         var eventExists = false
         var appendCalls = 0
@@ -49,7 +48,8 @@ class ConversationMemoryPromotionCoordinatorTest {
         val receipt = coordinator.approve(preview.previewId, preview.candidateDigest)
 
         assertEquals(1, appendCalls)
-        val command = assertNotNull(captured)
+        assertNotNull(captured)
+        val command = requireNotNull(captured)
         assertEquals("conversation.turn.promoted", command.eventType)
         assertEquals(ReasoningTurnAuthor.USER, command.actor)
         assertEquals(turn.body, command.content)
@@ -65,7 +65,7 @@ class ConversationMemoryPromotionCoordinatorTest {
     }
 
     @Test
-    fun auxiliaryAdvisoryCannotBecomeCandidate() = runTest {
+    fun auxiliaryAdvisoryCannotBecomeCandidate() = runBlocking {
         var appendCalls = 0
         val coordinator = coordinator(
             appendCanonical = {
@@ -74,18 +74,19 @@ class ConversationMemoryPromotionCoordinatorTest {
             }
         )
 
-        val error = assertFailsWith<IllegalArgumentException> {
+        val error = runCatching {
             coordinator.preview(
                 trustedTurn().copy(author = ReasoningTurnAuthor.AUXILIARY_ADVISORY)
             )
-        }
+        }.exceptionOrNull()
 
-        assertEquals("conversation_memory_untrusted_transcript_author", error.message)
+        assertTrue(error is IllegalArgumentException)
+        assertEquals("conversation_memory_untrusted_transcript_author", error?.message)
         assertEquals(0, appendCalls)
     }
 
     @Test
-    fun duplicateCandidateIsRejectedBeforePreviewAndBeforeAppend() = runTest {
+    fun duplicateCandidateIsRejectedBeforePreviewAndBeforeAppend() = runBlocking {
         var existing = true
         var appendCalls = 0
         val coordinator = coordinator(
@@ -96,23 +97,23 @@ class ConversationMemoryPromotionCoordinatorTest {
             }
         )
 
-        val first = assertFailsWith<IllegalArgumentException> {
-            coordinator.preview(trustedTurn())
-        }
-        assertEquals("conversation_memory_candidate_already_promoted", first.message)
+        val first = runCatching { coordinator.preview(trustedTurn()) }.exceptionOrNull()
+        assertTrue(first is IllegalArgumentException)
+        assertEquals("conversation_memory_candidate_already_promoted", first?.message)
 
         existing = false
         val preview = coordinator.preview(trustedTurn())
         existing = true
-        val second = assertFailsWith<IllegalArgumentException> {
+        val second = runCatching {
             coordinator.approve(preview.previewId, preview.candidateDigest)
-        }
-        assertEquals("conversation_memory_candidate_already_promoted", second.message)
+        }.exceptionOrNull()
+        assertTrue(second is IllegalArgumentException)
+        assertEquals("conversation_memory_candidate_already_promoted", second?.message)
         assertEquals(0, appendCalls)
     }
 
     @Test
-    fun approvalIsDigestBoundSingleUseAndFailsClosed() = runTest {
+    fun approvalIsDigestBoundSingleUseAndFailsClosed() = runBlocking {
         var appendCalls = 0
         val coordinator = coordinator(
             appendCanonical = { command ->
@@ -126,20 +127,22 @@ class ConversationMemoryPromotionCoordinatorTest {
         )
         val preview = coordinator.preview(trustedTurn())
 
-        val mismatch = assertFailsWith<IllegalArgumentException> {
+        val mismatch = runCatching {
             coordinator.approve(preview.previewId, "sha256:wrong")
-        }
-        assertEquals("conversation_memory_candidate_digest_mismatch", mismatch.message)
+        }.exceptionOrNull()
+        assertTrue(mismatch is IllegalArgumentException)
+        assertEquals("conversation_memory_candidate_digest_mismatch", mismatch?.message)
         assertEquals(0, appendCalls)
 
         val receipt = coordinator.approve(preview.previewId, preview.candidateDigest)
         assertTrue(receipt.verifiedInCanonicalChain)
         assertEquals(1, appendCalls)
 
-        val replay = assertFailsWith<IllegalArgumentException> {
+        val replay = runCatching {
             coordinator.approve(preview.previewId, preview.candidateDigest)
-        }
-        assertEquals("conversation_memory_preview_missing", replay.message)
+        }.exceptionOrNull()
+        assertTrue(replay is IllegalArgumentException)
+        assertEquals("conversation_memory_preview_missing", replay?.message)
         assertEquals(1, appendCalls)
     }
 
