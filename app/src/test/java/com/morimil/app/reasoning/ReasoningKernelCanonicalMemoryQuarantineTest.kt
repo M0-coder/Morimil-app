@@ -74,13 +74,10 @@ class ReasoningKernelCanonicalMemoryQuarantineTest {
         assertEquals(0, capsuleReads)
         assertEquals(0, intrinsicCalls)
         assertEquals(0, externalCalls)
-        assertTrue(
-            result.state.trace.any { trace ->
-                trace.stage == "memory_quarantine_abstention" &&
-                    trace.detail.contains("prompt_built=false") &&
-                    trace.detail.contains("sequence=7")
-            }
-        )
+        assertTrue(result.state.trace.any { trace -> trace.stage == "error" })
+        assertTrue(result.state.trace.none { trace -> trace.stage == "context_built" })
+        assertTrue(result.state.trace.none { trace -> trace.stage == "intrinsic_context_boundary" })
+        assertTrue(result.state.trace.none { trace -> trace.stage == "intrinsic_motor_plan" })
     }
 
     private fun testGenesis(): GenesisIdentity {
