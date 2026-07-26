@@ -29,7 +29,12 @@ jobs:
             capture { sub(/^          /, ""); print }
           ' .github/workflows/f2-3-temporary-convergence-patch.yml > /tmp/f2_3_patch.py
           test -s /tmp/f2_3_patch.py
-          python /tmp/f2_3_patch.py
+          set +e
+          python /tmp/f2_3_patch.py > /tmp/f2_3_patch.log 2>&1
+          status=$?
+          set -e
+          tail -80 /tmp/f2_3_patch.log
+          test "$status" -eq 0
           git diff --check
 
       - name: Commit permanent changes and remove launchers
