@@ -1,0 +1,62 @@
+name: F2.3 Temporary Bootstrap Fix
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/f2-3-temporary-bootstrap-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout working branch
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: plan-v2/f2-3-legacy-memory-convergence
+
+      - name: Repair bootstrap and its historical test
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          bootstrap = Path('app/src/main/java/com/morimil/app/runtime/GenesisUltraRuntimeBootstrapCoordinator.kt')
+          source = bootstrap.read_text()
+          marker = '\x01,'
+          if source.count(marker) != 1:
+              raise SystemExit(f'bootstrap control marker count={source.count(marker)}')
+          source = source.replace(
+              marker,
+              '''countCanonicalMemoryEvents = {
+                    memoryDatabase.genesisUltraMemoryDao().countAll()
+                },''',
+              1
+          )
+          bootstrap.write_text(source)
+
+          test = Path('app/src/test/java/com/morimil/app/runtime/GenesisUltraRuntimeBootstrapCoordinatorTest.kt')
+          source = test.read_text()
+          old = 'runtime_bootstrap_created_legacy_identity'
+          new = 'runtime_bootstrap_created_unconverged_legacy_identity'
+          if source.count(old) != 1:
+              raise SystemExit(f'bootstrap historical error count={source.count(old)}')
+          test.write_text(source.replace(old, new, 1))
+          PY
+          git diff --check
+
+      - name: Commit repair and remove workflow
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/f2-3-temporary-bootstrap-fix.yml
+          git add app/src/main/java/com/morimil/app/runtime/GenesisUltraRuntimeBootstrapCoordinator.kt
+          git add app/src/test/java/com/morimil/app/runtime/GenesisUltraRuntimeBootstrapCoordinatorTest.kt
+          git commit -m "fix(runtime): restore canonical memory count wiring"
+          git push origin HEAD:plan-v2/f2-3-legacy-memory-convergence
