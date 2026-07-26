@@ -14,7 +14,13 @@ internal val MorimilAppContainer.genesisUltraRuntimeBootstrapCoordinator:
 /** Startup gate backed by the canonical identity source and idempotent Ultra bootstrap. */
 internal val MorimilAppContainer.genesisUltraRuntimeStartupGate:
     GenesisUltraRuntimeStartupGate
-    get() = GenesisUltraRuntimeStartupGate.production(
-        identityRepository = genesisUltraRuntimeIdentityRepository,
-        bootstrapVerifiedIdentity = genesisUltraRuntimeBootstrapCoordinator::bootstrap
-    )
+    get() {
+        val bootstrap = genesisUltraRuntimeBootstrapCoordinator
+        return GenesisUltraRuntimeStartupGate.production(
+            identityRepository = genesisUltraRuntimeIdentityRepository,
+            bootstrapVerifiedIdentity = { identity ->
+                bootstrap.bootstrap(identity)
+                Unit
+            }
+        )
+    }
