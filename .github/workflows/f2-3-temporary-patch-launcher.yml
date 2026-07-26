@@ -64,6 +64,25 @@ jobs:
               1
           )
           path.write_text(source)
+
+          path = Path('app/src/main/java/com/morimil/app/MorimilAppContainer.kt')
+          source = path.read_text()
+          old = '''            database = memoryDatabase,
+              memoryIntegrityCore = memoryIntegrityCore,
+              memoryEventSigner = memoryEventSigner
+          '''
+          new = '''            database = memoryDatabase,
+              memoryIntegrityCore = memoryIntegrityCore,
+              livingMemoryPort = canonicalLivingMemoryPort
+          '''
+          if source.count(old) != 1:
+              raise SystemExit(f'container memory writer structural match={source.count(old)}')
+          source = source.replace(old, new, 1)
+          signer_line = '            memoryEventSigner = memoryEventSigner,\n'
+          if source.count(signer_line) != 1:
+              raise SystemExit(f'container rest signer match={source.count(signer_line)}')
+          source = source.replace(signer_line, '', 1)
+          path.write_text(source)
           PY
 
           awk '
@@ -78,13 +97,13 @@ jobs:
           path = Path('/tmp/f2_3_patch.py')
           source = path.read_text()
           source, count = re.subn(
-              r'# Fix the resumable coordinator before product wiring\.[\s\S]*?# Inject the sole canonical writer into the application container\.',
-              '# Inject the sole canonical writer into the application container.',
+              r'# Fix the resumable coordinator before product wiring\.[\s\S]*?# Replace the direct rest-cycle legacy append with the canonical port\.',
+              '# Replace the direct rest-cycle legacy append with the canonical port.',
               source,
               count=1
           )
           if count != 1:
-              raise SystemExit(f'coordinator patch section removal={count}')
+              raise SystemExit(f'coordinator/container section removal={count}')
           path.write_text(source)
           PY
 
