@@ -1,3 +1,5 @@
+# Document status: CURRENT
+
 # Flow
 
 Main green.

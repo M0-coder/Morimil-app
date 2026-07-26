@@ -1,3 +1,5 @@
+# Document status: CURRENT
+
 # Genesis Ultra: autorización de nacimiento atómico
 
 ## Objetivo

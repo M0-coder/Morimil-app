@@ -1,3 +1,5 @@
+# Document status: SUPERSEDED
+
 # Morimil Reasoning Kernel
 
 Morimil must not depend on a remote API for operational continuity. Remote or local LLMs are model backends. They are not Morimil's identity, memory, policy, or final authority.

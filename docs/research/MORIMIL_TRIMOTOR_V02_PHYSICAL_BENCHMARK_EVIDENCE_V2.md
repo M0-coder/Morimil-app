@@ -1,3 +1,5 @@
+# Document status: RESEARCH_ONLY
+
 # Morimil trimotor v0.2 physical benchmark evidence v2
 
 Status: **current 84/36 physical research gate passed; production activation blocked**

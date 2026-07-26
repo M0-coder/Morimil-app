@@ -1,3 +1,5 @@
+# Document status: RESEARCH_ONLY
+
 # Morimil Hugging Face provenance v0.1
 
 Status: **authenticated capture pending; normal-runtime activation blocked**

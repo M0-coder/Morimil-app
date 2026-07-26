@@ -1,3 +1,5 @@
+# Document status: CURRENT
+
 # Android release signing
 
 ## Scope

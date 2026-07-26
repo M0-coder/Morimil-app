@@ -1,3 +1,5 @@
+# Document status: CURRENT
+
 # Genesis Ultra atomic-birth witness archive transport
 
 Status: implemented as a strict transport boundary. It does not execute birth.

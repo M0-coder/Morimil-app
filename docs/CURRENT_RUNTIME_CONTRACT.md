@@ -1,5 +1,5 @@
-> **Document status: CURRENT**
->
+# Document status: CURRENT
+
 > **Audited baseline:** `74bcb874606db84d4a88397233d6ed3468904bce`
 >
 > This document describes the runtime that is connected to the normal application flow.

@@ -1,3 +1,5 @@
+# Document status: SUPERSEDED
+
 # Morimil App Architecture Map
 
 This document is an operational map, not branding documentation. Its purpose is to prevent disconnected organs: any new organ must have a caller, composition root registration, runtime path, UI path or worker path, validation command, and explicit risk classification.

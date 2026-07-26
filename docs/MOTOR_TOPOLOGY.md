@@ -1,3 +1,5 @@
+# Document status: CURRENT
+
 # Morimil cognitive topology
 
 Morimil has exactly three intrinsic cognitive motors:

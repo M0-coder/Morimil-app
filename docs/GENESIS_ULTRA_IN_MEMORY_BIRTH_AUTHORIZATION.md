@@ -1,3 +1,5 @@
+# Document status: CURRENT
+
 # Genesis Ultra in-memory atomic-birth authorization
 
 Status: implemented as a pre-execution verification boundary.

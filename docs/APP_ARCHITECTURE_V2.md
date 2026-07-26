@@ -1,3 +1,5 @@
+# Document status: SUPERSEDED
+
 # Morimil App Architecture V2
 
 This document describes the current `provider-neutral-motor` Android runtime. It is an active runtime contract, not an early plan.

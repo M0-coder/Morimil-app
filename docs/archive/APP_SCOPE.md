@@ -1,3 +1,5 @@
+# Document status: HISTORICAL
+
 # Morimil App Scope
 
 ## Current Scope

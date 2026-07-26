@@ -1,3 +1,5 @@
+# Document status: HISTORICAL
+
 # Morimil App Phase 2 Status
 
 ## Verdict

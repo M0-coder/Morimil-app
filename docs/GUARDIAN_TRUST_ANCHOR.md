@@ -1,3 +1,5 @@
+# Document status: CURRENT
+
 # Genesis Ultra Guardian trust anchor
 
 Status: storage and verification boundary implemented; production anchor not provisioned.

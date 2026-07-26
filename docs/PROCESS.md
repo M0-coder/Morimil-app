@@ -1,3 +1,5 @@
+# Document status: CURRENT
+
 # Process Guard
 
 ## Core rule

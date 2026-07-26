@@ -1,3 +1,5 @@
+# Document status: CURRENT
+
 # Ceremonia explícita de ejecución atómica Genesis Ultra
 
 ## Alcance

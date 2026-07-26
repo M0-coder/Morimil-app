@@ -1,3 +1,5 @@
+# Document status: SUPERSEDED
+
 # Android Standards Baseline
 
 This document defines the baseline Morimil-app should satisfy before feature expansion.

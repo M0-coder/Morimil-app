@@ -1,3 +1,5 @@
+# Document status: CURRENT
+
 # Genesis Ultra signed release adapter for Morimil
 
 Status: implemented and fail-closed on the preparation branch.

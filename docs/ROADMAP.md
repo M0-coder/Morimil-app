@@ -1,3 +1,5 @@
+# Document status: SUPERSEDED
+
 # Morimil App Roadmap
 
 ## Phase 1 - Native Android Skeleton

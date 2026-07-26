@@ -1,3 +1,5 @@
+# Document status: CURRENT
+
 # Genesis Ultra committed-consent retirement
 
 Status: implemented as post-commit maintenance. Atomic execution remains disconnected from onboarding.

@@ -1,3 +1,5 @@
+# Document status: RESEARCH_ONLY
+
 # Android ARM64 unplugged energy profile v0
 
 This profile measures the exact Gemma 3n E2B LiteRT-LM research candidate while the Android device is physically disconnected from USB power.

@@ -1,3 +1,5 @@
+# Document status: CURRENT
+
 # Morimil App
 
 Morimil App is the native Android application for the Morimil living-memory companion system.

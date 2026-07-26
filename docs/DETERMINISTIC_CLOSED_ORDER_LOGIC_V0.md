@@ -1,3 +1,5 @@
+# Document status: CURRENT
+
 # Deterministic closed-order logic v0
 
 Status: **bounded deterministic authority**

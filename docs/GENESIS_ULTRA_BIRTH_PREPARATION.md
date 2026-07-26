@@ -1,3 +1,5 @@
+# Document status: CURRENT
+
 # Genesis Ultra birth preparation boundary
 
 Status: Phase 3.1 implemented as an inspection-only boundary.

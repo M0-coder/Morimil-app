@@ -1,3 +1,5 @@
+# Document status: HISTORICAL
+
 # Morimil App Phase 5E Status
 
 Phase 5E is superseded by the provider-neutral reasoning motor work.

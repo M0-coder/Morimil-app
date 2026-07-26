@@ -1,3 +1,5 @@
+# Document status: RESEARCH_ONLY
+
 # Morimil Loop-Effort Comparative Benchmark v0
 
 Status: **research-only design**
