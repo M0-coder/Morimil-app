@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.morimil.app.MorimilAppContainer
+import com.morimil.app.genesisUltraRuntimeStartupGate
 import com.morimil.app.data.local.AgentProfileEntity
 import com.morimil.app.data.local.AutobiographicalSnapshotEntity
 import com.morimil.app.data.local.DecisionLogEntity
@@ -21,7 +22,6 @@ import com.morimil.app.data.local.ProjectVaultEntity
 import com.morimil.app.data.local.ReasoningTurnEntity
 import com.morimil.app.data.local.RecallScheduleEntity
 import com.morimil.app.data.local.UserWorkspaceEntity
-import com.morimil.app.data.repository.LocalBirthState
 import com.morimil.app.data.repository.RestCycleRepository
 import com.morimil.app.runtime.RestCycleScheduleStatus
 import com.morimil.app.runtime.RestCycleScheduler
@@ -225,25 +225,19 @@ class MorimilViewModel(application: Application) : AndroidViewModel(application)
             }
         }
         viewModelScope.launch(Dispatchers.IO) {
-            when (repository.readLocalBirthState()) {
-                LocalBirthState.ABSENT -> Unit
-                LocalBirthState.COMPLETE -> {
-                    RestCycleScheduler.schedule(application)
-                    refreshRestCycleScheduleStatusOnWorker(application)
-                    repository.seedInitialStateIfNeeded()
-                    reasoningTranscriptRepository.seedIntroTurnsIfNeeded()
-                    agentOrchestrationRepository.seedDefaultOrchestrationIfNeeded()
-                    runObservedInternalTask("rest_cycle.startup") { runRestCycleUseCase() }
-                    runObservedInternalTask("recall.startup") { recallScheduleRepository.seedFromRecentMemoryIfNeeded() }
-                }
-                LocalBirthState.INCONSISTENT -> {
-                    recordInternalRuntimeIssue(
-                        component = "birth_state",
-                        message = "Local birth state is incomplete; durable runtime startup is blocked.",
-                        failureCount = 1,
-                        occurredAtMillis = System.currentTimeMillis()
-                    )
-                }
+            runCatching {
+                container.genesisUltraRuntimeStartupGate.requireReady()
+            }.onSuccess {
+                reasoningTranscriptRepository.seedIntroTurnsIfNeeded()
+                refreshGenesis()
+            }.onFailure { error ->
+                recordInternalRuntimeIssue(
+                    component = "genesis_ultra_runtime_gate",
+                    message = error.message
+                        ?: "Genesis Ultra runtime identity could not be verified.",
+                    failureCount = 1,
+                    occurredAtMillis = System.currentTimeMillis()
+                )
             }
         }
         viewModelScope.launch {
@@ -252,7 +246,6 @@ class MorimilViewModel(application: Application) : AndroidViewModel(application)
                 refreshOrganismHealth()
             }
         }
-        refreshGenesis()
         refreshChatOrganismStatus()
         refreshOrganismHealth()
     }

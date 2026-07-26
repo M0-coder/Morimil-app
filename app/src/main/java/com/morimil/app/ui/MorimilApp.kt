@@ -21,10 +21,7 @@ fun MorimilApp(
                 }
 
                 GenesisUltraAppRoute.RUNTIME -> {
-                    // The legacy runtime ViewModel is not constructed before an
-                    // authorized Genesis Ultra birth is durably verified.
-                    val runtimeViewModel: MorimilViewModel = viewModel()
-                    MainTabsScaffold(runtimeViewModel)
+                    GenesisUltraRuntimeHost()
                 }
             }
         }

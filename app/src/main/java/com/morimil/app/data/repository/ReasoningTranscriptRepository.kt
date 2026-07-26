@@ -36,7 +36,10 @@ class ReasoningTranscriptRepository(
 
     suspend fun seedIntroTurnsIfNeeded() {
         if (dao.countTurns() != 0) return
-        appendMorimilTurn("Genesis movil v1 activo. Historial de conversacion separado de memoria viva.")
+        appendMorimilTurn(
+            "Genesis Ultra comprometido y verificado. " +
+                "Historial de conversacion separado de memoria canonica."
+        )
         appendMorimilTurn("Voz manual activa. Sin sincronizacion externa ni ejecucion de PC.")
     }
 
