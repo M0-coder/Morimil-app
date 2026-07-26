@@ -1,0 +1,226 @@
+name: F3.1 Apply ProjectVault Outbox Wiring
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.head_ref == 'plan-v2/f3-1-project-vault-transactional-outbox'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout working branch
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: plan-v2/f3-1-project-vault-transactional-outbox
+          fetch-depth: 0
+      - name: Apply exact wiring patch
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def read(path):
+              return Path(path).read_text(encoding="utf-8-sig")
+
+          def write(path, text):
+              Path(path).write_text(text, encoding="utf-8")
+
+          def replace_once(text, old, new, label):
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{label}: expected one match, found {count}")
+              return text.replace(old, new, 1)
+
+          repo_path = "app/src/main/java/com/morimil/app/data/repository/ProjectVaultRepository.kt"
+          text = read(repo_path)
+          text = replace_once(
+              text,
+              '''            buildOperation(
+                  operationType = ProjectVaultOutboxEntity.OPERATION_COMPLETE,
+                  desiredVault = desired,
+                  note = finalSummary,
+                  nowMillis = nowMillis
+              ).also(outboxDao::insert)''',
+              '''            val operation = buildOperation(
+                  operationType = ProjectVaultOutboxEntity.OPERATION_COMPLETE,
+                  desiredVault = desired,
+                  note = finalSummary,
+                  nowMillis = nowMillis
+              )
+              outboxDao.insert(operation)
+              operation''',
+              "complete staging"
+          )
+          text = replace_once(
+              text,
+              '''            buildOperation(
+                  operationType = ProjectVaultOutboxEntity.OPERATION_ARCHIVE,
+                  desiredVault = desired,
+                  note = reason,
+                  nowMillis = nowMillis
+              ).also(outboxDao::insert)''',
+              '''            val operation = buildOperation(
+                  operationType = ProjectVaultOutboxEntity.OPERATION_ARCHIVE,
+                  desiredVault = desired,
+                  note = reason,
+                  nowMillis = nowMillis
+              )
+              outboxDao.insert(operation)
+              operation''',
+              "archive staging"
+          )
+          text = replace_once(
+              text,
+              '''        check(desired.vaultId == operation.vaultId) {
+              throw ProjectVaultOutboxConflict("project_vault_outbox_payload_vault_mismatch")
+          }''',
+              '''        if (desired.vaultId != operation.vaultId) {
+              throw ProjectVaultOutboxConflict("project_vault_outbox_payload_vault_mismatch")
+          }''',
+              "payload vault conflict"
+          )
+          text = replace_once(
+              text,
+              '''                check(
+                      dao.completeProjectVault(
+                          vaultId = operation.vaultId,
+                          status = STATUS_COMPLETED,
+                          healthStatus = HEALTH_COMPLETED,
+                          progressPercent = 100,
+                          roadmapSummary = desired.roadmapSummary,
+                          updatedAtMillis = desired.updatedAtMillis,
+                          completedAtMillis = requireNotNull(desired.completedAtMillis)
+                      ) == 1
+                  ) { throw ProjectVaultOutboxConflict("project_vault_outbox_complete_conflict") }''',
+              '''                val updated = dao.completeProjectVault(
+                      vaultId = operation.vaultId,
+                      status = STATUS_COMPLETED,
+                      healthStatus = HEALTH_COMPLETED,
+                      progressPercent = 100,
+                      roadmapSummary = desired.roadmapSummary,
+                      updatedAtMillis = desired.updatedAtMillis,
+                      completedAtMillis = requireNotNull(desired.completedAtMillis)
+                  )
+                  if (updated != 1) {
+                      throw ProjectVaultOutboxConflict("project_vault_outbox_complete_conflict")
+                  }''',
+              "complete local conflict"
+          )
+          text = replace_once(
+              text,
+              '''                check(
+                      dao.archiveProjectVault(
+                          vaultId = operation.vaultId,
+                          status = STATUS_ARCHIVED,
+                          healthStatus = HEALTH_ARCHIVED,
+                          updatedAtMillis = desired.updatedAtMillis
+                      ) == 1
+                  ) { throw ProjectVaultOutboxConflict("project_vault_outbox_archive_conflict") }''',
+              '''                val updated = dao.archiveProjectVault(
+                      vaultId = operation.vaultId,
+                      status = STATUS_ARCHIVED,
+                      healthStatus = HEALTH_ARCHIVED,
+                      updatedAtMillis = desired.updatedAtMillis
+                  )
+                  if (updated != 1) {
+                      throw ProjectVaultOutboxConflict("project_vault_outbox_archive_conflict")
+                  }''',
+              "archive local conflict"
+          )
+          write(repo_path, text)
+
+          database_path = "app/src/main/java/com/morimil/app/data/local/MemoryOrganDatabase.kt"
+          text = read(database_path)
+          text = replace_once(
+              text,
+              "        ProjectVaultEntity::class,\n",
+              "        ProjectVaultEntity::class,\n        ProjectVaultOutboxEntity::class,\n",
+              "database entity"
+          )
+          text = replace_once(text, "    version = 7,", "    version = 8,", "database version")
+          text = replace_once(
+              text,
+              "    abstract fun memoryOrganDao(): MemoryOrganDao\n",
+              "    abstract fun memoryOrganDao(): MemoryOrganDao\n    abstract fun projectVaultOutboxDao(): ProjectVaultOutboxDao\n",
+              "database dao"
+          )
+          write(database_path, text)
+
+          encryption_path = "app/src/main/java/com/morimil/app/data/local/MemoryOrganDatabaseEncryption.kt"
+          text = read(encryption_path)
+          text = replace_once(
+              text,
+              "                MemoryOrganDatabase.MIGRATION_6_7\n",
+              "                MemoryOrganDatabase.MIGRATION_6_7,\n                MemoryOrganDatabaseMigrationV8.MIGRATION_7_8\n",
+              "encryption migration"
+          )
+          write(encryption_path, text)
+
+          container_path = "app/src/main/java/com/morimil/app/MorimilAppContainer.kt"
+          text = read(container_path)
+          text = replace_once(
+              text,
+              '''        ProjectVaultRepository(
+              organDatabase = organDatabase,
+              memoryRepository = memoryRepository
+          )''',
+              '''        ProjectVaultRepository(
+              organDatabase = organDatabase,
+              commitPort = canonicalProjectVaultCommitPort
+          )''',
+              "container project repository"
+          )
+          write(container_path, text)
+
+          gate_path = "app/src/main/java/com/morimil/app/MorimilAppContainerRuntimeGate.kt"
+          text = read(gate_path)
+          text = replace_once(
+              text,
+              '''        val convergence = legacyMemoryConvergenceCoordinator
+          val bootstrap = genesisUltraRuntimeBootstrapCoordinator''',
+              '''        val convergence = legacyMemoryConvergenceCoordinator
+          val projectVaultRecovery = projectVaultRepository
+          val bootstrap = genesisUltraRuntimeBootstrapCoordinator''',
+              "startup recovery binding"
+          )
+          text = replace_once(
+              text,
+              '''                convergence.converge(identity)
+                  bootstrap.bootstrap(identity)''',
+              '''                convergence.converge(identity)
+                  val vaultRecovery = projectVaultRecovery.recoverPendingOperations()
+                  check(vaultRecovery.blockedCount == 0) { "project_vault_outbox_blocked" }
+                  bootstrap.bootstrap(identity)''',
+              "startup recovery order"
+          )
+          write(gate_path, text)
+
+          migration_test_path = "app/src/androidTest/java/com/morimil/app/data/local/MemoryOrganDatabaseMigrationTest.kt"
+          text = read(migration_test_path)
+          text = text.replace("CurrentV7", "CurrentV8").replace("ToV7", "ToV8")
+          version_count = text.count("assertEquals(7, migrated.userVersion())")
+          if version_count != 3:
+              raise SystemExit(f"migration test versions: expected 3, found {version_count}")
+          text = text.replace("assertEquals(7, migrated.userVersion())", "assertEquals(8, migrated.userVersion())")
+          migration_count = text.count("MemoryOrganDatabase.MIGRATION_6_7")
+          if migration_count != 4:
+              raise SystemExit(f"migration lists: expected 4, found {migration_count}")
+          text = text.replace(
+              "MemoryOrganDatabase.MIGRATION_6_7",
+              "MemoryOrganDatabase.MIGRATION_6_7,\n                MemoryOrganDatabaseMigrationV8.MIGRATION_7_8"
+          )
+          write(migration_test_path, text)
+
+          Path(".github/workflows/f3-1-apply-outbox-wiring.yml").unlink()
+      - name: Validate and commit
+        run: |
+          git diff --check
+          test ! -e .github/workflows/f3-1-apply-outbox-wiring.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat(projects): wire recoverable ProjectVault outbox"
+          git push origin HEAD:plan-v2/f3-1-project-vault-transactional-outbox
