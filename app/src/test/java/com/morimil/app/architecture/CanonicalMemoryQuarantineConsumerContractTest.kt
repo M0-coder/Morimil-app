@@ -22,6 +22,18 @@ class CanonicalMemoryQuarantineConsumerContractTest {
     }
 
     @Test
+    fun storedSignatureTamperFixtureRemainsInTheInstrumentedSuite() {
+        val source = androidTestSource(
+            "com/morimil/app/data/genesis/ultra/GenesisUltraAtomicBirthStoreTest.kt"
+        ).readText()
+
+        assertTrue(source.contains("coordinatedStoredSignatureTamperIsRejectedDuringRecovery"))
+        assertTrue(source.contains("UPDATE genesis_ultra_memory_events"))
+        assertTrue(source.contains("signature_value"))
+        assertTrue(source.contains("canonical_memory_signature_invalid:1"))
+    }
+
+    @Test
     fun chatKeepsReasoningErrorsVisibleToTheGuardian() {
         val coordinator = productionSource(
             "com/morimil/app/ui/MorimilChatCoordinator.kt"
@@ -43,6 +55,17 @@ class CanonicalMemoryQuarantineConsumerContractTest {
             ?: error("Production source root not found")
         return File(root, relativePath).also { file ->
             require(file.isFile) { "Production source not found: $relativePath" }
+        }
+    }
+
+    private fun androidTestSource(relativePath: String): File {
+        val root = sequenceOf(
+            File("src/androidTest/java"),
+            File("app/src/androidTest/java")
+        ).firstOrNull(File::isDirectory)
+            ?: error("Android test source root not found")
+        return File(root, relativePath).also { file ->
+            require(file.isFile) { "Android test source not found: $relativePath" }
         }
     }
 
