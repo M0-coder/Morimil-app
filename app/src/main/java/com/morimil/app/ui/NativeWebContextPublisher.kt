@@ -1,55 +1,63 @@
 package com.morimil.app.ui
 
-import android.webkit.WebView
+import com.morimil.app.net.NetSourcePolicy
+import com.morimil.app.net.SafeWebDocument
+import com.morimil.app.net.SafeWebDocumentTextExtractor
 import com.morimil.app.web.NativeWebContextStore
 import com.morimil.app.web.NativeWebPageContext
 import com.morimil.app.web.NativeWebRequest
-import org.json.JSONArray
 
 internal object NativeWebContextPublisher {
-    fun capturePage(
-        webView: WebView,
+    fun captureDocument(
+        document: SafeWebDocument,
         request: NativeWebRequest,
-        selectedSource: NativeSelectedWebSource?,
-        onDone: (NativeWebCapture?) -> Unit
-    ) {
-        val script = """
-            (function() {
-                var title = document.title || '';
-                var text = document.body ? document.body.innerText : '';
-                var url = location.href || '';
-                return JSON.stringify({ title: title, url: url, text: text });
-            })();
-        """.trimIndent()
-        webView.evaluateJavascript(script) { raw ->
-            val capture = runCatching {
-                val jsonText = decodeJsString(raw)
-                val json = org.json.JSONObject(jsonText)
-                val text = json.optString("text").trim()
-                if (text.length < 120) return@runCatching null
+        selectedSource: NativeSelectedWebSource?
+    ): NativeWebCapture? {
+        val finalDecision = NetSourcePolicy.validateUrl(document.finalUrl)
+        if (!finalDecision.allowed) return null
 
-                val url = json.optString("url")
-                val title = json.optString("title")
-                val host = selectedSource?.host?.ifBlank { hostFromDisplayUrl(url) } ?: hostFromDisplayUrl(url)
-                val score = selectedSource?.score ?: 0
-                val confidence = NativeWebEvidenceRules.confidence(host = host, score = score, textChars = text.length)
-                NativeWebCapture(
-                    title = title,
+        return runCatching {
+            val extracted = SafeWebDocumentTextExtractor.extract(
+                document = document,
+                maxTextChars = MAX_DOCUMENT_CAPTURE_CHARS
+            )
+            val text = extracted.text.trim()
+            if (text.length < MIN_DOCUMENT_CAPTURE_CHARS) return@runCatching null
+
+            val url = document.finalUrl
+            val finalHost = hostFromDisplayUrl(url)
+            val effectiveSource = selectedSource?.let { source ->
+                val hostChanged = source.host != finalHost
+                source.copy(
                     url = url,
-                    text = text,
-                    textChars = text.length,
-                    source = selectedSource,
-                    confidence = confidence,
-                    evidenceGate = webEvidenceGateText(
-                        request = request,
-                        selectedSource = selectedSource,
-                        url = url,
-                        textChars = text.length
-                    )
+                    host = finalHost,
+                    score = if (hostChanged) 0 else source.score,
+                    reason = if (hostChanged) {
+                        "${source.reason}; final_redirect_host_changed=${source.host}->$finalHost"
+                    } else {
+                        source.reason
+                    }.take(MAX_SOURCE_REASON_CHARS)
                 )
-            }.getOrNull()
-            onDone(capture)
-        }
+            }
+            val title = extracted.title.ifBlank { effectiveSource?.title.orEmpty() }.take(MAX_TITLE_CHARS)
+            val host = effectiveSource?.host ?: finalHost
+            val score = effectiveSource?.score ?: 0
+            val confidence = NativeWebEvidenceRules.confidence(host = host, score = score, textChars = text.length)
+            NativeWebCapture(
+                title = title,
+                url = url,
+                text = text,
+                textChars = text.length,
+                source = effectiveSource,
+                confidence = confidence,
+                evidenceGate = webEvidenceGateText(
+                    request = request,
+                    selectedSource = effectiveSource,
+                    url = url,
+                    textChars = text.length
+                )
+            )
+        }.getOrNull()
     }
 
     fun publishWebContext(
@@ -159,11 +167,10 @@ internal object NativeWebContextPublisher {
             .removeSuffix("/")
     }
 
-    private fun decodeJsString(raw: String?): String {
-        val value = raw?.takeIf { it != "null" } ?: return ""
-        return JSONArray("[$value]").getString(0)
-    }
-
+    private const val MIN_DOCUMENT_CAPTURE_CHARS = 120
+    private const val MAX_DOCUMENT_CAPTURE_CHARS = 40_000
+    private const val MAX_TITLE_CHARS = 500
+    private const val MAX_SOURCE_REASON_CHARS = 600
     private const val MAX_PRIMARY_CAPTURED_TEXT_CHARS = 7_000
     private const val MAX_SECONDARY_CAPTURED_TEXT_CHARS = 3_000
     private const val MAX_EVIDENCE_GATE_CHARS = 1_200
