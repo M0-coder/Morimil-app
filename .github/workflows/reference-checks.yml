@@ -40,6 +40,8 @@ jobs:
 
       - name: Validate model-artifact and benchmark contracts
         run: |
+          python -m unittest discover -s tools/governance -p 'test_*.py'
+          python tools/governance/verify_version_policy.py check
           python -m unittest discover -s tools/model-artifacts -p 'test_*.py'
           python -m unittest discover -s tools/benchmarks -p 'test_*.py'
           python tools/benchmarks/morimil_deliberative_benchmark_v0.py check

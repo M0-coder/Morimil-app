@@ -176,7 +176,7 @@ android {
         minSdk = 26
         targetSdk = 35
         versionCode = 8
-        versionName = "0.8.0-phase5d"
+        versionName = "0.3.1-prealpha.plan-v3"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

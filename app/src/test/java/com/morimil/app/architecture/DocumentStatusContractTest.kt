@@ -50,6 +50,8 @@ class DocumentStatusContractTest {
         }
         assertEquals("CURRENT", statuses["README.md"])
         assertEquals("CURRENT", statuses["docs/DOCUMENT_STATUS_POLICY.md"])
+        assertEquals("CURRENT", statuses["docs/CURRENT_RUNTIME_CONTRACT.md"])
+        assertEquals("CURRENT", statuses["docs/VERSION_POLICY.md"])
     }
 
     @Test
