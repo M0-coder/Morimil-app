@@ -25,20 +25,24 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
+          import re
 
           path = Path('app/src/main/java/com/morimil/app/MorimilAppContainer.kt')
           source = path.read_text()
-          old = '''            contextReader = RepositoryReasoningContextReader(
-                memoryRepository = memoryRepository,
-                memoryOrganRepository = memoryOrganRepository
-            ),'''
-          new = '''            contextReader = RepositoryReasoningContextReader(
+          pattern = re.compile(
+              r'contextReader\s*=\s*RepositoryReasoningContextReader\(\s*'
+              r'memoryRepository\s*=\s*memoryRepository,\s*'
+              r'memoryOrganRepository\s*=\s*memoryOrganRepository\s*'
+              r'\),'
+          )
+          replacement = '''contextReader = RepositoryReasoningContextReader(
                 canonicalMemoryRepository = canonicalMemoryRepository,
                 memoryOrganRepository = memoryOrganRepository
             ),'''
-          if source.count(old) != 1:
-              raise SystemExit(f'expected one legacy reasoning reader wiring, found {source.count(old)}')
-          path.write_text(source.replace(old, new, 1))
+          updated, count = pattern.subn(replacement, source, count=1)
+          if count != 1:
+              raise SystemExit(f'expected one legacy reasoning reader wiring, found {count}')
+          path.write_text(updated)
           PY
           git diff --check
 
