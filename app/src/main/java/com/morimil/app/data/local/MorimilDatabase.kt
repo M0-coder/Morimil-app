@@ -20,9 +20,11 @@ import androidx.room.RoomDatabase
         GenesisUltraBirthJournalEntity::class,
         GenesisUltraBirthAuthorizationEntity::class,
         GenesisUltraMemoryEventEntity::class,
-        GenesisUltraMemoryPayloadEntity::class
+        GenesisUltraMemoryPayloadEntity::class,
+        LegacyMemoryConvergenceEntity::class,
+        LegacyMemoryImportEntity::class
     ],
-    version = 14,
+    version = 15,
     exportSchema = true
 )
 abstract class MorimilDatabase : RoomDatabase() {
@@ -31,6 +33,7 @@ abstract class MorimilDatabase : RoomDatabase() {
     abstract fun genesisUltraBirthDao(): GenesisUltraBirthDao
     abstract fun genesisUltraMemoryDao(): GenesisUltraMemoryDao
     abstract fun genesisUltraMemoryPayloadDao(): GenesisUltraMemoryPayloadDao
+    abstract fun legacyMemoryConvergenceDao(): LegacyMemoryConvergenceDao
 
     companion object {
         @Volatile
@@ -49,6 +52,7 @@ abstract class MorimilDatabase : RoomDatabase() {
         val MIGRATION_11_12 = MorimilDatabaseMigrations.MIGRATION_11_12
         val MIGRATION_12_13 = MorimilDatabaseMigrations.MIGRATION_12_13
         val MIGRATION_13_14 = MorimilDatabaseMigrationV14.MIGRATION_13_14
+        val MIGRATION_14_15 = MorimilDatabaseMigrationV15.MIGRATION_14_15
 
         fun getInstance(context: Context): MorimilDatabase {
             return instance ?: synchronized(this) {
