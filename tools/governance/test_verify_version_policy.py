@@ -59,7 +59,7 @@ class VersionPolicyTest(unittest.TestCase):
 
     def test_rejects_undocumented_policy(self) -> None:
         with self.assertRaisesRegex(
-            MODULE.VersionPolicyErrop,
+            MODULE.VersionPolicyError,
             "missing required declarations",
         ):
             MODULE.validate(
