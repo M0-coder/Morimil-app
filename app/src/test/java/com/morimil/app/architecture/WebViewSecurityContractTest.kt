@@ -2,6 +2,7 @@ package com.morimil.app.architecture
 
 import java.io.File
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -50,6 +51,29 @@ class WebViewSecurityContractTest {
         )
     }
 
+    @Test
+    fun isolatedReadersDoNotExecuteJavascript() {
+        val files = productionKotlinFiles()
+        val screen = requireNotNull(files[ISOLATED_BROWSER_SCREEN])
+        val runtime = requireNotNull(files[ISOLATED_BROWSER_RUNTIME])
+
+        assertTrue(
+            "$ISOLATED_BROWSER_SCREEN must explicitly disable JavaScript",
+            "settings.javaScriptEnabled = false" in screen
+        )
+        listOf(screen, runtime).forEach { source ->
+            assertFalse("Isolated readers must not evaluate JavaScript", "evaluateJavascript" in source)
+            assertFalse(
+                "The temporary issue-126 JavaScript marker must not return",
+                "TEMPORARY_ISOLATED_READER_ISSUE_126" in source
+            )
+        }
+        assertFalse(
+            "$ISOLATED_BROWSER_RUNTIME must not create a WebView",
+            Regex("""\bWebView\s*\(""").containsMatchIn(runtime)
+        )
+    }
+
     private fun productionKotlinFiles(): Map<String, String> {
         val root = repositoryRoot()
         val sourceRoot = File(root, "app/src/main/java")
@@ -84,14 +108,14 @@ class WebViewSecurityContractTest {
         )
 
         val EXPLICIT_JAVASCRIPT_BOUNDARIES = mapOf(
-            "app/src/main/java/com/morimil/app/net/NativeBrowserRuntime.kt" to
-                "WEBVIEW_JS_BOUNDARY: TEMPORARY_ISOLATED_READER_ISSUE_126",
             "app/src/main/java/com/morimil/app/ui/MorimilCanvasScreen.kt" to
                 "WEBVIEW_JS_BOUNDARY: LOCAL_CANVAS_ISSUE_127",
-            "app/src/main/java/com/morimil/app/ui/NativeBrowserScreen.kt" to
-                "WEBVIEW_JS_BOUNDARY: TEMPORARY_ISOLATED_READER_ISSUE_126",
             "app/src/main/java/com/morimil/app/ui/NativeWebBridgePanel.kt" to
                 "WEBVIEW_JS_BOUNDARY: TEMPORARY_REMOTE_RESEARCH_ISSUE_125"
         )
+        const val ISOLATED_BROWSER_SCREEN =
+            "app/src/main/java/com/morimil/app/ui/NativeBrowserScreen.kt"
+        const val ISOLATED_BROWSER_RUNTIME =
+            "app/src/main/java/com/morimil/app/net/NativeBrowserRuntime.kt"
     }
 }
