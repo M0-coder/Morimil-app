@@ -1,0 +1,79 @@
+package com.morimil.app.architecture
+
+import java.io.File
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class CanonicalMemoryQuarantineConsumerContractTest {
+    @Test
+    fun productionReasoningReaderQuarantinesBeforeReturningVerifiedContext() {
+        val source = productionSource(
+            "com/morimil/app/reasoning/ReasoningCapabilities.kt"
+        ).readText()
+        val executable = executableSource(source)
+
+        assertTrue(executable.contains("CanonicalMemoryQuarantineStore.verify("))
+        assertTrue(executable.contains("canonicalMemoryRepository.buildVerifiedContext("))
+        assertTrue(
+            executable.indexOf("CanonicalMemoryQuarantineStore.verify(") <
+                executable.indexOf("canonicalMemoryRepository.buildVerifiedContext(")
+        )
+    }
+
+    @Test
+    fun storedSignatureTamperFixtureRemainsInTheInstrumentedSuite() {
+        val source = androidTestSource(
+            "com/morimil/app/data/genesis/ultra/GenesisUltraAtomicBirthStoreTest.kt"
+        ).readText()
+
+        assertTrue(source.contains("coordinatedStoredSignatureTamperIsRejectedDuringRecovery"))
+        assertTrue(source.contains("UPDATE genesis_ultra_memory_events"))
+        assertTrue(source.contains("signature_value"))
+        assertTrue(source.contains("canonical_memory_signature_invalid:1"))
+    }
+
+    @Test
+    fun chatKeepsReasoningErrorsVisibleToTheGuardian() {
+        val coordinator = productionSource(
+            "com/morimil/app/ui/MorimilChatCoordinator.kt"
+        ).readText()
+        val screen = productionSource(
+            "com/morimil/app/ui/ChatScreenPolished.kt"
+        ).readText()
+
+        assertTrue(coordinator.contains("_chatError.value = result.errorMessage"))
+        assertTrue(screen.contains("uiState.error?.let"))
+        assertFalse(screen.contains("canonical_memory_signature_invalid"))
+    }
+
+    private fun productionSource(relativePath: String): File {
+        val root = sequenceOf(
+            File("src/main/java"),
+            File("app/src/main/java")
+        ).firstOrNull(File::isDirectory)
+            ?: error("Production source root not found")
+        return File(root, relativePath).also { file ->
+            require(file.isFile) { "Production source not found: $relativePath" }
+        }
+    }
+
+    private fun androidTestSource(relativePath: String): File {
+        val root = sequenceOf(
+            File("src/androidTest/java"),
+            File("app/src/androidTest/java")
+        ).firstOrNull(File::isDirectory)
+            ?: error("Android test source root not found")
+        return File(root, relativePath).also { file ->
+            require(file.isFile) { "Android test source not found: $relativePath" }
+        }
+    }
+
+    private fun executableSource(source: String): String {
+        return source
+            .replace(Regex("\"\"\"[\\s\\S]*?\"\"\""), "")
+            .replace(Regex("\"(?:\\\\.|[^\"\\\\])*\""), "")
+            .replace(Regex("/\\*[\\s\\S]*?\\*/"), "")
+            .replace(Regex("//.*"), "")
+    }
+}
