@@ -568,12 +568,19 @@ private fun NativeWebStatusStrip(
 }
 
 private fun WebView.configureAsDesktopBrowser() {
+    // WEBVIEW_JS_BOUNDARY: TEMPORARY_REMOTE_RESEARCH_ISSUE_125
     settings.javaScriptEnabled = true
+    settings.javaScriptCanOpenWindowsAutomatically = false
     settings.domStorageEnabled = true
     settings.cacheMode = WebSettings.LOAD_DEFAULT
     settings.allowFileAccess = false
     settings.allowContentAccess = false
+    settings.allowFileAccessFromFileURLs = false
+    settings.allowUniversalAccessFromFileURLs = false
     settings.setSupportMultipleWindows(false)
+    settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
+    settings.mediaPlaybackRequiresUserGesture = true
+    settings.safeBrowsingEnabled = true
     settings.useWideViewPort = true
     settings.loadWithOverviewMode = true
     settings.builtInZoomControls = false
