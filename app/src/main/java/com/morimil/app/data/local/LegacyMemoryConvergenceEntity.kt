@@ -8,6 +8,7 @@ import androidx.room.PrimaryKey
 data class LegacyMemoryConvergenceEntity(
     @PrimaryKey
     val slotId: String,
+    val instanceId: String,
     val status: String,
     val sourceEventCount: Int,
     val acceptedEventCount: Int,
