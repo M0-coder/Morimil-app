@@ -32,19 +32,24 @@ internal data class CanonicalMemoryAppendCommand(
 
 internal class CanonicalMemoryRecord internal constructor(
     val event: GenesisUltraFirstMemoryEvent,
-    contentBytes: ByteArray,
-    provenanceBytes: ByteArray,
-    val provenanceType: String
+    contentBytes: ByteArray?,
+    provenanceBytes: ByteArray?,
+    val provenanceType: String,
+    private val metadataSummary: String? = null
 ) {
-    private val content = contentBytes.copyOf()
-    private val provenance = provenanceBytes.copyOf()
+    private val content = contentBytes?.copyOf()
+    private val provenance = provenanceBytes?.copyOf()
+
+    val hasPayload: Boolean
+        get() = content != null && provenance != null
 
     val textContent: String
-        get() = decodeUtf8Strict(content)
+        get() = content?.let(::decodeUtf8Strict)
+            ?: requireNotNull(metadataSummary) { "canonical_memory_record_content_unavailable" }
 
-    fun copyContentBytes(): ByteArray = content.copyOf()
+    fun copyContentBytes(): ByteArray? = content?.copyOf()
 
-    fun copyProvenanceBytes(): ByteArray = provenance.copyOf()
+    fun copyProvenanceBytes(): ByteArray? = provenance?.copyOf()
 }
 
 internal data class CanonicalMemorySnapshot(
@@ -164,17 +169,37 @@ internal class CanonicalMemoryRepository private constructor(
         require(payloadDao.countAll() == payloadDao.countForInstance(session.identity.instanceId)) {
             "canonical_memory_foreign_instance_payloads"
         }
-        require(payloads.size == events.size) {
-            "canonical_memory_event_payload_count_mismatch"
+        val eventHashes = events.map { event -> event.eventHash }.toSet()
+        require(payloads.all { payload -> payload.eventHash in eventHashes }) {
+            "canonical_memory_payload_without_verified_event"
         }
-        val records = events.zip(payloads).map { (event, payload) ->
-            requirePayloadMatchesEvent(payload, event)
-            CanonicalMemoryRecord(
-                event = event,
-                contentBytes = payload.contentBytes,
-                provenanceBytes = payload.provenanceBytes,
-                provenanceType = payload.provenanceType
-            )
+        val payloadByEventHash = payloads.associateBy { payload -> payload.eventHash }
+        require(payloadByEventHash.size == payloads.size) {
+            "canonical_memory_payload_event_hash_duplicate"
+        }
+        val records = events.map { event ->
+            val payload = payloadByEventHash[event.eventHash]
+            if (payload != null) {
+                requirePayloadMatchesEvent(payload, event)
+                CanonicalMemoryRecord(
+                    event = event,
+                    contentBytes = payload.contentBytes,
+                    provenanceBytes = payload.provenanceBytes,
+                    provenanceType = payload.provenanceType
+                )
+            } else {
+                requireActivationMetadataEvent(event, session.identity)
+                CanonicalMemoryRecord(
+                    event = event,
+                    contentBytes = null,
+                    provenanceBytes = null,
+                    provenanceType = METADATA_ONLY,
+                    metadataSummary =
+                        "Genesis Ultra activation confirmed; " +
+                            "authorization_digest=${event.contentDigest}; " +
+                            "receipt_digest=${event.provenanceDigest}."
+                )
+            }
         }
         return CanonicalMemorySnapshot(
             instanceId = session.identity.instanceId,
@@ -195,7 +220,7 @@ internal class CanonicalMemoryRepository private constructor(
             appendLine("birth_root_sequence=${snapshot.birthRoot.sequence}")
             appendLine("birth_root_hash=${snapshot.birthRoot.eventHash}")
             appendLine("post_birth_events=${snapshot.postBirthEventCount}")
-            appendLine("verification=full_chain_and_payload_digests_verified")
+            appendLine("verification=full_chain_payload_digests_and_ceremony_links_verified")
             appendLine()
             appendLine("RELEVANT VERIFIED EVENTS:")
             if (selected.isEmpty()) {
@@ -204,7 +229,8 @@ internal class CanonicalMemoryRepository private constructor(
                 selected.sortedBy { record -> record.event.sequence }.forEach { record ->
                     appendLine(
                         "- sequence=${record.event.sequence}; type=${record.event.eventType}; " +
-                            "actor=${record.event.actor}; observed_at=${record.event.observedAt}"
+                            "actor=${record.event.actor}; observed_at=${record.event.observedAt}; " +
+                            "payload=${if (record.hasPayload) "present" else "metadata_only"}"
                     )
                     appendLine("  ${record.textContent.replace('\n', ' ').take(MAX_CONTEXT_EVENT_CHARS)}")
                 }
@@ -238,6 +264,21 @@ internal class CanonicalMemoryRepository private constructor(
                 bodyRawPublicKey = root.copyRawPublicKey()
             )
         )
+    }
+
+    private fun requireActivationMetadataEvent(
+        event: GenesisUltraFirstMemoryEvent,
+        identity: GenesisUltraRuntimeIdentity
+    ) {
+        require(
+            event.sequence == 1L &&
+                event.eventType == ACTIVATION_EVENT_TYPE &&
+                event.actor == ACTIVATION_ACTOR &&
+                event.contentType == ACTIVATION_CONTENT_TYPE &&
+                event.contentDigest == identity.authorization.authorizationDigest &&
+                event.provenanceDigest == identity.authorization.receiptDigest &&
+                event.privacy == PRIVATE_LOCAL
+        ) { "canonical_memory_payload_missing:${event.sequence}" }
     }
 
     private fun requirePayloadMatchesEvent(
@@ -345,6 +386,11 @@ internal class CanonicalMemoryRepository private constructor(
         private const val PRIVATE_LOCAL = "private_local"
         private const val PROVENANCE_TYPE = "application/json"
         private const val PROVENANCE_SCHEMA = "morimil.canonical_memory.provenance.v1"
+        private const val METADATA_ONLY = "metadata-only"
+        private const val ACTIVATION_EVENT_TYPE = "instance.activation.confirmed"
+        private const val ACTIVATION_ACTOR = "host_confirmed_system"
+        private const val ACTIVATION_CONTENT_TYPE =
+            "application/vnd.genesis.atomic-birth-authorization+json"
         private const val MAX_CONTENT_BYTES = 64 * 1024
         private const val MAX_PROVENANCE_BYTES = 16 * 1024
         private const val DEFAULT_CONTEXT_LIMIT = 12
