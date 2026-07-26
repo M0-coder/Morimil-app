@@ -1,10 +1,26 @@
 package com.morimil.app
 
+import com.morimil.app.runtime.GenesisUltraRuntimeBootstrapCoordinator
 import com.morimil.app.runtime.GenesisUltraRuntimeStartupGate
 
-/** Stateless startup gate backed by the canonical verified Genesis Ultra identity source. */
+/** Stateless canonical bootstrap backed only by verified Genesis Ultra identity. */
+internal val MorimilAppContainer.genesisUltraRuntimeBootstrapCoordinator:
+    GenesisUltraRuntimeBootstrapCoordinator
+    get() = GenesisUltraRuntimeBootstrapCoordinator.production(
+        memoryDatabase = memoryDatabase,
+        organDatabase = organDatabase
+    )
+
+/** Startup gate backed by the canonical identity source and idempotent Ultra bootstrap. */
 internal val MorimilAppContainer.genesisUltraRuntimeStartupGate:
     GenesisUltraRuntimeStartupGate
-    get() = GenesisUltraRuntimeStartupGate.production(
-        identityRepository = genesisUltraRuntimeIdentityRepository
-    )
+    get() {
+        val bootstrap = genesisUltraRuntimeBootstrapCoordinator
+        return GenesisUltraRuntimeStartupGate.production(
+            identityRepository = genesisUltraRuntimeIdentityRepository,
+            bootstrapVerifiedIdentity = { identity ->
+                bootstrap.bootstrap(identity)
+                Unit
+            }
+        )
+    }
