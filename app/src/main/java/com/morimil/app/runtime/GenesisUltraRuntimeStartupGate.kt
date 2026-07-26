@@ -10,10 +10,12 @@ import com.morimil.app.data.genesis.ultra.GenesisUltraRuntimeIdentityRepository
  *
  * A durable COMMITTED marker is necessary but not sufficient. The full identity must also be
  * reconstructed and cryptographically verified against the local Body and Guardian anchors.
+ * The post-verification bootstrap receives only that verified projection.
  */
 internal class GenesisUltraRuntimeStartupGate private constructor(
     private val readState: suspend () -> GenesisUltraPersistedBirthState,
-    private val readCommittedIdentity: suspend () -> GenesisUltraRuntimeIdentity?
+    private val readCommittedIdentity: suspend () -> GenesisUltraRuntimeIdentity?,
+    private val bootstrapVerifiedIdentity: suspend (GenesisUltraRuntimeIdentity) -> Unit
 ) {
     suspend fun requireReady(): GenesisUltraRuntimeIdentity {
         when (readState()) {
@@ -41,26 +43,32 @@ internal class GenesisUltraRuntimeStartupGate private constructor(
         require(identity.instanceId.isNotBlank() && identity.identityDigest.isNotBlank()) {
             "genesis_ultra_runtime_identity_projection_invalid"
         }
+
+        bootstrapVerifiedIdentity(identity)
         return identity
     }
 
     internal companion object {
         fun production(
-            identityRepository: GenesisUltraRuntimeIdentityRepository
+            identityRepository: GenesisUltraRuntimeIdentityRepository,
+            bootstrapVerifiedIdentity: suspend (GenesisUltraRuntimeIdentity) -> Unit = {}
         ): GenesisUltraRuntimeStartupGate {
             return GenesisUltraRuntimeStartupGate(
                 readState = identityRepository::readState,
-                readCommittedIdentity = identityRepository::readCommittedIdentity
+                readCommittedIdentity = identityRepository::readCommittedIdentity,
+                bootstrapVerifiedIdentity = bootstrapVerifiedIdentity
             )
         }
 
         fun forTest(
             readState: suspend () -> GenesisUltraPersistedBirthState,
-            readCommittedIdentity: suspend () -> GenesisUltraRuntimeIdentity?
+            readCommittedIdentity: suspend () -> GenesisUltraRuntimeIdentity?,
+            bootstrapVerifiedIdentity: suspend (GenesisUltraRuntimeIdentity) -> Unit = {}
         ): GenesisUltraRuntimeStartupGate {
             return GenesisUltraRuntimeStartupGate(
                 readState = readState,
-                readCommittedIdentity = readCommittedIdentity
+                readCommittedIdentity = readCommittedIdentity,
+                bootstrapVerifiedIdentity = bootstrapVerifiedIdentity
             )
         }
     }
