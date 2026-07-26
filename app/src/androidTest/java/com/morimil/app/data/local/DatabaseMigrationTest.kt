@@ -18,7 +18,7 @@ class DatabaseMigrationTest {
     )
 
     @Test
-    fun morimilDatabaseMigratesFrom7To13WithMemoryEventDefaults() {
+    fun morimilDatabaseMigratesFrom7To14WithMemoryDefaultsAndCanonicalPayloadStore() {
         val source = helper.createDatabase(TEST_DATABASE, 7)
         try {
             source.execSQL(
@@ -62,24 +62,34 @@ class DatabaseMigrationTest {
 
         val migrated = helper.runMigrationsAndValidate(
             TEST_DATABASE,
-            13,
+            14,
             true,
             MorimilDatabase.MIGRATION_7_8,
             MorimilDatabase.MIGRATION_8_9,
             MorimilDatabase.MIGRATION_9_10,
             MorimilDatabase.MIGRATION_10_11,
             MorimilDatabase.MIGRATION_11_12,
-            MorimilDatabase.MIGRATION_12_13
+            MorimilDatabase.MIGRATION_12_13,
+            MorimilDatabase.MIGRATION_13_14
         )
         try {
-            assertEquals(13, migrated.userVersion())
+            assertEquals(14, migrated.userVersion())
             assertTrue(migrated.tableNames().contains("genesis_ultra_birth_authorization"))
+            assertTrue(migrated.tableNames().contains("genesis_ultra_memory_payloads"))
             assertTrue(
                 migrated.indexNames("genesis_ultra_birth_authorization").containsAll(
                     setOf(
                         "index_genesis_ultra_birth_authorization_candidateDigest",
                         "index_genesis_ultra_birth_authorization_consentDigest",
                         "index_genesis_ultra_birth_authorization_authorizationDigest"
+                    )
+                )
+            )
+            assertTrue(
+                migrated.indexNames("genesis_ultra_memory_payloads").containsAll(
+                    setOf(
+                        "index_genesis_ultra_memory_payloads_instanceId_sequence",
+                        "index_genesis_ultra_memory_payloads_contentDigest"
                     )
                 )
             )
@@ -94,6 +104,13 @@ class DatabaseMigrationTest {
                 assertEquals(70, cursor.getInt(3))
                 assertEquals(0, cursor.getInt(4))
             }
+            assertEquals(
+                0,
+                migrated.query("SELECT COUNT(*) FROM genesis_ultra_memory_payloads").use { cursor ->
+                    assertTrue(cursor.moveToFirst())
+                    cursor.getInt(0)
+                }
+            )
         } finally {
             migrated.close()
         }
@@ -124,6 +141,6 @@ class DatabaseMigrationTest {
     }
 
     private companion object {
-        const val TEST_DATABASE = "morimil-v7-v13-focused-migration-test"
+        const val TEST_DATABASE = "morimil-v7-v14-focused-migration-test"
     }
 }
