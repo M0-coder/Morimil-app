@@ -167,6 +167,7 @@ fun NativeBrowserScreen() {
             factory = { context ->
                 WebView(context).apply {
                     activeWebView = this
+                    // WEBVIEW_JS_BOUNDARY: TEMPORARY_ISOLATED_READER_ISSUE_126
                     settings.javaScriptEnabled = true
                     settings.domStorageEnabled = false
                     settings.cacheMode = WebSettings.LOAD_NO_CACHE
@@ -175,6 +176,8 @@ fun NativeBrowserScreen() {
                     settings.blockNetworkLoads = true
                     settings.allowFileAccess = false
                     settings.allowContentAccess = false
+                    settings.allowFileAccessFromFileURLs = false
+                    settings.allowUniversalAccessFromFileURLs = false
                     settings.javaScriptCanOpenWindowsAutomatically = false
                     settings.setSupportMultipleWindows(false)
                     settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
