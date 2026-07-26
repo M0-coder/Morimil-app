@@ -1,6 +1,6 @@
 package com.morimil.app.data.repository
 
-internal data class ProjectVaultCommitCommand(
+data class ProjectVaultCommitCommand(
     val operationId: String,
     val vaultId: String,
     val operationType: String,
@@ -27,7 +27,7 @@ internal data class ProjectVaultCommitCommand(
     }
 }
 
-internal data class ProjectVaultCommitReceipt(
+data class ProjectVaultCommitReceipt(
     val eventId: String,
     val eventHash: String,
     val sequence: Long,
@@ -40,6 +40,6 @@ internal data class ProjectVaultCommitReceipt(
     }
 }
 
-internal interface ProjectVaultCommitPort {
+interface ProjectVaultCommitPort {
     suspend fun ensureCommitted(command: ProjectVaultCommitCommand): ProjectVaultCommitReceipt
 }
