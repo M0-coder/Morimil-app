@@ -24,9 +24,23 @@ jobs:
           java-version: '17'
           cache: gradle
       - name: Generate and validate schema
+        shell: bash
         run: |
+          set +e
           chmod +x ./gradlew
-          ./gradlew :app:kspDebugKotlin --stacktrace
+          ./gradlew :app:kspDebugKotlin --stacktrace > /tmp/f3-1-schema.log 2>&1
+          status=$?
+          if [ "$status" -ne 0 ]; then
+            tail -n 220 /tmp/f3-1-schema.log > .f3-1-schema-error.txt
+            rm -f .github/workflows/f3-1-export-room-schema.yml
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add -A
+            git commit -m "chore(f3.1): publish schema compile diagnostic"
+            git push origin HEAD:plan-v2/f3-1-project-vault-transactional-outbox
+            exit "$status"
+          fi
+          set -e
           schema='app/schemas/com.morimil.app.data.local.MemoryOrganDatabase/8.json'
           test -s "$schema"
           python - <<'PY'
@@ -40,6 +54,7 @@ jobs:
           PY
           changes=$(git status --porcelain -- app/schemas | awk '{$1=""; sub(/^ /,""); print}' | sort)
           test "$changes" = "$schema"
+          rm -f .f3-1-schema-error.txt
           rm -f .github/workflows/f3-1-export-room-schema.yml
           git diff --check
       - name: Commit schema and remove workflow
