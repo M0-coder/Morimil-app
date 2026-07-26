@@ -11,14 +11,16 @@ internal val MorimilAppContainer.genesisUltraRuntimeBootstrapCoordinator:
         organDatabase = organDatabase
     )
 
-/** Startup gate backed by the canonical identity source and idempotent Ultra bootstrap. */
+/** Startup gate backed by canonical identity, memory convergence and Ultra bootstrap. */
 internal val MorimilAppContainer.genesisUltraRuntimeStartupGate:
     GenesisUltraRuntimeStartupGate
     get() {
+        val convergence = legacyMemoryConvergenceCoordinator
         val bootstrap = genesisUltraRuntimeBootstrapCoordinator
         return GenesisUltraRuntimeStartupGate.production(
             identityRepository = genesisUltraRuntimeIdentityRepository,
             bootstrapVerifiedIdentity = { identity ->
+                convergence.converge(identity)
                 bootstrap.bootstrap(identity)
                 Unit
             }
