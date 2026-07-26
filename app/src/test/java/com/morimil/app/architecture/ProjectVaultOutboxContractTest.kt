@@ -46,18 +46,23 @@ class ProjectVaultOutboxContractTest {
     }
 
     @Test
-    fun memoryOrganDatabaseRegistersVersionEightOutbox() {
+    fun memoryOrganDatabaseRegistersAndExportsVersionEightOutbox() {
         val database = productionFile(
             "com/morimil/app/data/local/MemoryOrganDatabase.kt"
         ).readText()
         val encryption = productionFile(
             "com/morimil/app/data/local/MemoryOrganDatabaseEncryption.kt"
         ).readText()
+        val schema = schemaFile(
+            "com.morimil.app.data.local.MemoryOrganDatabase/8.json"
+        ).readText()
 
         assertTrue(database.contains("ProjectVaultOutboxEntity::class"))
         assertTrue(database.contains("version = 8"))
         assertTrue(database.contains("projectVaultOutboxDao"))
         assertTrue(encryption.contains("MemoryOrganDatabaseMigrationV8.MIGRATION_7_8"))
+        assertTrue(schema.contains("\"version\": 8"))
+        assertTrue(schema.contains("\"tableName\": \"project_vault_outbox\""))
     }
 
     private fun productionFile(relativePath: String): File {
@@ -72,5 +77,13 @@ class ProjectVaultOutboxContractTest {
             File("app/src/main/java")
         ).firstOrNull(File::isDirectory)
             ?: error("Production source root not found")
+    }
+
+    private fun schemaFile(relativePath: String): File {
+        return sequenceOf(
+            File("schemas", relativePath),
+            File("app/schemas", relativePath)
+        ).firstOrNull(File::isFile)
+            ?: error("Exported schema not found: $relativePath")
     }
 }
