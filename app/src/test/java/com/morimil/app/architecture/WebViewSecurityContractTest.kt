@@ -74,6 +74,21 @@ class WebViewSecurityContractTest {
         )
     }
 
+    @Test
+    fun remoteResearchBridgeDoesNotCreateOrScriptAWebView() {
+        val bridge = requireNotNull(productionKotlinFiles()[REMOTE_RESEARCH_BRIDGE])
+
+        assertFalse(
+            "$REMOTE_RESEARCH_BRIDGE must not create a WebView",
+            Regex("""\bWebView\s*\(""").containsMatchIn(bridge)
+        )
+        assertFalse("Remote research must not evaluate JavaScript", "evaluateJavascript" in bridge)
+        assertFalse(
+            "The temporary issue-125 JavaScript marker must not return",
+            "TEMPORARY_REMOTE_RESEARCH_ISSUE_125" in bridge
+        )
+    }
+
     private fun productionKotlinFiles(): Map<String, String> {
         val root = repositoryRoot()
         val sourceRoot = File(root, "app/src/main/java")
@@ -109,13 +124,13 @@ class WebViewSecurityContractTest {
 
         val EXPLICIT_JAVASCRIPT_BOUNDARIES = mapOf(
             "app/src/main/java/com/morimil/app/ui/MorimilCanvasScreen.kt" to
-                "WEBVIEW_JS_BOUNDARY: LOCAL_CANVAS_ISSUE_127",
-            "app/src/main/java/com/morimil/app/ui/NativeWebBridgePanel.kt" to
-                "WEBVIEW_JS_BOUNDARY: TEMPORARY_REMOTE_RESEARCH_ISSUE_125"
+                "WEBVIEW_JS_BOUNDARY: LOCAL_CANVAS_ISSUE_127"
         )
         const val ISOLATED_BROWSER_SCREEN =
             "app/src/main/java/com/morimil/app/ui/NativeBrowserScreen.kt"
         const val ISOLATED_BROWSER_RUNTIME =
             "app/src/main/java/com/morimil/app/net/NativeBrowserRuntime.kt"
+        const val REMOTE_RESEARCH_BRIDGE =
+            "app/src/main/java/com/morimil/app/ui/NativeWebBridgePanel.kt"
     }
 }
