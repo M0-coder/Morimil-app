@@ -21,10 +21,7 @@ internal data class CanonicalMemoryQuarantineDiagnostic(
 internal class CanonicalMemoryQuarantinedException internal constructor(
     val diagnostic: CanonicalMemoryQuarantineDiagnostic,
     cause: Throwable
-) : IllegalStateException(
-    "canonical_memory_quarantined:${diagnostic.code}:${diagnostic.sequence ?: "unknown"}",
-    cause
-)
+) : IllegalStateException(diagnostic.visibleMessage(), cause)
 
 /**
  * Process-local projection of a durable integrity failure.
