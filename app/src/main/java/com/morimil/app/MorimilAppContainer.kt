@@ -275,9 +275,9 @@ class MorimilAppContainer(context: Context) {
     val reasoningKernel: ReasoningKernel by lazy {
         ReasoningKernel(
             contextReader = RepositoryReasoningContextReader(
-                memoryRepository = memoryRepository,
-                memoryOrganRepository = memoryOrganRepository
-            ),
+      canonicalMemoryRepository = canonicalMemoryRepository,
+      memoryOrganRepository = memoryOrganRepository
+  ),
             intrinsicCoordinator = MorimilNormalIntrinsicRuntimeV0.createCoordinator(),
             temporaryExternalProvider = ReasoningClientTemporaryExternalProvider(reasoningClient)
         )
