@@ -5,6 +5,7 @@ import com.morimil.app.ai.ExternalReasoningDisclosureMode
 import com.morimil.app.ai.ExternalReasoningDisclosurePolicy
 import com.morimil.app.ai.ReasoningClient
 import com.morimil.app.ai.ReasoningProviderConfig
+import com.morimil.app.data.genesis.ultra.CanonicalMemoryQuarantineStore
 import com.morimil.app.data.genesis.ultra.CanonicalMemoryRepository
 import com.morimil.app.data.repository.MemoryOrganRepository
 
@@ -19,7 +20,9 @@ internal class RepositoryReasoningContextReader(
     private val memoryOrganRepository: MemoryOrganRepository
 ) : ReasoningContextReader {
     override suspend fun readLivingMemory(query: String): String {
-        return canonicalMemoryRepository.buildVerifiedContext(query)
+        return CanonicalMemoryQuarantineStore.verify(stage = "reasoning_context") {
+            canonicalMemoryRepository.buildVerifiedContext(query)
+        }
     }
 
     override suspend fun readKnowledgeCapsules(): String {
