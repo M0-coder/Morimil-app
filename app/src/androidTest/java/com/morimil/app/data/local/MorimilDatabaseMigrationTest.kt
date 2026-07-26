@@ -23,7 +23,7 @@ class MorimilDatabaseMigrationTest {
     }
 
     @Test
-    fun migratesLegacyIdentityFromV4ThroughCurrentV13() {
+    fun migratesLegacyIdentityFromV4ThroughCurrentV14() {
         createVersion4DatabaseWithLegacyIdentity()
 
         val database = Room.databaseBuilder(
@@ -40,13 +40,14 @@ class MorimilDatabaseMigrationTest {
                 MorimilDatabase.MIGRATION_9_10,
                 MorimilDatabase.MIGRATION_10_11,
                 MorimilDatabase.MIGRATION_11_12,
-                MorimilDatabase.MIGRATION_12_13
+                MorimilDatabase.MIGRATION_12_13,
+                MorimilDatabase.MIGRATION_13_14
             )
             .build()
 
         try {
             val migrated = database.openHelper.writableDatabase
-            assertEquals(13, migrated.userVersion())
+            assertEquals(14, migrated.userVersion())
             assertTrue(
                 migrated.columnNames("local_instance_identity").containsAll(
                     setOf("localMemoryOwner", "localMemoryName", "localMemoryUri")
@@ -68,9 +69,14 @@ class MorimilDatabaseMigrationTest {
                 )
             }
             assertTrue(migrated.tableNames().contains("genesis_ultra_birth_authorization"))
+            assertTrue(migrated.tableNames().contains("genesis_ultra_memory_payloads"))
             assertEquals(
                 0,
                 migrated.singleInt("SELECT COUNT(*) FROM genesis_ultra_birth_authorization")
+            )
+            assertEquals(
+                0,
+                migrated.singleInt("SELECT COUNT(*) FROM genesis_ultra_memory_payloads")
             )
         } finally {
             database.close()
@@ -261,6 +267,6 @@ class MorimilDatabaseMigrationTest {
     }
 
     private companion object {
-        const val TEST_DATABASE = "morimil-v4-v13-identity-migration-test"
+        const val TEST_DATABASE = "morimil-v4-v14-identity-migration-test"
     }
 }

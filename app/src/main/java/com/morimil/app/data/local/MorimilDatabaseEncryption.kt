@@ -40,7 +40,7 @@ internal object MorimilDatabaseEncryption {
                 databaseFile.absolutePath
             )
                 .openHelperFactory(SupportOpenHelperFactory(factoryPassphrase))
-                .addMigrations(*MorimilDatabaseMigrations.ALL)
+                .addMigrations(*MorimilDatabaseMigrationPlan.ALL)
                 .build()
         } finally {
             passphrase.fill(0)
