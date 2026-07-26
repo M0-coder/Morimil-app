@@ -54,33 +54,37 @@ internal object MorimilDatabaseMigrationV15 {
                     "index_genesis_ultra_legacy_memory_imports_instanceId_canonicalSequence " +
                     "ON genesis_ultra_legacy_memory_imports(instanceId, canonicalSequence)"
             )
-            db.execSQL(
-                """
-                CREATE TRIGGER IF NOT EXISTS $INSERT_TRIGGER
-                BEFORE INSERT ON memory_events
-                BEGIN
-                    SELECT RAISE(ABORT, '$READ_ONLY_ERROR');
-                END
-                """.trimIndent()
-            )
-            db.execSQL(
-                """
-                CREATE TRIGGER IF NOT EXISTS $UPDATE_TRIGGER
-                BEFORE UPDATE ON memory_events
-                BEGIN
-                    SELECT RAISE(ABORT, '$READ_ONLY_ERROR');
-                END
-                """.trimIndent()
-            )
-            db.execSQL(
-                """
-                CREATE TRIGGER IF NOT EXISTS $DELETE_TRIGGER
-                BEFORE DELETE ON memory_events
-                BEGIN
-                    SELECT RAISE(ABORT, '$READ_ONLY_ERROR');
-                END
-                """.trimIndent()
-            )
+            installReadOnlyTriggers(db)
         }
+    }
+
+    fun installReadOnlyTriggers(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TRIGGER IF NOT EXISTS $INSERT_TRIGGER
+            BEFORE INSERT ON memory_events
+            BEGIN
+                SELECT RAISE(ABORT, '$READ_ONLY_ERROR');
+            END
+            """.trimIndent()
+        )
+        db.execSQL(
+            """
+            CREATE TRIGGER IF NOT EXISTS $UPDATE_TRIGGER
+            BEFORE UPDATE ON memory_events
+            BEGIN
+                SELECT RAISE(ABORT, '$READ_ONLY_ERROR');
+            END
+            """.trimIndent()
+        )
+        db.execSQL(
+            """
+            CREATE TRIGGER IF NOT EXISTS $DELETE_TRIGGER
+            BEFORE DELETE ON memory_events
+            BEGIN
+                SELECT RAISE(ABORT, '$READ_ONLY_ERROR');
+            END
+            """.trimIndent()
+        )
     }
 }
