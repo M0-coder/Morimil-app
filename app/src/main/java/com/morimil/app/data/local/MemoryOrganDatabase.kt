@@ -1,4 +1,4 @@
-﻿package com.morimil.app.data.local
+package com.morimil.app.data.local
 
 import android.content.Context
 import androidx.room.Database
@@ -15,6 +15,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         MigrationRecordEntity::class,
         OrchestratorDeviceEntity::class,
         ProjectVaultEntity::class,
+        ProjectVaultOutboxEntity::class,
         AgentProfileEntity::class,
         AgentInstanceEntity::class,
         DelegatedTaskEntity::class,
@@ -22,11 +23,12 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         TaskResultEntity::class,
         AsiCycleRecordEntity::class
     ],
-    version = 7,
+    version = 8,
     exportSchema = true
 )
 abstract class MemoryOrganDatabase : RoomDatabase() {
     abstract fun memoryOrganDao(): MemoryOrganDao
+    abstract fun projectVaultOutboxDao(): ProjectVaultOutboxDao
 
     companion object {
         @Volatile
