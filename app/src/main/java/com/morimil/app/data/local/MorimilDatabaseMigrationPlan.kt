@@ -117,6 +117,7 @@ internal object MorimilDatabaseMigrationPlan {
     }
 
     val MIGRATION_13_14: Migration = MorimilDatabaseMigrationV14.MIGRATION_13_14
+    val MIGRATION_14_15: Migration = MorimilDatabaseMigrationV15.MIGRATION_14_15
 
     val ALL: Array<Migration> = arrayOf(
         MorimilDatabaseMigrations.MIGRATION_1_2,
@@ -131,7 +132,8 @@ internal object MorimilDatabaseMigrationPlan {
         MorimilDatabaseMigrations.MIGRATION_10_11,
         MorimilDatabaseMigrations.MIGRATION_11_12,
         MorimilDatabaseMigrations.MIGRATION_12_13,
-        MIGRATION_13_14
+        MIGRATION_13_14,
+        MIGRATION_14_15
     )
 
     /**
