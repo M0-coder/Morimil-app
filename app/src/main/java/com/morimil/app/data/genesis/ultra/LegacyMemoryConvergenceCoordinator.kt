@@ -81,7 +81,6 @@ internal class LegacyMemoryConvergenceCoordinator private constructor(
             "legacy_convergence_read_only_triggers_missing"
         }
         val events = loadLegacyEvents().sortedBy { event -> event.id }
-        val tipHash = events.lastOrNull()?.eventHash
         val plans = events.map(::plan)
         val dryRunDigest = dryRunDigest(identity.instanceId, plans)
         val previous = loadState()
@@ -97,16 +96,16 @@ internal class LegacyMemoryConvergenceCoordinator private constructor(
 
         val (localIdentityCount, genesisCoreCount) = loadLegacyIdentityCounts()
         if (events.isEmpty()) {
-            require(localIdentityCount == 0 && genesisCoreCount == 0) {
-                block(
-                    identity = identity,
-                    events = events,
-                    dryRunDigest = dryRunDigest,
-                    failureCode = "legacy_convergence_identity_without_memory"
-                )
-                "legacy_convergence_identity_without_memory"
-            }
-            val complete = completeState(
+    if (localIdentityCount != 0 || genesisCoreCount != 0) {
+        block(
+            identity = identity,
+            events = events,
+            dryRunDigest = dryRunDigest,
+            failureCode = "legacy_convergence_identity_without_memory"
+        )
+        error("legacy_convergence_identity_without_memory")
+    }
+    val complete = completeState(
                 identity = identity,
                 events = events,
                 dryRunDigest = dryRunDigest,
@@ -464,8 +463,10 @@ internal class LegacyMemoryConvergenceCoordinator private constructor(
                     memoryDao.countLocalIdentity() to memoryDao.countGenesisCore()
                 },
                 loadLegacyEvents = memoryDao::loadMemoryEventAuditChain,
-                verifyLegacyChain = memoryIntegrityCore::verifyMemoryEventChain,
-                loadState = convergenceDao::loadState,
+                verifyLegacyChain = { events ->
+                    memoryIntegrityCore.verifyMemoryEventChain(events)
+                },
+                loadState = { convergenceDao.loadState() },
                 saveState = convergenceDao::upsertState,
                 loadImports = convergenceDao::loadImports,
                 saveImport = convergenceDao::insertImport,

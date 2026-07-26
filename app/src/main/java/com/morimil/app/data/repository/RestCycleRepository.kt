@@ -1,7 +1,5 @@
 package com.morimil.app.data.repository
 
-import androidx.room.withTransaction
-import com.morimil.app.core.memory.MemoryEventSigner
 import com.morimil.app.core.memory.MemoryIntegrityCore
 import com.morimil.app.core.memory.MemoryOrganReconciliationReport
 import com.morimil.app.core.memory.RestCycleMaintenancePlanner
@@ -21,7 +19,6 @@ class RestCycleRepository(
     private val database: MorimilDatabase,
     organDatabase: MemoryOrganDatabase,
     private val memoryIntegrityCore: MemoryIntegrityCore,
-    private val memoryEventSigner: MemoryEventSigner,
     private val memoryRepository: MemoryRepository
 ) {
     private val memoryDao: MemoryDao = database.memoryDao()
@@ -61,9 +58,9 @@ class RestCycleRepository(
         if (memoryDao.countGenesisCore() == 0) return false
 
         val now = System.currentTimeMillis()
-        val latestRestCycle = memoryDao.loadLatestRestCycleEvent()
+        val latestRestCycle = memoryRepository.loadLatestLivingMemoryEventByType(REST_CYCLE_EVENT_TYPE)
         if (!force && latestRestCycle != null &&
-            now - latestRestCycle.createdAtMillis < REST_CYCLE_MIN_INTERVAL_MILLIS
+            now - latestRestCycle.observedAtMillis < REST_CYCLE_MIN_INTERVAL_MILLIS
         ) {
             return false
         }
@@ -195,99 +192,36 @@ class RestCycleRepository(
         migrationId: String,
         approvalId: String?
     ): RestCycleAppendResult? {
-        return MemoryAppendGate.withAppendLock {
-            database.withTransaction {
-                val genesisCore = requireNotNull(memoryDao.loadGenesisCore()) {
-                    "Cannot run rest cycle without a local Genesis Core."
-                }
-                val localIdentity = memoryDao.loadLocalIdentity()
-                val recoveryBoundary = memoryDao.loadLatestMemoryEventByType(MEMORY_INTEGRITY_QUARANTINE_EVENT_TYPE)
-                val eventTail = if (recoveryBoundary == null) {
-                    memoryDao.loadMemoryEventTail(MEMORY_EVENT_TAIL_VERIFICATION_LIMIT)
-                } else {
-                    memoryDao.loadMemoryEventTailAfterLatestEventType(
-                        eventType = MEMORY_INTEGRITY_QUARANTINE_EVENT_TYPE,
-                        limit = MEMORY_EVENT_TAIL_VERIFICATION_LIMIT
-                    )
-                }.asReversed()
-
-                val createdAtMillis = System.currentTimeMillis()
-                val tailTrusted = memoryIntegrityCore.verifyMemoryEventChain(eventTail, requireGenesisStart = false)
-                if (!tailTrusted && recoveryBoundary == null) return@withTransaction null
-                val previousEventHash = if (tailTrusted) {
-                    eventTail.lastOrNull()?.eventHash ?: recoveryBoundary?.eventHash
-                } else {
-                    recoveryBoundary?.eventHash
-                }
-                val tagsJson = JSONArray(listOf("rest_cycle", "local_consolidation", "snapshot")).toString()
-                val evidenceJson = JSONObject()
-                    .put("schema", "morimil.memory_evidence.v1")
-                    .put("classifier", "local_rest_cycle_v1")
-                    .put("event_type", REST_CYCLE_EVENT_TYPE)
-                    .put("actor", "system")
-                    .put("source", "local_rest_cycle")
-                    .put("memory_kind", "rest_cycle")
-                    .put("user_confirmed", false)
-                    .put("confidence", 90)
-                    .put("migration_id", migrationId)
-                    .put("approval_id", approvalId)
-                    .put("excerpt", summary.take(240))
-                    .toString()
-
-                val eventHash = memoryIntegrityCore.hashMemoryEventV3(
-                    genesisCoreId = genesisCore.coreId,
-                    genesisCoreHash = genesisCore.contentSha256,
-                    previousEventHash = previousEventHash,
-                    eventType = REST_CYCLE_EVENT_TYPE,
-                    actor = "system",
-                    source = "local_rest_cycle",
-                    contextTag = "local_rest_cycle",
-                    privacyVisibility = PRIVATE_LOCAL,
-                    memoryKind = "rest_cycle",
-                    tagsJson = tagsJson,
-                    evidenceJson = evidenceJson,
-                    confidence = 90,
-                    userConfirmed = false,
-                    body = summary,
-                    importance = 88,
-                    createdAtMillis = createdAtMillis
-                )
-                val signature = memoryEventSigner.signEventHash(eventHash)
-
-                memoryDao.insertMemoryEvent(
-                    MemoryEventEntity(
-                        genesisCoreId = genesisCore.coreId,
-                        genesisCoreHash = genesisCore.contentSha256,
-                        previousEventHash = previousEventHash,
-                        eventHash = eventHash,
-                        hashAlgorithm = MemoryIntegrityCore.HASH_ALGORITHM_SHA256,
-                        canonicalization = MemoryIntegrityCore.MEMORY_EVENT_CANONICALIZATION_V3,
-                        signatureAlgorithm = signature.signatureAlgorithm,
-                        eventSignature = signature.eventSignature,
-                        eventType = REST_CYCLE_EVENT_TYPE,
-                        actor = "system",
-                        source = "local_rest_cycle",
-                        contextTag = "local_rest_cycle",
-                        privacyVisibility = PRIVATE_LOCAL,
-                        memoryKind = "rest_cycle",
-                        tagsJson = tagsJson,
-                        evidenceJson = evidenceJson,
-                        confidence = 90,
-                        userConfirmed = false,
-                        body = summary,
-                        importance = 88,
-                        createdAtMillis = createdAtMillis
-                    )
-                )
-                rebuildLivingMemorySnapshot()
-                RestCycleAppendResult(
-                    eventHash = eventHash,
-                    instanceId = localIdentity?.instanceId ?: "local_instance_pending",
-                    genesisCoreHash = genesisCore.contentSha256,
-                    createdAtMillis = createdAtMillis
-                )
-            }
+        val genesisCore = requireNotNull(memoryDao.loadGenesisCore()) {
+            "Cannot run rest cycle without a local Genesis Core."
         }
+        val localIdentity = memoryDao.loadLocalIdentity()
+        val createdAtMillis = System.currentTimeMillis()
+        val evidenceJson = JSONObject()
+            .put("schema", "morimil.memory_evidence.v1")
+            .put("classifier", "local_rest_cycle_v1")
+            .put("event_type", REST_CYCLE_EVENT_TYPE)
+            .put("actor", "system")
+            .put("source", "local_rest_cycle")
+            .put("memory_kind", "rest_cycle")
+            .put("user_confirmed", false)
+            .put("confidence", 90)
+            .put("migration_id", migrationId)
+            .put("approval_id", approvalId)
+            .put("excerpt", summary.take(240))
+            .toString()
+        val eventHash = memoryRepository.recordSystemMemoryEvent(
+            eventType = REST_CYCLE_EVENT_TYPE,
+            body = summary,
+            importance = 88,
+            evidenceJson = evidenceJson
+        ) ?: return null
+        return RestCycleAppendResult(
+            eventHash = eventHash,
+            instanceId = localIdentity?.instanceId ?: "legacy_instance_read_only",
+            genesisCoreHash = genesisCore.contentSha256,
+            createdAtMillis = createdAtMillis
+        )
     }
 
     private suspend fun consolidateAutobiographyFromRestCycle(
