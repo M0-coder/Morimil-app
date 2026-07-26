@@ -16,8 +16,8 @@ lifecycle, or Body succession.
 | Boundary | Content | JavaScript decision | Network decision | Tracking |
 | --- | --- | --- | --- | --- |
 | Native Web Bridge | Brave results and selected public sources | Temporary and explicitly tracked; must be removed from arbitrary remote pages | Direct WebView navigation currently allowed | #125 |
-| Native browser screen | HTML already fetched through the safe document loader | Temporary, only for bounded text extraction | WebView network loads and navigation are blocked | #126 |
-| Native browser runtime | HTML already fetched through the safe document loader | Temporary, only for bounded text extraction | WebView network loads and navigation are blocked | #126 |
+| Native browser screen | Hardened HTML already fetched through the safe document loader | Disabled; capture uses bounded deterministic text extraction | WebView network loads and navigation are blocked | #126 |
+| Native browser runtime | Hardened HTML already fetched through the safe document loader | No WebView is created; extraction is pure Kotlin | Only the filtered transport performs the bounded fetch | #126 |
 | Morimil Canvas | App-owned assets served through `WebViewAssetLoader` | Accepted only for the controlled local Canvas origin | External HTTP(S) requests are rejected | #127 |
 
 ## Invariants
@@ -31,8 +31,11 @@ lifecycle, or Body succession.
   `WebViewSecurityContractTest` and carry its reviewed boundary marker.
 - New JavaScript-enabled WebViews fail tests by default.
 - The local Canvas exception does not authorize remote JavaScript.
-- The temporary remote and isolated-reader exceptions do not close #125 or
-  #126; they make the remaining risk visible and prevent its expansion.
+- The remote-research exception does not close #125; it makes the remaining
+  risk visible and prevents its expansion.
+- The isolated readers must not call `evaluateJavascript`; their deterministic
+  extractor returns only bounded static text and treats empty static evidence
+  as insufficient.
 
 ## Alert reconciliation
 

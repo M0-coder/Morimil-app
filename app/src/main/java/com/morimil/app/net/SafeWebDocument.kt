@@ -5,11 +5,118 @@ internal data class SafeWebDocument(
     val html: String
 )
 
+internal data class SafeWebDocumentText(
+    val title: String,
+    val text: String
+)
+
 internal data class SafeWebDocumentResult(
     val ok: Boolean,
     val document: SafeWebDocument? = null,
     val error: String? = null
 )
+
+internal object SafeWebDocumentTextExtractor {
+    fun extract(document: SafeWebDocument, maxTextChars: Int): SafeWebDocumentText {
+        require(maxTextChars > 0) { "maxTextChars must be positive" }
+
+        val title = TITLE_REGEX.find(document.html)
+            ?.groupValues
+            ?.getOrNull(1)
+            .orEmpty()
+            .let(::extractFragment)
+            .take(MAX_TITLE_CHARS)
+        val body = BODY_REGEX.find(document.html)
+            ?.groupValues
+            ?.getOrNull(1)
+            ?: document.html
+        val text = extractFragment(body).take(maxTextChars)
+        return SafeWebDocumentText(title = title, text = text)
+    }
+
+    private fun extractFragment(source: String): String {
+        val visible = source
+            .replace(COMMENT_REGEX, " ")
+            .replace(HIDDEN_BLOCK_REGEX, " ")
+            .replace(BREAK_REGEX, "\n")
+            .replace(BLOCK_TAG_REGEX, "\n")
+            .replace(TAG_REGEX, " ")
+            .let(::decodeEntities)
+            .replace('\u00a0', ' ')
+            .replace(HORIZONTAL_WHITESPACE_REGEX, " ")
+            .replace(SPACE_AROUND_NEWLINE_REGEX, "\n")
+            .replace(EXCESS_NEWLINES_REGEX, "\n\n")
+            .trim()
+        return visible
+    }
+
+    private fun decodeEntities(source: String): String {
+        val numericDecoded = NUMERIC_ENTITY_REGEX.replace(source) { match ->
+            val rawValue = match.groupValues[1]
+            val radix = if (rawValue.startsWith("x", ignoreCase = true)) 16 else 10
+            val digits = if (radix == 16) rawValue.drop(1) else rawValue
+            val codePoint = digits.toIntOrNull(radix)
+            codePoint
+                ?.takeIf(::isSafeCodePoint)
+                ?.let { String(Character.toChars(it)) }
+                ?: match.value
+        }
+        return NAMED_ENTITY_REGEX.replace(numericDecoded) { match ->
+            NAMED_ENTITIES[match.groupValues[1].lowercase()] ?: match.value
+        }
+    }
+
+    private fun isSafeCodePoint(value: Int): Boolean {
+        return Character.isValidCodePoint(value) &&
+            value !in Character.MIN_SURROGATE.code..Character.MAX_SURROGATE.code &&
+            value != 0
+    }
+
+    private const val MAX_TITLE_CHARS = 500
+    private val TITLE_REGEX = Regex(
+        "<title\\b[^>]*>(.*?)</title\\s*>",
+        setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)
+    )
+    private val BODY_REGEX = Regex(
+        "<body\\b[^>]*>(.*?)</body\\s*>",
+        setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)
+    )
+    private val COMMENT_REGEX = Regex(
+        "<!--.*?-->",
+        setOf(RegexOption.DOT_MATCHES_ALL)
+    )
+    private val HIDDEN_BLOCK_REGEX = Regex(
+        "<(?:script|style|noscript|template|svg|math|iframe|object)\\b[^>]*>.*?" +
+            "</(?:script|style|noscript|template|svg|math|iframe|object)\\s*>",
+        setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)
+    )
+    private val BREAK_REGEX = Regex("<br\\b[^>]*>", RegexOption.IGNORE_CASE)
+    private val BLOCK_TAG_REGEX = Regex(
+        "</?(?:address|article|aside|blockquote|dd|details|dialog|div|dl|dt|" +
+            "fieldset|figcaption|figure|footer|form|h[1-6]|header|hr|li|main|nav|" +
+            "ol|p|pre|section|summary|table|tbody|td|tfoot|th|thead|tr|ul)\\b[^>]*>",
+        RegexOption.IGNORE_CASE
+    )
+    private val TAG_REGEX = Regex("<[^>]+>", RegexOption.DOT_MATCHES_ALL)
+    private val NUMERIC_ENTITY_REGEX = Regex("&#(x[0-9a-f]+|[0-9]+);", RegexOption.IGNORE_CASE)
+    private val NAMED_ENTITY_REGEX = Regex("&([a-z][a-z0-9]+);", RegexOption.IGNORE_CASE)
+    private val HORIZONTAL_WHITESPACE_REGEX = Regex("[\\t\\u000b\\u000c\\r ]+")
+    private val SPACE_AROUND_NEWLINE_REGEX = Regex(" *\\n *")
+    private val EXCESS_NEWLINES_REGEX = Regex("\\n{3,}")
+    private val NAMED_ENTITIES = mapOf(
+        "amp" to "&",
+        "apos" to "'",
+        "gt" to ">",
+        "lt" to "<",
+        "nbsp" to " ",
+        "quot" to "\"",
+        "ndash" to "–",
+        "mdash" to "—",
+        "hellip" to "…",
+        "copy" to "©",
+        "reg" to "®"
+    )
+}
 
 internal class SafeWebDocumentLoader(
     private val transport: SafeHttpTransport = SafeHttpTransport()
