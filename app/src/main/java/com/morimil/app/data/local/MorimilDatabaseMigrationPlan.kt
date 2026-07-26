@@ -78,7 +78,6 @@ internal object MorimilDatabaseMigrationPlan {
                     canonicalization,
                     signatureAlgorithm,
                     eventSignature,
-                    eventType,
                     actor,
                     source,
                     contextTag,
@@ -116,6 +115,8 @@ internal object MorimilDatabaseMigrationPlan {
         }
     }
 
+    val MIGRATION_13_14: Migration = MorimilDatabaseMigrationV14.MIGRATION_13_14
+
     val ALL: Array<Migration> = arrayOf(
         MorimilDatabaseMigrations.MIGRATION_1_2,
         MorimilDatabaseMigrations.MIGRATION_2_3,
@@ -128,13 +129,13 @@ internal object MorimilDatabaseMigrationPlan {
         MorimilDatabaseMigrations.MIGRATION_9_10,
         MorimilDatabaseMigrations.MIGRATION_10_11,
         MorimilDatabaseMigrations.MIGRATION_11_12,
-        MorimilDatabaseMigrations.MIGRATION_12_13
+        MorimilDatabaseMigrations.MIGRATION_12_13,
+        MIGRATION_13_14
     )
 
     /**
-     * MorimilDatabaseEncryption predates this repaired plan and consumes the
-     * mutable legacy registry. Install the same migration before the singleton
-     * database is opened so production and migration tests cannot diverge.
+     * Retained for callers that still initialize the legacy array before open.
+     * Production itself consumes [ALL].
      */
     fun installIntoLegacyRegistry() {
         val legacy = MorimilDatabaseMigrations.ALL
