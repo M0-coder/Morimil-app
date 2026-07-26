@@ -174,6 +174,7 @@ internal class NativeBrowserReader(
     @SuppressLint("SetJavaScriptEnabled")
     private fun WebView.configureForIsolatedResearch() {
         CookieManager.getInstance().setAcceptThirdPartyCookies(this, false)
+        // WEBVIEW_JS_BOUNDARY: TEMPORARY_ISOLATED_READER_ISSUE_126
         settings.javaScriptEnabled = true
         settings.javaScriptCanOpenWindowsAutomatically = false
         settings.domStorageEnabled = false
@@ -184,6 +185,8 @@ internal class NativeBrowserReader(
         settings.mediaPlaybackRequiresUserGesture = true
         settings.allowFileAccess = false
         settings.allowContentAccess = false
+        settings.allowFileAccessFromFileURLs = false
+        settings.allowUniversalAccessFromFileURLs = false
         settings.setSupportMultipleWindows(false)
         settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
         settings.safeBrowsingEnabled = true
