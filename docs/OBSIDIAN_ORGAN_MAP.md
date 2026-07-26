@@ -1,3 +1,5 @@
+# Document status: SUPERSEDED
+
 # Morimil Obsidian-Style Organ Map
 
 This file is separate from `docs/ARCHITECTURE_MAP.md`. Do not merge this into the architecture map. This is a visual operating map for quickly seeing which organs are connected, which are in review, and which are critical.

@@ -1,3 +1,5 @@
+# Document status: SUPERSEDED
+
 # Morimil App Architecture
 
 ## Source Of Truth

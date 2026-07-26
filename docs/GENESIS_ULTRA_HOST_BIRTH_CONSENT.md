@@ -1,3 +1,5 @@
+# Document status: CURRENT
+
 # Genesis Ultra — consentimiento explícito del host
 
 ## Frontera

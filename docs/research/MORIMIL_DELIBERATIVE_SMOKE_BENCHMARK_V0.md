@@ -1,3 +1,5 @@
+# Document status: RESEARCH_ONLY
+
 # Morimil Deliberative Smoke Benchmark v0
 
 Status: **research-only, executable**

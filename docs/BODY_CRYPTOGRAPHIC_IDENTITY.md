@@ -1,3 +1,5 @@
+# Document status: CURRENT
+
 # Identidad criptográfica del cuerpo
 
 ## Propósito

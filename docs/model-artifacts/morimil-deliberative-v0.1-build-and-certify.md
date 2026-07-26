@@ -1,3 +1,5 @@
+# Document status: RESEARCH_ONLY
+
 # Build and certify `morimil-deliberative-v0.1.litertlm`
 
 Status: offline certification tooling. No model weights, license acceptance, network download, installation, or signing key are included.

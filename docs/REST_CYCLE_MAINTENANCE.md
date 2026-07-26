@@ -1,3 +1,5 @@
+# Document status: CURRENT
+
 # Rest Cycle Maintenance
 
 Morimil treats rest as local maintenance, not only summarization.

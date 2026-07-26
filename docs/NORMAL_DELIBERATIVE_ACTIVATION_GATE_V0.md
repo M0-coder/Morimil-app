@@ -1,3 +1,5 @@
+# Document status: CURRENT
+
 # Normal deliberative activation gate v0
 
 Status: **normal-runtime activation blocked**

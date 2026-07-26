@@ -1,3 +1,5 @@
+# Document status: RESEARCH_ONLY
+
 # Morimil trimotor v0.2 physical benchmark evidence v1
 
 Status: **physical ARM64 execution completed; research gate passed; personal runtime activation remains blocked**.

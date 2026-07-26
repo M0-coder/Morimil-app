@@ -1,3 +1,5 @@
+# Document status: CURRENT
+
 # Deterministic exact instruction authority v0
 
 Status: bounded deterministic authority available to the local Intuitive core.

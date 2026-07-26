@@ -1,3 +1,5 @@
+# Document status: RESEARCH_ONLY
+
 # Morimil deliberative v0.2 physical benchmark evidence v1
 
 Status: **research-only**

@@ -1,3 +1,5 @@
+# Document status: RESEARCH_ONLY
+
 # Morimil Loop-Effort Motor Research Contract v0.3
 
 Status: **research-only**

@@ -1,3 +1,5 @@
+# Document status: RESEARCH_ONLY
+
 # Android ARM64 LiteRT-LM native crash v0
 
 Status: **initial physical run failed closed; guarded repeat completed successfully**

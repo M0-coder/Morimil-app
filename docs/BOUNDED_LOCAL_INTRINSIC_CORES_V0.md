@@ -1,3 +1,5 @@
+# Document status: CURRENT
+
 # Bounded local intrinsic cores v0
 
 Status: executable bounded cores. The Intuitive core is active in normal runtime; the Metacognitive core remains research-only.

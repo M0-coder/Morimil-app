@@ -1,3 +1,5 @@
+# Document status: SUPERSEDED
+
 # Morimil-app V2 Integration
 
 This document describes how to integrate changes into the current `provider-neutral-motor` runtime without regressing the living-memory system.

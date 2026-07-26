@@ -1,3 +1,5 @@
+# Document status: CURRENT
+
 # Hybrid authority router v0
 
 Status: bounded authority integrated in the intrinsic coordinator. The normal runtime still registers only the local Intuitive role.

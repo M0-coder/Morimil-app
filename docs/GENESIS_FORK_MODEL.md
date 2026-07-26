@@ -1,3 +1,5 @@
+# Document status: SUPERSEDED
+
 # Morimil App Genesis Fork Model
 
 ## Verdict

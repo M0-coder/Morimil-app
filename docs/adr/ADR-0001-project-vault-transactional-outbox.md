@@ -1,3 +1,5 @@
+# Document status: CURRENT
+
 # ADR-0001 — Transactional outbox for ProjectVault
 
 - Status: Accepted

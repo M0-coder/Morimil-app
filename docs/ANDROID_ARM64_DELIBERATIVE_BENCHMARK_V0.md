@@ -1,3 +1,5 @@
+# Document status: RESEARCH_ONLY
+
 # Android ARM64 deliberative benchmark v0
 
 This harness executes the frozen 120-case Morimil deliberative smoke benchmark against the exact v0.2 LiteRT-LM research candidate on one physical Android ARM64 device.

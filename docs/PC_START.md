@@ -1,3 +1,5 @@
+# Document status: PROPOSAL
+
 # PC Start
 
 ## Clone

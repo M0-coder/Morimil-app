@@ -1,3 +1,5 @@
+# Document status: CURRENT
+
 # Hybrid authority UI presentation v0
 
 This layer presents the bounded hybrid-authority result in Chat without changing runtime authority.

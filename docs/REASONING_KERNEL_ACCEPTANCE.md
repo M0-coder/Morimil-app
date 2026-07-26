@@ -1,3 +1,5 @@
+# Document status: CURRENT
+
 # Reasoning Kernel Acceptance Gates
 
 Este documento es la compuerta de merge para cualquier rama que toque razonamiento, proveedores auxiliares, web nativa, memoria, herramientas u orquestacion.

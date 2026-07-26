@@ -1,3 +1,5 @@
+# Document status: RESEARCH_ONLY
+
 # Android ARM64 candidate harness v0
 
 ## Purpose

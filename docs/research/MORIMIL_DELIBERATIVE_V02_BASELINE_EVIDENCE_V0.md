@@ -1,3 +1,5 @@
+# Document status: RESEARCH_ONLY
+
 # Morimil deliberative v0.2 baseline evidence v0
 
 Status: **research-only**

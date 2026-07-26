@@ -1,3 +1,5 @@
+# Document status: CURRENT
+
 # Genesis Ultra host consent ceremony
 
 ## Purpose

@@ -1,3 +1,5 @@
+# Document status: CURRENT
+
 # Autorización durable del nacimiento Genesis Ultra
 
 ## Propósito

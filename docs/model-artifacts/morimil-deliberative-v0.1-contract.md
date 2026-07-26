@@ -1,3 +1,5 @@
+# Document status: RESEARCH_ONLY
+
 # Morimil Deliberative Artifact Contract v0.1
 
 Status: draft contract for review. This document defines an artifact identity; it does not contain model weights.

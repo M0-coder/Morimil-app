@@ -1,3 +1,5 @@
+# Document status: RESEARCH_ONLY
+
 # Intrinsic tri-motor research runtime v0
 
 Status: **full tri-motor remains research-only and isolated**

@@ -1,3 +1,5 @@
+# Document status: RESEARCH_ONLY
+
 # Android ARM64 tri-motor benchmark v0
 
 Status: **research-only harness physically executed for the historical 72/48 routing contract**.

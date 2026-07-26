@@ -1,3 +1,5 @@
+# Document status: RESEARCH_ONLY
+
 # Morimil LOTUS feasibility preflight v0
 
 Status: **research-only; no model execution**

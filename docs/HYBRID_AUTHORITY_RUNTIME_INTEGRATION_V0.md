@@ -1,3 +1,5 @@
+# Document status: CURRENT
+
 # Hybrid authority runtime integration v0
 
 Status: structural integration only. Disabled by default. No model installation or production promotion.

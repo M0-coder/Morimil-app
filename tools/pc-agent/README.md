@@ -1,3 +1,5 @@
+# Document status: PROPOSAL
+
 # Morimil PC Agent
 
 Run from the repository root:

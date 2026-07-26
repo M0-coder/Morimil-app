@@ -1,3 +1,5 @@
+# Document status: RESEARCH_ONLY
+
 # Android ARM64 sustained profile v0
 
 This harness measures the exact Gemma 3n E2B LiteRT-LM research candidate on a physical Android ARM64 device. It is an opt-in instrumentation workflow and is not part of Morimil's normal runtime.
