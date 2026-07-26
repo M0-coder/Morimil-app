@@ -16,6 +16,7 @@ class LegacyMemoryWriterConvergenceContractTest {
                     executable.contains("INSERT INTO memory_events")
             }
             .map { file -> file.relativeTo(productionRoot()).invariantSeparatorsPath }
+            .toList()
 
         assertTrue("Legacy memory writers remain: $violations", violations.isEmpty())
     }
