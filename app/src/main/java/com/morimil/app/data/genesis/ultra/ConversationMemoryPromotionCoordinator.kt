@@ -15,6 +15,13 @@ internal enum class ConversationMemoryClassification(val value: String) {
     MORIMIL_REFLECTION("morimil_reflection")
 }
 
+internal data class ConversationMemoryAuthority(
+    val instanceId: String,
+    val guardianId: String,
+    val guardianKeyEpochId: String,
+    val bodyId: String
+)
+
 internal data class ConversationMemoryPromotionPreview(
     val previewId: String,
     val candidateDigest: String,
@@ -28,6 +35,12 @@ internal data class ConversationMemoryPromotionPreview(
     val bodyId: String,
     val createdAtMillis: Long,
     val expiresAtMillis: Long
+)
+
+internal data class ConversationMemoryAppendedEvent(
+    val eventId: String,
+    val eventHash: String,
+    val sequence: Long
 )
 
 internal data class ConversationMemoryPromotionReceipt(
@@ -48,14 +61,18 @@ internal data class ConversationMemoryPromotionReceipt(
  * is bound to the exact transcript bytes, Instance, Guardian and active Body.
  */
 internal class ConversationMemoryPromotionCoordinator private constructor(
-    private val readIdentity: suspend () -> GenesisUltraRuntimeIdentity,
-    private val readSnapshot: suspend () -> CanonicalMemorySnapshot,
-    private val appendCanonical: suspend (CanonicalMemoryAppendCommand) -> CanonicalMemoryRecord,
+    private val readAuthority: suspend () -> ConversationMemoryAuthority,
+    private val canonicalEventExists: suspend (String, String) -> Boolean,
+    private val appendCanonical: suspend (CanonicalMemoryAppendCommand) ->
+        ConversationMemoryAppendedEvent,
+    private val verifyCanonical: suspend (String, String, String) ->
+        ConversationMemoryAppendedEvent,
     private val clockMillis: () -> Long,
     private val nextPreviewId: () -> String
 ) {
     private data class PendingPromotion(
         val turn: ReasoningTurnEntity,
+        val authority: ConversationMemoryAuthority,
         val preview: ConversationMemoryPromotionPreview
     )
 
@@ -70,15 +87,11 @@ internal class ConversationMemoryPromotionCoordinator private constructor(
         val content = turn.body.trim()
         require(content.isNotEmpty()) { "conversation_memory_turn_empty" }
 
-        val identity = readIdentity()
+        val authority = readAuthority()
         val classification = classificationFor(turn.author)
-        val candidateDigest = candidateDigest(identity, turn, content, classification)
+        val candidateDigest = candidateDigest(authority, turn, content, classification)
         val eventId = deterministicEventId(candidateDigest)
-        val snapshot = readSnapshot()
-        require(snapshot.instanceId == identity.instanceId) {
-            "conversation_memory_snapshot_instance_mismatch"
-        }
-        require(snapshot.records.none { record -> record.event.eventId == eventId }) {
+        require(!canonicalEventExists(authority.instanceId, eventId)) {
             "conversation_memory_candidate_already_promoted"
         }
 
@@ -91,14 +104,18 @@ internal class ConversationMemoryPromotionCoordinator private constructor(
             sourceAuthor = turn.author,
             content = content,
             classification = classification.value,
-            guardianId = identity.guardian.guardianId,
-            guardianKeyEpochId = identity.guardian.keyEpochId,
-            bodyId = identity.activeBody.bodyId,
+            guardianId = authority.guardianId,
+            guardianKeyEpochId = authority.guardianKeyEpochId,
+            bodyId = authority.bodyId,
             createdAtMillis = turn.createdAtMillis,
             expiresAtMillis = now + PREVIEW_TTL_MILLIS
         )
         pendingMutex.withLock {
-            pending = PendingPromotion(turn = turn.copy(body = content), preview = preview)
+            pending = PendingPromotion(
+                turn = turn.copy(body = content),
+                authority = authority,
+                preview = preview
+            )
         }
         return preview
     }
@@ -122,20 +139,12 @@ internal class ConversationMemoryPromotionCoordinator private constructor(
             current
         }
 
-        val identity = readIdentity()
-        require(identity.guardian.guardianId == selected.preview.guardianId) {
-            "conversation_memory_guardian_changed"
-        }
-        require(identity.guardian.keyEpochId == selected.preview.guardianKeyEpochId) {
-            "conversation_memory_guardian_epoch_changed"
-        }
-        require(identity.activeBody.bodyId == selected.preview.bodyId) {
-            "conversation_memory_body_changed"
-        }
+        val authority = readAuthority()
+        require(authority == selected.authority) { "conversation_memory_authority_changed" }
 
         val classification = classificationFor(selected.turn.author)
         val recomputedDigest = candidateDigest(
-            identity = identity,
+            authority = authority,
             turn = selected.turn,
             content = selected.preview.content,
             classification = classification
@@ -146,11 +155,9 @@ internal class ConversationMemoryPromotionCoordinator private constructor(
         require(deterministicEventId(recomputedDigest) == selected.preview.deterministicEventId) {
             "conversation_memory_event_id_changed_after_preview"
         }
-
-        val before = readSnapshot()
-        require(before.records.none { record ->
-            record.event.eventId == selected.preview.deterministicEventId
-        }) { "conversation_memory_candidate_already_promoted" }
+        require(!canonicalEventExists(authority.instanceId, selected.preview.deterministicEventId)) {
+            "conversation_memory_candidate_already_promoted"
+        }
 
         val approvalNote = JSONObject()
             .put("schema", APPROVAL_NOTE_SCHEMA)
@@ -164,7 +171,7 @@ internal class ConversationMemoryPromotionCoordinator private constructor(
             .put("approval", "explicit_guardian_confirmation")
             .toString()
 
-        val record = appendCanonical(
+        val appended = appendCanonical(
             CanonicalMemoryAppendCommand(
                 eventType = PROMOTION_EVENT_TYPE,
                 actor = selected.preview.sourceAuthor,
@@ -182,28 +189,22 @@ internal class ConversationMemoryPromotionCoordinator private constructor(
                 eventId = selected.preview.deterministicEventId
             )
         )
-        require(record.event.eventId == selected.preview.deterministicEventId) {
+        require(appended.eventId == selected.preview.deterministicEventId) {
             "conversation_memory_persisted_event_id_mismatch"
         }
-        require(record.event.eventType == PROMOTION_EVENT_TYPE) {
-            "conversation_memory_persisted_event_type_mismatch"
-        }
 
-        val after = readSnapshot()
-        val verified = requireNotNull(
-            after.records.singleOrNull { candidate ->
-                candidate.event.eventId == selected.preview.deterministicEventId
-            }
-        ) { "conversation_memory_verified_event_missing" }
-        require(verified.event.eventHash == record.event.eventHash) {
-            "conversation_memory_verified_event_hash_mismatch"
-        }
+        val verified = verifyCanonical(
+            authority.instanceId,
+            selected.preview.deterministicEventId,
+            appended.eventHash
+        )
+        require(verified == appended) { "conversation_memory_verified_event_mismatch" }
 
         return ConversationMemoryPromotionReceipt(
             candidateDigest = selected.preview.candidateDigest,
-            eventId = verified.event.eventId,
-            eventHash = verified.event.eventHash,
-            sequence = verified.event.sequence,
+            eventId = verified.eventId,
+            eventHash = verified.eventHash,
+            sequence = verified.sequence,
             bodyId = selected.preview.bodyId,
             guardianId = selected.preview.guardianId,
             verifiedInCanonicalChain = true
@@ -225,7 +226,7 @@ internal class ConversationMemoryPromotionCoordinator private constructor(
     }
 
     private fun candidateDigest(
-        identity: GenesisUltraRuntimeIdentity,
+        authority: ConversationMemoryAuthority,
         turn: ReasoningTurnEntity,
         content: String,
         classification: ConversationMemoryClassification
@@ -233,10 +234,10 @@ internal class ConversationMemoryPromotionCoordinator private constructor(
         return GenesisUltraHashProfile.hashFields(
             CANDIDATE_DIGEST_DOMAIN,
             listOf(
-                identity.instanceId,
-                identity.guardian.guardianId,
-                identity.guardian.keyEpochId,
-                identity.activeBody.bodyId,
+                authority.instanceId,
+                authority.guardianId,
+                authority.guardianKeyEpochId,
+                authority.bodyId,
                 turn.id.toString(),
                 turn.author,
                 turn.createdAtMillis.toString(),
@@ -259,29 +260,71 @@ internal class ConversationMemoryPromotionCoordinator private constructor(
             clockMillis: () -> Long = System::currentTimeMillis
         ): ConversationMemoryPromotionCoordinator {
             return ConversationMemoryPromotionCoordinator(
-                readIdentity = {
-                    requireNotNull(identityRepository.readCommittedIdentity()) {
+                readAuthority = {
+                    val identity = requireNotNull(identityRepository.readCommittedIdentity()) {
                         "conversation_memory_identity_not_committed"
                     }
+                    ConversationMemoryAuthority(
+                        instanceId = identity.instanceId,
+                        guardianId = identity.guardian.guardianId,
+                        guardianKeyEpochId = identity.guardian.keyEpochId,
+                        bodyId = identity.activeBody.bodyId
+                    )
                 },
-                readSnapshot = canonicalRepository::readVerifiedSnapshot,
-                appendCanonical = canonicalRepository::appendText,
+                canonicalEventExists = { instanceId, eventId ->
+                    val snapshot = canonicalRepository.readVerifiedSnapshot()
+                    require(snapshot.instanceId == instanceId) {
+                        "conversation_memory_snapshot_instance_mismatch"
+                    }
+                    snapshot.records.any { record -> record.event.eventId == eventId }
+                },
+                appendCanonical = { command ->
+                    val record = canonicalRepository.appendText(command)
+                    ConversationMemoryAppendedEvent(
+                        eventId = record.event.eventId,
+                        eventHash = record.event.eventHash,
+                        sequence = record.event.sequence
+                    )
+                },
+                verifyCanonical = { instanceId, eventId, eventHash ->
+                    val snapshot = canonicalRepository.readVerifiedSnapshot()
+                    require(snapshot.instanceId == instanceId) {
+                        "conversation_memory_verified_instance_mismatch"
+                    }
+                    val record = requireNotNull(
+                        snapshot.records.singleOrNull { candidate ->
+                            candidate.event.eventId == eventId
+                        }
+                    ) { "conversation_memory_verified_event_missing" }
+                    require(record.event.eventHash == eventHash) {
+                        "conversation_memory_verified_event_hash_mismatch"
+                    }
+                    ConversationMemoryAppendedEvent(
+                        eventId = record.event.eventId,
+                        eventHash = record.event.eventHash,
+                        sequence = record.event.sequence
+                    )
+                },
                 clockMillis = clockMillis,
                 nextPreviewId = { UUID.randomUUID().toString() }
             )
         }
 
         fun forTest(
-            readIdentity: suspend () -> GenesisUltraRuntimeIdentity,
-            readSnapshot: suspend () -> CanonicalMemorySnapshot,
-            appendCanonical: suspend (CanonicalMemoryAppendCommand) -> CanonicalMemoryRecord,
+            readAuthority: suspend () -> ConversationMemoryAuthority,
+            canonicalEventExists: suspend (String, String) -> Boolean,
+            appendCanonical: suspend (CanonicalMemoryAppendCommand) ->
+                ConversationMemoryAppendedEvent,
+            verifyCanonical: suspend (String, String, String) ->
+                ConversationMemoryAppendedEvent,
             clockMillis: () -> Long,
             nextPreviewId: () -> String
         ): ConversationMemoryPromotionCoordinator {
             return ConversationMemoryPromotionCoordinator(
-                readIdentity = readIdentity,
-                readSnapshot = readSnapshot,
+                readAuthority = readAuthority,
+                canonicalEventExists = canonicalEventExists,
                 appendCanonical = appendCanonical,
+                verifyCanonical = verifyCanonical,
                 clockMillis = clockMillis,
                 nextPreviewId = nextPreviewId
             )
