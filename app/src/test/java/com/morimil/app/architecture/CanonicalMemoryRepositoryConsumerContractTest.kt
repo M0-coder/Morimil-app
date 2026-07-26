@@ -13,10 +13,10 @@ class CanonicalMemoryRepositoryConsumerContractTest {
         ).readText()
         val executable = executableSource(source)
 
-        assertTrue(executable.contains("CanonicalMemoryRepository"))
-        assertTrue(executable.contains("buildVerifiedContext("))
-        assertFalse(executable.contains("MemoryRepository"))
-        assertFalse(executable.contains("buildLivingMemoryContext("))
+        assertTrue(Regex("\\bCanonicalMemoryRepository\\b").containsMatchIn(executable))
+        assertTrue(Regex("\\.buildVerifiedContext\\s*\\(").containsMatchIn(executable))
+        assertFalse(Regex("\\bMemoryRepository\\b").containsMatchIn(executable))
+        assertFalse(Regex("\\.buildLivingMemoryContext\\s*\\(").containsMatchIn(executable))
     }
 
     @Test
@@ -25,9 +25,19 @@ class CanonicalMemoryRepositoryConsumerContractTest {
             "com/morimil/app/MorimilAppContainer.kt"
         ).readText()
         val executable = executableSource(source)
+        val readerCall = Regex(
+            "RepositoryReasoningContextReader\\s*\\([\\s\\S]*?\\)\\s*,"
+        ).find(executable)?.value.orEmpty()
 
-        assertTrue(executable.contains("canonicalMemoryRepository = canonicalMemoryRepository"))
-        assertFalse(executable.contains("memoryRepository = memoryRepository"))
+        assertTrue(readerCall.isNotEmpty())
+        assertTrue(
+            Regex("\\bcanonicalMemoryRepository\\s*=\\s*canonicalMemoryRepository\\b")
+                .containsMatchIn(readerCall)
+        )
+        assertFalse(
+            Regex("\\bmemoryRepository\\s*=\\s*memoryRepository\\b")
+                .containsMatchIn(readerCall)
+        )
     }
 
     @Test
