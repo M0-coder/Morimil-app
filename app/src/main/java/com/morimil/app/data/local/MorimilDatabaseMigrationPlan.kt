@@ -78,6 +78,7 @@ internal object MorimilDatabaseMigrationPlan {
                     canonicalization,
                     signatureAlgorithm,
                     eventSignature,
+                    eventType,
                     actor,
                     source,
                     contextTag,
