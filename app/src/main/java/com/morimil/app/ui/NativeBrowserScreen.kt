@@ -1,6 +1,5 @@
 package com.morimil.app.ui
 
-import android.annotation.SuppressLint
 import android.webkit.CookieManager
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
@@ -33,7 +32,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.morimil.app.net.NetSourcePolicy
+import com.morimil.app.net.SafeWebDocument
 import com.morimil.app.net.SafeWebDocumentLoader
+import com.morimil.app.net.SafeWebDocumentTextExtractor
 import com.morimil.app.net.blockedWebResponse
 import com.morimil.app.web.NativeWebContextStore
 import com.morimil.app.web.NativeWebPageContext
@@ -41,15 +42,14 @@ import com.morimil.app.web.NativeWebRequestStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.json.JSONArray
 
-@SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun NativeBrowserScreen() {
     var input by remember { mutableStateOf("https://www.google.com/search?q=Morimil") }
     var loadTarget by remember { mutableStateOf(input) }
     var status by remember { mutableStateOf("Navegador nativo aislado listo.") }
     var activeWebView by remember { mutableStateOf<WebView?>(null) }
+    var loadedDocument by remember { mutableStateOf<SafeWebDocument?>(null) }
     var initialLoadStarted by remember { mutableStateOf(false) }
     val documentLoader = remember { SafeWebDocumentLoader() }
     val scope = rememberCoroutineScope()
@@ -63,6 +63,7 @@ fun NativeBrowserScreen() {
             status = "Navegacion bloqueada: ${decision.reason}"
             return
         }
+        loadedDocument = null
         status = "Validando DNS y descargando de forma aislada: ${target.take(120)}"
         scope.launch {
             val fetched = withContext(Dispatchers.IO) { documentLoader.fetch(target) }
@@ -78,6 +79,7 @@ fun NativeBrowserScreen() {
             }
             input = document.finalUrl
             loadTarget = document.finalUrl
+            loadedDocument = document
             activeWebView?.loadDataWithBaseURL(
                 document.finalUrl,
                 document.html,
@@ -117,7 +119,7 @@ fun NativeBrowserScreen() {
     ) {
         Text("Web nativa", style = MaterialTheme.typography.headlineSmall)
         Text(
-            "Descarga paginas publicas mediante un transporte con DNS filtrado y las muestra sin dar acceso directo de red a WebView. Solo al pulsar Capturar se guarda texto visible como contexto externo temporal.",
+            "Descarga paginas publicas mediante un transporte con DNS filtrado, elimina contenido activo y las muestra sin dar acceso directo de red a WebView. Capturar usa extraccion determinista y no ejecuta JavaScript remoto.",
             style = MaterialTheme.typography.bodySmall
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
@@ -142,7 +144,12 @@ fun NativeBrowserScreen() {
                 Text("Recargar")
             }
             Button(onClick = {
-                activeWebView?.let { view -> capturePage(view) { status = it } }
+                val document = loadedDocument
+                if (document == null) {
+                    status = "No hay un documento validado para capturar."
+                } else {
+                    captureDocument(document) { status = it }
+                }
             }) {
                 Text("Capturar")
             }
@@ -167,8 +174,7 @@ fun NativeBrowserScreen() {
             factory = { context ->
                 WebView(context).apply {
                     activeWebView = this
-                    // WEBVIEW_JS_BOUNDARY: TEMPORARY_ISOLATED_READER_ISSUE_126
-                    settings.javaScriptEnabled = true
+                    settings.javaScriptEnabled = false
                     settings.domStorageEnabled = false
                     settings.cacheMode = WebSettings.LOAD_NO_CACHE
                     settings.loadsImagesAutomatically = false
@@ -242,52 +248,34 @@ private fun normalizeUrlOrSearch(value: String): String {
     return "https://www.google.com/search?q=$encoded"
 }
 
-private fun capturePage(webView: WebView, onStatus: (String) -> Unit) {
-    val currentUrl = webView.url.orEmpty()
-    val currentDecision = NetSourcePolicy.validateUrl(currentUrl)
+private fun captureDocument(document: SafeWebDocument, onStatus: (String) -> Unit) {
+    val currentDecision = NetSourcePolicy.validateUrl(document.finalUrl)
     if (!currentDecision.allowed) {
         onStatus("Captura bloqueada: ${currentDecision.reason}")
         return
     }
 
-    val script = """
-        (function() {
-            var title = (document.title || '').slice(0, 500);
-            var text = document.body ? document.body.innerText : '';
-            var url = location.href || '';
-            return JSON.stringify({ title: title, url: url, text: text.slice(0, $MAX_CAPTURE_CHARS) });
-        })();
-    """.trimIndent()
-    webView.evaluateJavascript(script) { raw ->
-        runCatching {
-            val jsonText = decodeJsString(raw)
-            val json = org.json.JSONObject(jsonText)
-            val capturedUrl = json.optString("url")
-            val capturedDecision = NetSourcePolicy.validateUrl(capturedUrl)
-            require(capturedDecision.allowed) { "captured_url_denied:${capturedDecision.reason}" }
-            require(capturedUrl == webView.url) { "captured_url_changed" }
-            val text = json.optString("text").trim().take(MAX_CAPTURE_CHARS)
-            if (text.isBlank()) {
-                onStatus("Pagina cargada, pero no se pudo extraer texto visible.")
-            } else {
-                NativeWebContextStore.update(
-                    NativeWebPageContext(
-                        title = json.optString("title").take(500),
-                        url = capturedUrl,
-                        text = text
-                    )
+    runCatching {
+        SafeWebDocumentTextExtractor.extract(
+            document = document,
+            maxTextChars = MAX_CAPTURE_CHARS
+        )
+    }.onSuccess { extracted ->
+        if (extracted.text.isBlank()) {
+            onStatus("Pagina cargada, pero no contiene texto estatico suficiente.")
+        } else {
+            NativeWebContextStore.update(
+                NativeWebPageContext(
+                    title = extracted.title,
+                    url = document.finalUrl,
+                    text = extracted.text
                 )
-                onStatus("Pagina capturada para el chat: ${text.length} caracteres.")
-            }
-        }.onFailure { error ->
-            onStatus("No se pudo capturar pagina: ${error.message ?: error::class.java.simpleName}")
+            )
+            onStatus("Pagina capturada sin JavaScript: ${extracted.text.length} caracteres.")
         }
+    }.onFailure { error ->
+        onStatus("No se pudo capturar pagina: ${error.message ?: error::class.java.simpleName}")
     }
-}
-
-private fun decodeJsString(raw: String?): String {
-    val value = raw?.takeIf { it != "null" } ?: return "{}"
-    return JSONArray("[$value]").getString(0)
 }
 
 private const val MAX_CAPTURE_CHARS = 12_000
