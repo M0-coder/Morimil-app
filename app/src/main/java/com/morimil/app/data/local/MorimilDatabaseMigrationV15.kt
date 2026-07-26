@@ -15,6 +15,7 @@ internal object MorimilDatabaseMigrationV15 {
                 """
                 CREATE TABLE IF NOT EXISTS genesis_ultra_legacy_memory_convergence (
                     slotId TEXT NOT NULL,
+                    instanceId TEXT NOT NULL,
                     status TEXT NOT NULL,
                     sourceEventCount INTEGER NOT NULL,
                     acceptedEventCount INTEGER NOT NULL,
