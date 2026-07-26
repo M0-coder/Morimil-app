@@ -134,7 +134,7 @@ class GenesisUltraRuntimeBootstrapCoordinatorTest {
             coordinator.bootstrap(validIdentity())
         }.exceptionOrNull()
 
-        assertEquals("runtime_bootstrap_created_legacy_identity", failure?.message)
+        assertEquals("runtime_bootstrap_created_unconverged_legacy_identity", failure?.message)
         assertEquals(2, inspections)
     }
 

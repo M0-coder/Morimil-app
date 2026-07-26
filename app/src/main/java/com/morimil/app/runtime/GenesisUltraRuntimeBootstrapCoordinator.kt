@@ -188,7 +188,9 @@ internal class GenesisUltraRuntimeBootstrapCoordinator private constructor(
                         orchestratorDeviceCount = organDao.countOrchestratorDevices()
                     )
                 },
-                ,
+                countCanonicalMemoryEvents = {
+          memoryDatabase.genesisUltraMemoryDao().countAll()
+      },
                 isLegacyMemoryConverged = { instanceId ->
                     val state = memoryDatabase.legacyMemoryConvergenceDao().loadState()
                     state?.instanceId == instanceId &&
