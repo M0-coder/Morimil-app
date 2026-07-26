@@ -31,6 +31,16 @@ internal data class NativeMultiSourceVerification(
     val reason: String
 )
 
+internal data class NativeWebResearchRun(
+    val primary: NativeWebCapture?,
+    val secondary: NativeWebCapture?,
+    val verifier: NativeMultiSourceVerification,
+    val retryCount: Int,
+    val candidates: List<NativeSelectedWebSource>,
+    val navigationEvents: List<NativeNavigationEvent>,
+    val error: String? = null
+)
+
 internal data class NativeNavigationEvent(
     val type: String,
     val detail: String,
