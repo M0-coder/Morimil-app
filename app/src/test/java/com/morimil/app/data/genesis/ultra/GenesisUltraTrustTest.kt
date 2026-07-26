@@ -66,9 +66,11 @@ class GenesisUltraTrustTest {
     @Test
     fun rejectsPossessionSignatureMutation() {
         val fixture = signedPossessionFixture()
+        val originalSignature = fixture.proof.signature.value
+        val mutatedFirstByte = originalSignature.take(2).toInt(16) xor 0x01
         val mutated = fixture.proof.copy(
             signature = fixture.proof.signature.copy(
-                value = "00" + fixture.proof.signature.value.drop(2)
+                value = "%02x".format(mutatedFirstByte) + originalSignature.drop(2)
             )
         )
 
