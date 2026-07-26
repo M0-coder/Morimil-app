@@ -1,5 +1,6 @@
 package com.morimil.app.data.genesis.ultra
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -45,6 +46,18 @@ class CanonicalMemoryQuarantineStoreTest {
         val result = CanonicalMemoryQuarantineStore.verify(stage = "event_chain") { "verified" }
 
         assertEquals("verified", result)
+        assertNull(CanonicalMemoryQuarantineStore.diagnostic.value)
+    }
+
+    @Test
+    fun cancellationPropagatesWithoutCreatingQuarantine() = runBlocking {
+        val failure = runCatching {
+            CanonicalMemoryQuarantineStore.verify(stage = "event_chain") {
+                throw CancellationException("cancelled")
+            }
+        }.exceptionOrNull()
+
+        assertTrue(failure is CancellationException)
         assertNull(CanonicalMemoryQuarantineStore.diagnostic.value)
     }
 
