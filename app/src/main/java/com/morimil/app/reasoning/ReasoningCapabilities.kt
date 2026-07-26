@@ -14,7 +14,7 @@ interface ReasoningContextReader {
     suspend fun readKnowledgeCapsules(): String
 }
 
-class RepositoryReasoningContextReader(
+internal class RepositoryReasoningContextReader(
     private val canonicalMemoryRepository: CanonicalMemoryRepository,
     private val memoryOrganRepository: MemoryOrganRepository
 ) : ReasoningContextReader {
