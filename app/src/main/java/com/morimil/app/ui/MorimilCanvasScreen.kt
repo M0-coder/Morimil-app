@@ -170,20 +170,22 @@ fun MorimilCanvasScreen() {
                     modifier = Modifier.fillMaxSize(),
                     factory = { webContext ->
                         WebView(webContext).apply {
-                            activeWebView = this
                             // WEBVIEW_JS_BOUNDARY: LOCAL_CANVAS_ISSUE_127
-                            settings.javaScriptEnabled = true
-                            settings.domStorageEnabled = true
+                            settings.setJavaScriptEnabled(true)
+                            settings.setDomStorageEnabled(true)
                             settings.cacheMode = WebSettings.LOAD_DEFAULT
-                            settings.allowFileAccess = false
-                            settings.allowContentAccess = false
-                            settings.allowFileAccessFromFileURLs = false
-                            settings.allowUniversalAccessFromFileURLs = false
-                            settings.javaScriptCanOpenWindowsAutomatically = false
+                            settings.setAllowFileAccess(false)
+                            settings.setAllowContentAccess(false)
+                            settings.setAllowFileAccessFromFileURLs(false)
+                            settings.setAllowUniversalAccessFromFileURLs(false)
+                            settings.setJavaScriptCanOpenWindowsAutomatically(false)
                             settings.setSupportMultipleWindows(false)
                             settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
-                            settings.mediaPlaybackRequiresUserGesture = true
-                            settings.safeBrowsingEnabled = true
+                            settings.setMediaPlaybackRequiresUserGesture(true)
+                            settings.setSafeBrowsingEnabled(true)
+                            // Do not expose the Canvas WebView until the local-origin
+                            // security boundary is fully configured.
+                            activeWebView = this
 
                             webViewClient = object : WebViewClient() {
                                 override fun shouldInterceptRequest(

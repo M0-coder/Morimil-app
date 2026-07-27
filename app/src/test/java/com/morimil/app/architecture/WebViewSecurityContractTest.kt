@@ -59,7 +59,7 @@ class WebViewSecurityContractTest {
 
         assertTrue(
             "$ISOLATED_BROWSER_SCREEN must explicitly disable JavaScript",
-            "settings.javaScriptEnabled = false" in screen
+            "settings.setJavaScriptEnabled(false)" in screen
         )
         listOf(screen, runtime).forEach { source ->
             assertFalse("Isolated readers must not evaluate JavaScript", "evaluateJavascript" in source)
@@ -110,16 +110,19 @@ class WebViewSecurityContractTest {
     }
 
     private companion object {
-        val FILE_ACCESS_TRUE = Regex("""allowFileAccess\s*=\s*true""")
-        val CONTENT_ACCESS_TRUE = Regex("""allowContentAccess\s*=\s*true""")
-        val JAVASCRIPT_ENABLED = Regex("""javaScriptEnabled\s*=\s*true""")
+        val FILE_ACCESS_TRUE =
+            Regex("""(?:allowFileAccess\s*=\s*true|setAllowFileAccess\(\s*true\s*\))""")
+        val CONTENT_ACCESS_TRUE =
+            Regex("""(?:allowContentAccess\s*=\s*true|setAllowContentAccess\(\s*true\s*\))""")
+        val JAVASCRIPT_ENABLED =
+            Regex("""(?:javaScriptEnabled\s*=\s*true|setJavaScriptEnabled\(\s*true\s*\))""")
         val ADD_JAVASCRIPT_INTERFACE = Regex("""\baddJavascriptInterface\s*\(""")
 
         val REQUIRED_FAIL_CLOSED_SETTINGS = setOf(
-            "settings.allowFileAccess = false",
-            "settings.allowContentAccess = false",
-            "settings.allowFileAccessFromFileURLs = false",
-            "settings.allowUniversalAccessFromFileURLs = false"
+            "settings.setAllowFileAccess(false)",
+            "settings.setAllowContentAccess(false)",
+            "settings.setAllowFileAccessFromFileURLs(false)",
+            "settings.setAllowUniversalAccessFromFileURLs(false)"
         )
 
         val EXPLICIT_JAVASCRIPT_BOUNDARIES = mapOf(
