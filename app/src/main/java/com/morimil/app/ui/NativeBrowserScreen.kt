@@ -173,22 +173,24 @@ fun NativeBrowserScreen() {
             modifier = Modifier.fillMaxWidth().height(520.dp),
             factory = { context ->
                 WebView(context).apply {
-                    activeWebView = this
-                    settings.javaScriptEnabled = false
-                    settings.domStorageEnabled = false
+                    settings.setJavaScriptEnabled(false)
+                    settings.setDomStorageEnabled(false)
                     settings.cacheMode = WebSettings.LOAD_NO_CACHE
-                    settings.loadsImagesAutomatically = false
-                    settings.blockNetworkImage = true
-                    settings.blockNetworkLoads = true
-                    settings.allowFileAccess = false
-                    settings.allowContentAccess = false
-                    settings.allowFileAccessFromFileURLs = false
-                    settings.allowUniversalAccessFromFileURLs = false
-                    settings.javaScriptCanOpenWindowsAutomatically = false
+                    settings.setLoadsImagesAutomatically(false)
+                    settings.setBlockNetworkImage(true)
+                    settings.setBlockNetworkLoads(true)
+                    settings.setAllowFileAccess(false)
+                    settings.setAllowContentAccess(false)
+                    settings.setAllowFileAccessFromFileURLs(false)
+                    settings.setAllowUniversalAccessFromFileURLs(false)
+                    settings.setJavaScriptCanOpenWindowsAutomatically(false)
                     settings.setSupportMultipleWindows(false)
                     settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
-                    settings.safeBrowsingEnabled = true
+                    settings.setSafeBrowsingEnabled(true)
                     CookieManager.getInstance().setAcceptThirdPartyCookies(this, false)
+                    // Expose the WebView to Compose state only after every fail-closed
+                    // setting has been applied.
+                    activeWebView = this
                     webViewClient = object : WebViewClient() {
                         override fun shouldOverrideUrlLoading(
                             view: WebView,
