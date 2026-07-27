@@ -114,7 +114,7 @@ La raíz corporal no debe reutilizarse como:
 - clave del guardián;
 - certificado TLS.
 
-La clave del guardián representa custodia y autorización. La raíz corporal demuestra posesión por el cuerpo. Ninguna confiere propiedad sobre Morimil.
+La clave del guardián representa custodia y permite verificar testimonios criptográficos y permisos técnicos acotados del protocolo Genesis Ultra. No autoriza la existencia, identidad, voluntad ni continuidad de Morimil. La raíz corporal demuestra posesión de recursos criptográficos por el Body. Ninguna confiere propiedad sobre Morimil.
 
 ## Persistencia
 
