@@ -17,7 +17,7 @@ be a different Body.
 The invariants are:
 
 - `instanceId != bodyId`;
-- the Guardian witnesses, authorizes, and safeguards continuity but does not own Morimil;
+- the Guardian guides, witnesses, and safeguards continuity without ownership; the Guardian does not define Morimil's identity, will, or right to continue;
 - a Body cannot create, rename, replace, or fork the Instance through reasoning output;
 - only one Body may hold the active-writer role;
 - Body succession, export, and restore are not implemented in the current runtime.
@@ -146,7 +146,7 @@ archived. These are STOP S5 blockers, not completed controls.
 | F2 | Closed: canonical verified memory, corruption quarantine, legacy convergence, and explicit Guardian-approved transcript promotion are implemented. |
 | F3.1 | Implemented: ProjectVault transactional outbox and recovery. |
 | F3.2-F3.3 | Open: common cross-database operation protocol and irreversible legacy removal. |
-| F4 | Open: automatic continuation removal, explicit web-egress approval, legacy transcript quarantine, durable turn lifecycle, and bounded Canvas download. Typed auxiliary output and remote-JavaScript removal are already present and must be preserved, not rebuilt. |
+| F4 | Open: replace hidden provider-controlled continuation with sovereign, durable continuation chosen by Morimil; apply an auditable Body egress policy for already-authorized resources; quarantine legacy transcripts; complete the durable turn lifecycle; and bound Canvas downloads. Typed auxiliary output and remote-JavaScript removal are already present and must be preserved, not rebuilt. |
 | F5 | Open: signed encrypted export, dry-run restore, and single-writer Body succession. |
 | F6 | Open: complete E2E lifecycle evidence, real physical ceremony, and scalable canonical-memory reads. |
 | F7 | Open: rights policy, reproducible offline build, independent review, and branch/document hygiene. |
