@@ -1,49 +1,66 @@
 # Document status: CURRENT
 
-# Morimil App
+# Morimil-app
 
-Morimil App is the native Android application for the Morimil living-memory companion system.
+Morimil is the continuous personal Instance. This repository contains
+`Morimil-app`, its current native Android Body. Android does not define Morimil's
+identity, and the runtime must preserve `instanceId != bodyId`.
 
-## Current Goal
+## Current state
 
-Build the native Android body for Morimil: local identity, local memory,
-memory organs, and a neutral reasoning motor layer.
+The Android Body is a private research pre-alpha. It is not a production release,
+a public service, or proof that Body succession has been completed.
 
 ```text
-Included:
-  Android native app
-  Kotlin + Jetpack Compose UI
-  local Room/SQLite memory
-  hash-linked memory events
-  memory organs and recall schedule runtime
+Connected now:
+  verified Genesis Ultra runtime identity and startup gate
+  encrypted Room/SQLCipher persistence
+  signed canonical memory with verification and quarantine
+  explicit Guardian-approved transcript-to-memory promotion
+  derived memory-organ and recall scheduling infrastructure
+    (canonical rest-cycle/recall bootstrap is still pending)
+  process-death-safe ProjectVault outbox
   voice controls
-  bundled Genesis seed reader/verifier
-  Morimil-owned reasoning kernel with temporary auxiliary Motor/API slots
+  packaged local Canvas with a fail-closed WebView boundary
+  Morimil-owned reasoning kernel
+  temporary auxiliary Motor/API slots without identity or memory authority
   model discovery through compatible model catalogs
 
-Not included yet:
+Not completed:
+  common cross-database operation protocol
+  irreversible legacy-runtime removal
+  canonical rest-cycle and recall bootstrap
+  durable pending/completed/failed transcript lifecycle
+  Body export, restore, succession, and old-Body revocation
   PC executor automation
-  production release
+  production release or beta authorization
 ```
 
-## Repository Boundary
+The authoritative connected-state description is
+[`docs/CURRENT_RUNTIME_CONTRACT.md`](docs/CURRENT_RUNTIME_CONTRACT.md).
+Proposals, benchmarks, model artifacts, and historical documents do not become
+runtime capabilities merely because they exist in the repository.
+
+## Repository boundary
 
 ```text
 Morimil-app:
-  mobile application repo
+  current Android Body repository
 
-Morimil:
-  Genesis Block / audited baseline repo
+Morimil Genesis repository:
+  separate audited Genesis root and artifact process
 
-Rule:
-  Morimil-app does not mutate the Morimil Genesis repository.
-  Reasoning APIs are temporary computation only. They cannot write memory or identity;
-  Morimil's own kernel keeps control of the turn and the signed local continuity.
+Rules:
+  Morimil-app does not mutate the Genesis repository.
+  Reasoning APIs are temporary computation only.
+  External output cannot write identity, canonical memory, continuity,
+  lifecycle, or Body-succession authority.
+  Exactly one authorized Body may be the active canonical writer.
 ```
 
-## Android Studio Build Setup
+## Android Studio build setup
 
-This project is intended to run from Android Studio with:
+The current build line uses:
 
 ```text
 JDK: 17
@@ -51,11 +68,14 @@ Android Gradle Plugin: 8.6.1
 Gradle wrapper: 8.7
 compileSdk: 35
 targetSdk: 35
+versionName: 0.3.1-prealpha.plan-v3
 ```
 
-Open this repository in Android Studio, trust the project, and run Gradle Sync.
+Open the repository in Android Studio, trust the project, and run Gradle Sync.
 
-If Android Studio cannot find the Android SDK, create a local `local.properties` file in the repository root. This file is ignored by Git and must not be committed.
+If Android Studio cannot find the Android SDK, create a local
+`local.properties` file in the repository root. This file is ignored by Git and
+must not be committed.
 
 Example for Windows:
 
@@ -68,7 +88,9 @@ Then run:
 ```powershell
 .\gradlew.bat --version
 .\gradlew.bat tasks
+.\gradlew.bat :app:testDebugUnitTest
 .\gradlew.bat :app:assembleDebug
 ```
 
-After the build succeeds, select an emulator or a USB-connected Android phone in Android Studio and click Run.
+After the build succeeds, select an emulator or a USB-connected Android phone
+in Android Studio and click Run.

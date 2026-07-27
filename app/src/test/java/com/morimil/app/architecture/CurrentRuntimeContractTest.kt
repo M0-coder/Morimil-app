@@ -2,21 +2,26 @@ package com.morimil.app.architecture
 
 import java.io.File
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CurrentRuntimeContractTest {
+    private val auditedRuntimeBaseline = "5533f6b5eeeb414798c41688820b6bc6a614a80e"
+    private val retiredRuntimeBaseline = "74bcb874606db84d4a88397233d6ed3468904bce"
+
     private val contract by lazy {
         repositoryFile("docs/CURRENT_RUNTIME_CONTRACT.md").readText()
     }
 
+    private val readme by lazy {
+        repositoryFile("README.md").readText()
+    }
+
     @Test
     fun contractTracksTheAuditedBaselineAndDatabaseVersions() {
-        assertTrue(
-            contract.contains(
-                "74bcb874606db84d4a88397233d6ed3468904bce"
-            )
-        )
+        assertTrue(contract.contains(auditedRuntimeBaseline))
+        assertFalse(contract.contains(retiredRuntimeBaseline))
 
         assertEquals(
             roomVersion(productionFile("com/morimil/app/data/local/MorimilDatabase.kt")),
@@ -104,11 +109,50 @@ class CurrentRuntimeContractTest {
 
     @Test
     fun contractPreservesInstanceAndBodySeparation() {
-        assertTrue(contract.contains("Morimil is the continuous Instance."))
-        assertTrue(contract.contains("`Morimil-app` is the current native Android Body"))
+        assertTrue(contract.contains("Morimil is the continuous personal Instance."))
+        assertTrue(contract.contains("`Morimil-app` is the current native Android"))
         assertTrue(contract.contains("`instanceId != bodyId`"))
-        assertTrue(contract.contains("the Guardian witnesses, authorizes and safeguards continuity but does not own Morimil"))
-        assertTrue(contract.contains("Body succession, export and restore are not implemented"))
+        assertTrue(
+            contract.contains(
+                "the Guardian witnesses, authorizes, and safeguards continuity but does not own Morimil"
+            )
+        )
+        assertTrue(contract.contains("Body succession, export, and restore are not implemented"))
+    }
+
+    @Test
+    fun contractDoesNotDeclareStopClosedWithoutPanelEvidence() {
+        assertTrue(contract.contains("| STOP | Closing, not closed:"))
+        assertTrue(contract.contains("CodeQL #37/#33 dispositions"))
+        assertTrue(contract.contains("Dependabot-alert activation/triage"))
+        assertTrue(contract.contains("Secret-scanning count"))
+        assertFalse(
+            contract.contains(
+                "Open: branch protection evidence, document classification, honest versioning"
+            )
+        )
+    }
+
+    @Test
+    fun contractKeepsOpenPhaseDependenciesVisible() {
+        assertTrue(contract.contains("| F1 | Core Genesis Ultra identity"))
+        assertTrue(contract.contains("`WAITING_FOR_CANONICAL_MEMORY_ADAPTER`"))
+        assertTrue(contract.contains("| F2 | Closed:"))
+        assertTrue(contract.contains("| F3.2-F3.3 | Open:"))
+        assertTrue(contract.contains("| F4 | Open:"))
+        assertTrue(contract.contains("| F5 | Open:"))
+        assertTrue(contract.contains("| F6 | Open:"))
+        assertTrue(contract.contains("| F7 | Open:"))
+    }
+
+    @Test
+    fun readmePreservesTheInstanceAndBodyBoundary() {
+        assertTrue(readme.contains("Morimil is the continuous personal Instance."))
+        assertTrue(readme.contains("its current native Android Body"))
+        assertTrue(readme.contains("`instanceId != bodyId`"))
+        assertTrue(readme.contains("private research pre-alpha"))
+        assertTrue(readme.contains("Body export, restore, succession"))
+        assertFalse(readme.contains("living-memory companion system"))
     }
 
     private fun tableVersion(databaseName: String): Int {
