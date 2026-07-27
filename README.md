@@ -17,7 +17,8 @@ Connected now:
   encrypted Room/SQLCipher persistence
   signed canonical memory with verification and quarantine
   explicit Guardian-approved transcript-to-memory promotion
-  memory organs and recall scheduling infrastructure
+  derived memory-organ and recall scheduling infrastructure
+    (canonical rest-cycle/recall bootstrap is still pending)
   process-death-safe ProjectVault outbox
   voice controls
   packaged local Canvas with a fail-closed WebView boundary
@@ -28,6 +29,7 @@ Connected now:
 Not completed:
   common cross-database operation protocol
   irreversible legacy-runtime removal
+  canonical rest-cycle and recall bootstrap
   durable pending/completed/failed transcript lifecycle
   Body export, restore, succession, and old-Body revocation
   PC executor automation
