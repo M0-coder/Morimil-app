@@ -60,7 +60,7 @@ fun MorimilCanvasScreen() {
     var bundleError by remember { mutableStateOf<String?>(null) }
     var status by remember { mutableStateOf("Verificando Morimil Canvas…") }
     var bridgeReady by remember { mutableStateOf(false) }
-    var activeWebView by remember { mutableStateOf<WebView?>(null) }
+    val activeWebView = remember { arrayOfNulls<WebView>(1) }
     var activeBridge by remember { mutableStateOf<MorimilCanvasBridge?>(null) }
     var pendingExport by remember { mutableStateOf<PendingCanvasExport?>(null) }
 
@@ -113,8 +113,8 @@ fun MorimilCanvasScreen() {
         onDispose {
             activeBridge?.close()
             activeBridge = null
-            activeWebView?.destroy()
-            activeWebView = null
+            activeWebView[0]?.destroy()
+            activeWebView[0] = null
         }
     }
 
@@ -169,7 +169,8 @@ fun MorimilCanvasScreen() {
                 AndroidView(
                     modifier = Modifier.fillMaxSize(),
                     factory = { webContext ->
-                        WebView(webContext).apply {
+                        val webView = WebView(webContext)
+                        val settings = webView.settings
                             // WEBVIEW_JS_BOUNDARY: LOCAL_CANVAS_ISSUE_127
                             settings.setJavaScriptEnabled(true)
                             settings.setDomStorageEnabled(true)
@@ -183,11 +184,7 @@ fun MorimilCanvasScreen() {
                             settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
                             settings.setMediaPlaybackRequiresUserGesture(true)
                             settings.setSafeBrowsingEnabled(true)
-                            // Do not expose the Canvas WebView until the local-origin
-                            // security boundary is fully configured.
-                            activeWebView = this
-
-                            webViewClient = object : WebViewClient() {
+                            webView.webViewClient = object : WebViewClient() {
                                 override fun shouldInterceptRequest(
                                     view: WebView,
                                     request: WebResourceRequest
@@ -233,7 +230,7 @@ fun MorimilCanvasScreen() {
                             }
 
                             val bridge = MorimilCanvasBridge(
-                                webView = this,
+                                webView = webView,
                                 onEvent = { event ->
                                     handleCanvasEvent(
                                         event = event,
@@ -273,8 +270,10 @@ fun MorimilCanvasScreen() {
                             )
                             bridge.install()
                             activeBridge = bridge
-                            loadUrl(MorimilCanvasContract.APP_URL)
-                        }
+                            // Publish only after settings, client, and bridge are configured.
+                            activeWebView[0] = webView
+                            webView.loadUrl(MorimilCanvasContract.APP_URL)
+                            webView
                     },
                     update = { webView ->
                         if (webView.url.isNullOrBlank()) {
