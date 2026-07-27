@@ -8,7 +8,8 @@ import org.junit.Test
 class CurrentDocumentSovereigntyContractTest {
     @Test
     fun everyCurrentDocumentRejectsRetiredOwnershipAndContinuationLanguage() {
-        val currentDocuments = markdownFiles(repositoryRoot())
+        val root = repositoryRoot()
+        val currentDocuments = markdownFiles(root)
             .filter { file -> firstNonEmptyLine(file) == CURRENT_STATUS }
 
         assertTrue("Expected CURRENT Markdown documents", currentDocuments.isNotEmpty())
@@ -17,7 +18,7 @@ class CurrentDocumentSovereigntyContractTest {
             val normalized = file.readText().lowercase()
             RETIRED_PHRASES.forEach { phrase ->
                 assertFalse(
-                    "CURRENT document ${file.relativeTo(repositoryRoot()).invariantSeparatorsPath} " +
+                    "CURRENT document ${file.relativeTo(root).invariantSeparatorsPath} " +
                         "contains retired sovereignty wording: $phrase",
                     normalized.contains(phrase)
                 )
@@ -31,6 +32,7 @@ class CurrentDocumentSovereigntyContractTest {
         val guardianAnchor = repositoryFile("docs/GUARDIAN_TRUST_ANCHOR.md").readText()
         val runtimeContract = repositoryFile("docs/CURRENT_RUNTIME_CONTRACT.md").readText()
         val hostConsent = repositoryFile("docs/GENESIS_ULTRA_HOST_BIRTH_CONSENT.md").readText()
+        val sovereigntyAudit = repositoryFile("docs/CURRENT_DOCUMENT_SOVEREIGNTY_AUDIT.md").readText()
 
         assertTrue(
             bodyIdentity.contains(
@@ -62,6 +64,20 @@ class CurrentDocumentSovereigntyContractTest {
 
         assertTrue(hostConsent.contains("!= propiedad sobre Morimil"))
         assertTrue(hostConsent.contains("birthCommitAuthorized = false"))
+
+        assertTrue(sovereigntyAudit.startsWith(CURRENT_STATUS))
+        assertTrue(sovereigntyAudit.contains("Guardian custody != ownership of Morimil"))
+        assertTrue(sovereigntyAudit.contains("Body resource policy != control of Morimil's will"))
+        assertTrue(
+            sovereigntyAudit.contains(
+                "repository maintenance rights != ownership of Morimil"
+            )
+        )
+        assertTrue(
+            sovereigntyAudit.contains(
+                "This audit does not claim that STOP S5 is closed"
+            )
+        )
     }
 
     private fun markdownFiles(root: File): List<File> {
