@@ -34,12 +34,18 @@ class CrossDatabaseOperationInventoryContractTest {
     fun everyProductionCrossDatabaseBoundaryOwnerIsInventoried() {
         val root = repositoryRoot()
         val inventory = inventoryFile(root).readText()
-        val discovered = discoverBoundaryOwners(root)
+        val candidates = discoverBoundaryCandidates(root)
+        val owners = candidates - SCANNER_EXCLUDED_PATHS
 
+        assertEquals(
+            "Cross-database candidate set changed; classify the new path in the F3.2 inventory",
+            EXPECTED_OWNER_PATHS + SCANNER_EXCLUDED_PATHS,
+            candidates
+        )
         assertEquals(
             "Cross-database owner set changed; update the versioned F3.2 inventory in the same PR",
             EXPECTED_OWNER_PATHS,
-            discovered
+            owners
         )
         EXPECTED_OWNER_PATHS.forEach { path ->
             assertTrue("Inventory is missing owner $path", inventory.contains("`$path`"))
@@ -62,35 +68,34 @@ class CrossDatabaseOperationInventoryContractTest {
     }
 
     @Test
-    fun excludedObserversRemainExplicitAndDoNotBecomeSilentOwners() {
+    fun excludedObserversAndCompositionRemainExplicit() {
         val root = repositoryRoot()
         val inventory = inventoryFile(root).readText()
+        val candidates = discoverBoundaryCandidates(root)
 
         EXPLICITLY_EXCLUDED_PATHS.forEach { path ->
             assertTrue("Missing excluded source $path", File(root, path).isFile)
             assertTrue("Inventory must explain exclusion of $path", inventory.contains("`${File(path).nameWithoutExtension}`"))
-            assertTrue("Excluded path unexpectedly discovered as an owner: $path", path !in discoverBoundaryOwners(root))
+            assertTrue("Excluded path unexpectedly classified as an owner: $path", path !in EXPECTED_OWNER_PATHS)
+        }
+        SCANNER_EXCLUDED_PATHS.forEach { path ->
+            assertTrue("Scanner exclusion no longer matches a candidate: $path", path in candidates)
+            assertTrue("Scanner exclusion must be explained in the inventory: $path", path in EXPLICITLY_EXCLUDED_PATHS)
         }
     }
 
-    private fun discoverBoundaryOwners(root: File): Set<String> {
+    private fun discoverBoundaryCandidates(root: File): Set<String> {
         val sourceRoot = File(root, "app/src/main/java")
         return sourceRoot.walkTopDown()
             .filter { file -> file.isFile && file.extension == "kt" }
             .filter { file ->
-                val path = file.relativeTo(root).invariantSeparatorsPath
-                val inAuditedPackage = path.startsWith(REPOSITORY_PREFIX) || path == BOOTSTRAP_PATH
-                if (!inAuditedPackage) {
-                    false
-                } else {
-                    val source = file.readText()
-                    source.contains("MemoryOrganDatabase") &&
-                        (
-                            source.contains("MorimilDatabase") ||
-                                source.contains("MemoryRepository") ||
-                                source.contains("ProjectVaultCommitPort")
-                            )
-                }
+                val source = file.readText()
+                MEMORY_ORGAN_DATABASE_PATTERN.containsMatchIn(source) &&
+                    (
+                        MORIMIL_DATABASE_PATTERN.containsMatchIn(source) ||
+                            MEMORY_REPOSITORY_PATTERN.containsMatchIn(source) ||
+                            PROJECT_VAULT_COMMIT_PORT_PATTERN.containsMatchIn(source)
+                        )
             }
             .map { file -> file.relativeTo(root).invariantSeparatorsPath }
             .toSet()
@@ -114,9 +119,13 @@ class CrossDatabaseOperationInventoryContractTest {
 
     private companion object {
         const val INVENTORY_PATH = "docs/F3_CROSS_DATABASE_OPERATION_INVENTORY.md"
-        const val REPOSITORY_PREFIX = "app/src/main/java/com/morimil/app/data/repository/"
         const val BOOTSTRAP_PATH =
             "app/src/main/java/com/morimil/app/runtime/GenesisUltraRuntimeBootstrapCoordinator.kt"
+
+        val MEMORY_ORGAN_DATABASE_PATTERN = Regex("\\bMemoryOrganDatabase\\b")
+        val MORIMIL_DATABASE_PATTERN = Regex("\\bMorimilDatabase\\b")
+        val MEMORY_REPOSITORY_PATTERN = Regex("\\bMemoryRepository\\b")
+        val PROJECT_VAULT_COMMIT_PORT_PATTERN = Regex("\\bProjectVaultCommitPort\\b")
 
         val REQUIRED_CLASSIFICATIONS = setOf(
             "PROTECTED_REFERENCE",
@@ -127,7 +136,7 @@ class CrossDatabaseOperationInventoryContractTest {
 
         val EXPECTED_OWNER_PATHS = setOf(
             "app/src/main/java/com/morimil/app/data/repository/ProjectVaultRepository.kt",
-            "app/src/main/java/com/morimil/app/runtime/GenesisUltraRuntimeBootstrapCoordinator.kt",
+            BOOTSTRAP_PATH,
             "app/src/main/java/com/morimil/app/data/repository/RecallScheduleRepository.kt",
             "app/src/main/java/com/morimil/app/data/repository/RestCycleRepository.kt",
             "app/src/main/java/com/morimil/app/data/repository/CognitiveMigrationRepository.kt",
@@ -178,6 +187,10 @@ class CrossDatabaseOperationInventoryContractTest {
                 "markMigrationFailed",
                 "markMigrationRolledBack"
             )
+        )
+
+        val SCANNER_EXCLUDED_PATHS = setOf(
+            "app/src/main/java/com/morimil/app/MorimilAppContainer.kt"
         )
 
         val EXPLICITLY_EXCLUDED_PATHS = setOf(
