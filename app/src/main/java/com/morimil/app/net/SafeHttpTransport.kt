@@ -64,6 +64,21 @@ internal data class SafeHttpResponse(
     }
 }
 
+/**
+ * PUBLIC_ORIGIN_TLS_BOUNDARY: CODEQL_ALERT_33_ISSUE_132
+ *
+ * This transport reads user-selected public HTTPS origins, not one stable
+ * Morimil-owned API. A global certificate pin would either reject legitimate
+ * arbitrary destinations or pretend to protect hosts it cannot know ahead of
+ * time. TLS therefore uses OkHttp's unmodified platform trust manager and
+ * hostname verifier. The surrounding policy fails closed on non-HTTPS URLs,
+ * revalidates every redirect and gives OkHttp only the already-approved public
+ * DNS answers. Do not add a permissive TrustManager or HostnameVerifier here.
+ *
+ * A future Morimil-owned stable origin must use a separate pinned transport
+ * with an explicit certificate-rotation policy. This exception does not apply
+ * to such an origin.
+ */
 internal class SafeHttpTransport(
     resolver: NetAddressResolver = SystemNetAddressResolver,
     connectTimeoutMillis: Long = 10_000L,
