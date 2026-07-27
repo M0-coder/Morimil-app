@@ -60,7 +60,7 @@ fun MorimilCanvasScreen() {
     var bundleError by remember { mutableStateOf<String?>(null) }
     var status by remember { mutableStateOf("Verificando Morimil Canvas…") }
     var bridgeReady by remember { mutableStateOf(false) }
-    var activeWebView by remember { mutableStateOf<WebView?>(null) }
+    val activeWebView = remember { arrayOfNulls<WebView>(1) }
     var activeBridge by remember { mutableStateOf<MorimilCanvasBridge?>(null) }
     var pendingExport by remember { mutableStateOf<PendingCanvasExport?>(null) }
 
@@ -113,8 +113,8 @@ fun MorimilCanvasScreen() {
         onDispose {
             activeBridge?.close()
             activeBridge = null
-            activeWebView?.destroy()
-            activeWebView = null
+            activeWebView[0]?.destroy()
+            activeWebView[0] = null
         }
     }
 
@@ -169,112 +169,111 @@ fun MorimilCanvasScreen() {
                 AndroidView(
                     modifier = Modifier.fillMaxSize(),
                     factory = { webContext ->
-                        WebView(webContext).apply {
-                            // WEBVIEW_JS_BOUNDARY: LOCAL_CANVAS_ISSUE_127
-                            settings.setJavaScriptEnabled(true)
-                            settings.setDomStorageEnabled(true)
-                            settings.cacheMode = WebSettings.LOAD_DEFAULT
-                            settings.setAllowFileAccess(false)
-                            settings.setAllowContentAccess(false)
-                            settings.setAllowFileAccessFromFileURLs(false)
-                            settings.setAllowUniversalAccessFromFileURLs(false)
-                            settings.setJavaScriptCanOpenWindowsAutomatically(false)
-                            settings.setSupportMultipleWindows(false)
-                            settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
-                            settings.setMediaPlaybackRequiresUserGesture(true)
-                            settings.setSafeBrowsingEnabled(true)
-                            // Do not expose the Canvas WebView until the local-origin
-                            // security boundary is fully configured.
-                            activeWebView = this
-
-                            webViewClient = object : WebViewClient() {
-                                override fun shouldInterceptRequest(
-                                    view: WebView,
-                                    request: WebResourceRequest
-                                ): WebResourceResponse? {
-                                    val localResponse = assetLoader.shouldInterceptRequest(request.url)
-                                    if (localResponse != null) return localResponse
-                                    return if (request.url.scheme in setOf("http", "https")) {
-                                        WebResourceResponse(
-                                            "text/plain",
-                                            "utf-8",
-                                            403,
-                                            "Blocked",
-                                            emptyMap(),
-                                            ByteArrayInputStream(ByteArray(0))
-                                        )
-                                    } else {
-                                        null
-                                    }
-                                }
-
-                                override fun shouldOverrideUrlLoading(
-                                    view: WebView,
-                                    request: WebResourceRequest
-                                ): Boolean {
-                                    return !request.url.toString().startsWith(
-                                        "${MorimilCanvasContract.APP_ORIGIN}/assets/${MorimilCanvasContract.ASSET_ROOT}/"
+                        val webView = WebView(webContext)
+                        val settings = webView.settings
+                        // WEBVIEW_JS_BOUNDARY: LOCAL_CANVAS_ISSUE_127
+                        settings.setJavaScriptEnabled(true)
+                        settings.setDomStorageEnabled(true)
+                        settings.cacheMode = WebSettings.LOAD_DEFAULT
+                        settings.setAllowFileAccess(false)
+                        settings.setAllowContentAccess(false)
+                        settings.setAllowFileAccessFromFileURLs(false)
+                        settings.setAllowUniversalAccessFromFileURLs(false)
+                        settings.setJavaScriptCanOpenWindowsAutomatically(false)
+                        settings.setSupportMultipleWindows(false)
+                        settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
+                        settings.setMediaPlaybackRequiresUserGesture(true)
+                        settings.setSafeBrowsingEnabled(true)
+                        webView.webViewClient = object : WebViewClient() {
+                            override fun shouldInterceptRequest(
+                                view: WebView,
+                                request: WebResourceRequest
+                            ): WebResourceResponse? {
+                                val localResponse = assetLoader.shouldInterceptRequest(request.url)
+                                if (localResponse != null) return localResponse
+                                return if (request.url.scheme in setOf("http", "https")) {
+                                    WebResourceResponse(
+                                        "text/plain",
+                                        "utf-8",
+                                        403,
+                                        "Blocked",
+                                        emptyMap(),
+                                        ByteArrayInputStream(ByteArray(0))
                                     )
-                                }
-
-                                override fun onPageFinished(view: WebView, url: String?) {
-                                    status = "Lienzo local cargado"
-                                }
-
-                                override fun onReceivedError(
-                                    view: WebView,
-                                    request: WebResourceRequest,
-                                    error: WebResourceError
-                                ) {
-                                    if (request.isForMainFrame) {
-                                        status = "Error del lienzo: ${error.description}"
-                                    }
+                                } else {
+                                    null
                                 }
                             }
 
-                            val bridge = MorimilCanvasBridge(
-                                webView = this,
-                                onEvent = { event ->
-                                    handleCanvasEvent(
-                                        event = event,
-                                        onStatus = { status = it },
-                                        onReady = { bridgeReady = true },
-                                        onExport = { export ->
-                                            val allowedMimeTypes = setOf(
-                                                "image/png",
-                                                "image/svg+xml",
-                                                "application/vnd.excalidraw+json"
-                                            )
-                                            require(export.mimeType in allowedMimeTypes) {
-                                                "Tipo de exportación no permitido"
-                                            }
-                                            val bytes = Base64.decode(export.base64, Base64.DEFAULT)
-                                            require(bytes.size == export.declaredSize) {
-                                                "El tamaño exportado no coincide"
-                                            }
-                                            pendingExport = PendingCanvasExport(
-                                                fileName = export.fileName,
-                                                mimeType = export.mimeType,
-                                                bytes = bytes
-                                            )
-                                            exportLauncher.launch(
-                                                Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
-                                                    addCategory(Intent.CATEGORY_OPENABLE)
-                                                    type = export.mimeType
-                                                    putExtra(Intent.EXTRA_TITLE, export.fileName)
-                                                }
-                                            )
-                                        }
-                                    )
-                                },
-                                onFailure = { error ->
-                                    status = "Puente rechazado: ${error.message ?: error::class.java.simpleName}"
+                            override fun shouldOverrideUrlLoading(
+                                view: WebView,
+                                request: WebResourceRequest
+                            ): Boolean {
+                                return !request.url.toString().startsWith(
+                                    "${MorimilCanvasContract.APP_ORIGIN}/assets/${MorimilCanvasContract.ASSET_ROOT}/"
+                                )
+                            }
+
+                            override fun onPageFinished(view: WebView, url: String?) {
+                                status = "Lienzo local cargado"
+                            }
+
+                            override fun onReceivedError(
+                                view: WebView,
+                                request: WebResourceRequest,
+                                error: WebResourceError
+                            ) {
+                                if (request.isForMainFrame) {
+                                    status = "Error del lienzo: ${error.description}"
                                 }
-                            )
-                            bridge.install()
-                            activeBridge = bridge
-                            loadUrl(MorimilCanvasContract.APP_URL)
+                            }
                         }
+
+                        val bridge = MorimilCanvasBridge(
+                            webView = webView,
+                            onEvent = { event ->
+                                handleCanvasEvent(
+                                    event = event,
+                                    onStatus = { status = it },
+                                    onReady = { bridgeReady = true },
+                                    onExport = { export ->
+                                        val allowedMimeTypes = setOf(
+                                            "image/png",
+                                            "image/svg+xml",
+                                            "application/vnd.excalidraw+json"
+                                        )
+                                        require(export.mimeType in allowedMimeTypes) {
+                                            "Tipo de exportación no permitido"
+                                        }
+                                        val bytes = Base64.decode(export.base64, Base64.DEFAULT)
+                                        require(bytes.size == export.declaredSize) {
+                                            "El tamaño exportado no coincide"
+                                        }
+                                        pendingExport = PendingCanvasExport(
+                                            fileName = export.fileName,
+                                            mimeType = export.mimeType,
+                                            bytes = bytes
+                                        )
+                                        exportLauncher.launch(
+                                            Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                                                addCategory(Intent.CATEGORY_OPENABLE)
+                                                type = export.mimeType
+                                                putExtra(Intent.EXTRA_TITLE, export.fileName)
+                                            }
+                                        )
+                                    }
+                                )
+                            },
+                            onFailure = { error ->
+                                status = "Puente rechazado: ${error.message ?: error::class.java.simpleName}"
+                            }
+                        )
+                        bridge.install()
+                        activeBridge = bridge
+                        // Publish only after settings, client, and bridge are configured.
+                        activeWebView[0] = webView
+                        webView.loadUrl(MorimilCanvasContract.APP_URL)
+                        webView
                     },
                     update = { webView ->
                         if (webView.url.isNullOrBlank()) {

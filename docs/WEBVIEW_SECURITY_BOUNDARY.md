@@ -26,8 +26,12 @@ lifecycle, or Body succession.
   `allowFileAccessFromFileURLs`, and
   `allowUniversalAccessFromFileURLs` remain disabled through explicit
   `WebSettings` setters that CodeQL can model.
-- A WebView is not published to Compose state until its fail-closed settings
-  have been applied.
+- Every WebView constructor is assigned to a local variable before its
+  `WebSettings` are obtained and hardened. Security configuration must not use
+  an implicit Kotlin `apply` receiver.
+- WebView references are not stored in delegated Compose state. A
+  non-observable local slot avoids manufacturing unconfigured WebView sources in
+  static analysis, while a separate Boolean state carries readiness.
 - No production code may call `addJavascriptInterface` without a separate,
   explicit security review.
 - Every production `javaScriptEnabled = true` site must be listed in
@@ -48,13 +52,16 @@ Historical filenames must not be dismissed merely because they were renamed.
 Alert closure requires a fresh CodeQL result on the exact protected `main`
 commit plus source evidence for the corresponding boundary.
 
-After CodeQL #149 analyzed `main@296d6d9`, the open count fell from 27 to 12
-without manual dismissals. The remaining inventory is:
+CodeQL #149 on `main@296d6d9` reduced the inventory from 27 to 12 without
+manual dismissals. CodeQL #151 on `main@fc8185a` then closed three old
+fingerprints but opened #34–#36, leaving the total at 12. That result proves
+that explicit setters inside a Kotlin `WebView(...).apply` block are not enough
+for this query's data-flow model. The remaining inventory is:
 
 | Alerts | Boundary | Disposition |
 | --- | --- | --- |
-| #2, #3, #6–#10, #28, #31, #32 | Canvas and isolated browser content access | Use explicit fail-closed setters before exposing either WebView, then require a fresh CodeQL run |
-| #25 | Local Canvas JavaScript | Reviewed local-origin exception tracked by #127; remote requests and navigation remain denied |
+| #2, #3, #6–#10, #31, #35, #36 | Canvas and isolated browser content access | Replace implicit Kotlin receivers and delegated WebView state with a traceable constructor → settings → fail-closed setter flow, then require a fresh CodeQL run |
+| #34 | Local Canvas JavaScript | Reviewed local-origin exception tracked by #127; remote requests and navigation remain denied |
 | #33 | Public-origin TLS pinning | Platform-PKI exception tracked by #132; arbitrary user-selected hosts cannot share a truthful static pin set |
 
 ## Public-origin TLS

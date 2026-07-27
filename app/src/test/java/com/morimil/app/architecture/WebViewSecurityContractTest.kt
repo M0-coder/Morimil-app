@@ -22,6 +22,34 @@ class WebViewSecurityContractTest {
     }
 
     @Test
+    fun webViewSecurityFlowStaysExplicitForCodeQl() {
+        productionKotlinFiles().forEach { (path, source) ->
+            assertFalse(
+                "$path configures a WebView through an implicit apply receiver",
+                WEBVIEW_APPLY.containsMatchIn(source)
+            )
+            assertFalse(
+                "$path stores a WebView in delegated Compose state",
+                WEBVIEW_COMPOSE_STATE.containsMatchIn(source)
+            )
+            if (WEBVIEW_CONSTRUCTOR.containsMatchIn(source)) {
+                assertTrue(
+                    "$path must assign each WebView constructor to the reviewed local variable",
+                    "val webView = WebView(" in source
+                )
+                assertTrue(
+                    "$path must obtain WebSettings through the explicit WebView variable",
+                    "val settings = webView.settings" in source
+                )
+                assertTrue(
+                    "$path must disable content access on the traceable settings variable",
+                    "settings.setAllowContentAccess(false)" in source
+                )
+            }
+        }
+    }
+
+    @Test
     fun javascriptBoundariesStayExplicitAndHardened() {
         val files = productionKotlinFiles()
         val javascriptFiles = files
@@ -117,6 +145,9 @@ class WebViewSecurityContractTest {
         val JAVASCRIPT_ENABLED =
             Regex("""(?:javaScriptEnabled\s*=\s*true|setJavaScriptEnabled\(\s*true\s*\))""")
         val ADD_JAVASCRIPT_INTERFACE = Regex("""\baddJavascriptInterface\s*\(""")
+        val WEBVIEW_APPLY = Regex("""\bWebView\s*\([^)]*\)\s*\.apply\s*\{""")
+        val WEBVIEW_COMPOSE_STATE = Regex("""mutableStateOf\s*<\s*WebView""")
+        val WEBVIEW_CONSTRUCTOR = Regex("""\bWebView\s*\(""")
 
         val REQUIRED_FAIL_CLOSED_SETTINGS = setOf(
             "settings.setAllowFileAccess(false)",
