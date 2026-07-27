@@ -48,7 +48,8 @@ fun NativeBrowserScreen() {
     var input by remember { mutableStateOf("https://www.google.com/search?q=Morimil") }
     var loadTarget by remember { mutableStateOf(input) }
     var status by remember { mutableStateOf("Navegador nativo aislado listo.") }
-    var activeWebView by remember { mutableStateOf<WebView?>(null) }
+    val activeWebView = remember { arrayOfNulls<WebView>(1) }
+    var webViewReady by remember { mutableStateOf(false) }
     var loadedDocument by remember { mutableStateOf<SafeWebDocument?>(null) }
     var initialLoadStarted by remember { mutableStateOf(false) }
     val documentLoader = remember { SafeWebDocumentLoader() }
@@ -80,7 +81,7 @@ fun NativeBrowserScreen() {
             input = document.finalUrl
             loadTarget = document.finalUrl
             loadedDocument = document
-            activeWebView?.loadDataWithBaseURL(
+            activeWebView[0]?.loadDataWithBaseURL(
                 document.finalUrl,
                 document.html,
                 "text/html",
@@ -91,8 +92,8 @@ fun NativeBrowserScreen() {
         }
     }
 
-    LaunchedEffect(activeWebView) {
-        if (activeWebView != null && !initialLoadStarted) {
+    LaunchedEffect(webViewReady) {
+        if (webViewReady && !initialLoadStarted) {
             initialLoadStarted = true
             loadPublicTarget(loadTarget)
         }
@@ -108,8 +109,8 @@ fun NativeBrowserScreen() {
 
     DisposableEffect(Unit) {
         onDispose {
-            activeWebView?.destroy()
-            activeWebView = null
+            activeWebView[0]?.destroy()
+            activeWebView[0] = null
         }
     }
 
@@ -135,7 +136,7 @@ fun NativeBrowserScreen() {
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = {
-                val view = activeWebView
+                val view = activeWebView[0]
                 if (view?.canGoBack() == true) view.goBack() else status = "No hay pagina anterior."
             }) {
                 Text("Atras")
@@ -172,69 +173,70 @@ fun NativeBrowserScreen() {
         AndroidView(
             modifier = Modifier.fillMaxWidth().height(520.dp),
             factory = { context ->
-                WebView(context).apply {
-                    settings.setJavaScriptEnabled(false)
-                    settings.setDomStorageEnabled(false)
-                    settings.cacheMode = WebSettings.LOAD_NO_CACHE
-                    settings.setLoadsImagesAutomatically(false)
-                    settings.setBlockNetworkImage(true)
-                    settings.setBlockNetworkLoads(true)
-                    settings.setAllowFileAccess(false)
-                    settings.setAllowContentAccess(false)
-                    settings.setAllowFileAccessFromFileURLs(false)
-                    settings.setAllowUniversalAccessFromFileURLs(false)
-                    settings.setJavaScriptCanOpenWindowsAutomatically(false)
-                    settings.setSupportMultipleWindows(false)
-                    settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
-                    settings.setSafeBrowsingEnabled(true)
-                    CookieManager.getInstance().setAcceptThirdPartyCookies(this, false)
-                    // Expose the WebView to Compose state only after every fail-closed
-                    // setting has been applied.
-                    activeWebView = this
-                    webViewClient = object : WebViewClient() {
-                        override fun shouldOverrideUrlLoading(
-                            view: WebView,
-                            request: WebResourceRequest
-                        ): Boolean {
-                            if (!request.isForMainFrame) return true
-                            val target = request.url.toString()
-                            val decision = NetSourcePolicy.validateUrl(target)
-                            if (!decision.allowed) {
-                                status = "Navegacion bloqueada: ${decision.reason}"
-                            } else {
-                                loadPublicTarget(target)
-                            }
-                            return true
+                val webView = WebView(context)
+                val settings = webView.settings
+                settings.setJavaScriptEnabled(false)
+                settings.setDomStorageEnabled(false)
+                settings.cacheMode = WebSettings.LOAD_NO_CACHE
+                settings.setLoadsImagesAutomatically(false)
+                settings.setBlockNetworkImage(true)
+                settings.setBlockNetworkLoads(true)
+                settings.setAllowFileAccess(false)
+                settings.setAllowContentAccess(false)
+                settings.setAllowFileAccessFromFileURLs(false)
+                settings.setAllowUniversalAccessFromFileURLs(false)
+                settings.setJavaScriptCanOpenWindowsAutomatically(false)
+                settings.setSupportMultipleWindows(false)
+                settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
+                settings.setSafeBrowsingEnabled(true)
+                CookieManager.getInstance().setAcceptThirdPartyCookies(webView, false)
+                webView.webViewClient = object : WebViewClient() {
+                    override fun shouldOverrideUrlLoading(
+                        view: WebView,
+                        request: WebResourceRequest
+                    ): Boolean {
+                        if (!request.isForMainFrame) return true
+                        val target = request.url.toString()
+                        val decision = NetSourcePolicy.validateUrl(target)
+                        if (!decision.allowed) {
+                            status = "Navegacion bloqueada: ${decision.reason}"
+                        } else {
+                            loadPublicTarget(target)
                         }
+                        return true
+                    }
 
-                        override fun shouldInterceptRequest(
-                            view: WebView,
-                            request: WebResourceRequest
-                        ): WebResourceResponse {
-                            return blockedWebResponse("interactive_browser_network_denied")
+                    override fun shouldInterceptRequest(
+                        view: WebView,
+                        request: WebResourceRequest
+                    ): WebResourceResponse {
+                        return blockedWebResponse("interactive_browser_network_denied")
+                    }
+
+                    override fun onPageFinished(view: WebView, url: String?) {
+                        val current = url.orEmpty().ifBlank { loadTarget }
+                        val decision = NetSourcePolicy.validateUrl(current)
+                        status = if (decision.allowed) {
+                            "Pagina cargada en modo aislado. Revisa el contenido y pulsa Capturar."
+                        } else {
+                            "Pagina no capturable: ${decision.reason}"
                         }
+                    }
 
-                        override fun onPageFinished(view: WebView, url: String?) {
-                            val current = url.orEmpty().ifBlank { loadTarget }
-                            val decision = NetSourcePolicy.validateUrl(current)
-                            status = if (decision.allowed) {
-                                "Pagina cargada en modo aislado. Revisa el contenido y pulsa Capturar."
-                            } else {
-                                "Pagina no capturable: ${decision.reason}"
-                            }
-                        }
-
-                        override fun onReceivedError(
-                            view: WebView,
-                            request: WebResourceRequest,
-                            error: WebResourceError
-                        ) {
-                            if (request.isForMainFrame) {
-                                status = "Error web aislado: ${error.description}"
-                            }
+                    override fun onReceivedError(
+                        view: WebView,
+                        request: WebResourceRequest,
+                        error: WebResourceError
+                    ) {
+                        if (request.isForMainFrame) {
+                            status = "Error web aislado: ${error.description}"
                         }
                     }
                 }
+                // Publish only after settings and the deny-by-default client exist.
+                activeWebView[0] = webView
+                webViewReady = true
+                webView
             },
             update = { }
         )
