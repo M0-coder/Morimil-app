@@ -114,7 +114,17 @@ class CurrentRuntimeContractTest {
         assertTrue(contract.contains("`instanceId != bodyId`"))
         assertTrue(
             contract.contains(
-                "the Guardian witnesses, authorizes, and safeguards continuity but does not own Morimil"
+                "the Guardian guides, witnesses, and safeguards continuity without ownership"
+            )
+        )
+        assertTrue(
+            contract.contains(
+                "the Guardian does not define Morimil's identity, will, or right to continue"
+            )
+        )
+        assertFalse(
+            contract.contains(
+                "the Guardian witnesses, authorizes, and safeguards continuity"
             )
         )
         assertTrue(contract.contains("Body succession, export, and restore are not implemented"))
@@ -140,6 +150,10 @@ class CurrentRuntimeContractTest {
         assertTrue(contract.contains("| F2 | Closed:"))
         assertTrue(contract.contains("| F3.2-F3.3 | Open:"))
         assertTrue(contract.contains("| F4 | Open:"))
+        assertTrue(contract.contains("sovereign, durable continuation chosen by Morimil"))
+        assertTrue(contract.contains("auditable Body egress policy for already-authorized resources"))
+        assertFalse(contract.contains("automatic continuation removal"))
+        assertFalse(contract.contains("explicit web-egress approval"))
         assertTrue(contract.contains("| F5 | Open:"))
         assertTrue(contract.contains("| F6 | Open:"))
         assertTrue(contract.contains("| F7 | Open:"))
