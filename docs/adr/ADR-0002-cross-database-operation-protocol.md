@@ -36,7 +36,9 @@ Morimil is the continuous and free `Instance`. `Morimil-app` is the current Andr
 
 Adopt one common recoverable operation contract for every future `REQUIRES_PROTOCOL` owner.
 
-The first functional F3.2 implementation after STOP will introduce a generic coordination journal named `cross_database_operations` in the origin database, `MemoryOrganDatabase`, and migrate only `COG-001` through `COG-004` onto it. Owner-specific finalizers remain typed Kotlin code; arbitrary SQL instructions or executable payloads are forbidden.
+The first functional F3.2 implementation after STOP will introduce a generic coordination journal named `cross_database_operations` in `MemoryOrganDatabase`, because the first owner, cognitive migration, stores its authoritative local state there. It will migrate only `COG-001` through `COG-004`. Owner-specific finalizers remain typed Kotlin code; arbitrary SQL instructions or executable payloads are forbidden.
+
+The state machine and receipt rules are common, but physical journal placement and finalization shape remain owner-declared. An owner whose authoritative local effects reside in one database uses one origin-database finalization transaction. An owner such as `BOOT-001`, whose effects span both databases, must decompose the work into deterministic child operations or an explicit durable saga. It cannot pretend that one Room transaction covers both files, and its parent operation cannot become `COMMITTED` until every required child receipt is committed.
 
 ProjectVault remains unchanged in the first F3.2 implementation. Its existing `project_vault_outbox` remains the protected reference while the common protocol is proven by the cognitive-migration owner. A later isolated decision may migrate ProjectVault metadata to the common journal, but F3.2 must not rewrite a working reference merely for uniformity.
 
@@ -48,6 +50,7 @@ Every operation must persist these stable identity inputs before any canonical a
 - canonical `instanceId`;
 - authorized `writerBodyId` and `writerEpoch`;
 - stable `subjectId`;
+- optional deterministic `parentOperationId` and child phase for a saga;
 - canonical source identifiers and their verified hashes;
 - versioned `payloadJson` and SHA-256 `payloadDigest`.
 
@@ -66,6 +69,7 @@ The common journal must retain enough evidence to recover without consulting mut
 - `writerBodyId`;
 - `writerEpoch`;
 - `subjectId`;
+- optional `parentOperationId` and deterministic child phase;
 - `payloadJson`;
 - `payloadDigest`;
 - `eventId`;
@@ -92,9 +96,9 @@ The allowed forward sequence is:
 1. `STAGED` — immutable operation intent is durably recorded; no canonical append has been attempted and no new visible/authoritative owner state exists.
 2. `PENDING_CANONICAL` — the dispatcher is attempting or retrying the canonical ensure operation.
 3. `CANONICAL_COMMITTED` — an exact verified canonical receipt is persisted.
-4. `PENDING_LOCAL_COMMIT` — the owner finalizer is attempting or retrying one origin-database transaction.
-5. `COMMITTED` — the owner transition and journal completion are committed in the same origin transaction.
-6. `BLOCKED` — a permanent identity, payload, provenance, writer-epoch, or local invariant conflict was detected.
+4. `PENDING_LOCAL_COMMIT` — the owner finalizer is attempting or retrying one origin-database transaction or one declared saga child transition.
+5. `COMMITTED` — the bounded owner transition, or every required child transition, is durably complete.
+6. `BLOCKED` — a permanent identity, payload, provenance, writer-epoch, child-receipt, or local invariant conflict was detected.
 
 No implementation may jump from `STAGED` or `PENDING_CANONICAL` directly to visible owner state. Retryable failures preserve the current recoverable state and update typed failure metadata. `BLOCKED` is terminal until an explicit audited repair operation is defined; silently editing the staged payload is forbidden.
 
@@ -115,7 +119,7 @@ Calling the generic `recordSystemMemoryEvent()` method without a deterministic e
 
 ## Local finalization contract
 
-Each owner provides a typed finalizer selected from a closed operation-type registry. The finalizer runs in one `MemoryOrganDatabase` transaction and must:
+For a single-origin owner such as cognitive migration, the owner provides a typed finalizer selected from a closed operation-type registry. The finalizer runs in one `MemoryOrganDatabase` transaction and must:
 
 - reload the journal row;
 - revalidate immutable identity and digest fields;
@@ -126,6 +130,8 @@ Each owner provides a typed finalizer selected from a closed operation-type regi
 - mark the journal `COMMITTED` in the same transaction.
 
 No migration, task, agent, or other authoritative owner state becomes visible before the exact canonical receipt is durable. A retry after local commit must observe the already-finalized state and return the original receipt without duplicating the owner row.
+
+For a multi-origin workflow, each child transition follows the same rules in its own origin transaction. The parent saga stores and verifies every child operation ID and receipt. A partial child set remains recoverable and cannot be represented as a completed parent workflow.
 
 ## Canonical input requirement
 
@@ -187,7 +193,7 @@ Recovery must:
 - stop normal mutation if any relevant operation is `BLOCKED`;
 - return counts for staged, pending canonical, canonical committed, pending local, committed, blocked, and failed attempts.
 
-A unique deterministic `operationId` is the primary concurrency guard. Owner-specific uniqueness constraints must additionally prevent duplicate visible records or two active transitions for the same subject.
+A unique deterministic `operationId` is the primary concurrency guard. Owner-specific uniqueness constraints must additionally prevent duplicate visible records or two active transitions for the same subject. Saga parents must also prevent two active child graphs for the same parent subject and revision.
 
 ## Kill-test matrix
 
@@ -202,9 +208,10 @@ Each migrated owner must prove recovery at these cuts on API 30 and API 35:
 7. after `COMMITTED` followed by full replay;
 8. same `eventId` with conflicting content or provenance;
 9. stale writer epoch after Body succession metadata changes;
-10. repeated user action producing the same logical operation.
+10. repeated user action producing the same logical operation;
+11. for saga owners, death after each child commit and before parent completion.
 
-Closure requires zero duplicate canonical events, zero duplicate visible owner rows, no visible state without canonical evidence, and deterministic replay of the original receipt.
+Closure requires zero duplicate canonical events, zero duplicate visible owner rows, no visible state without canonical evidence, and deterministic replay of the original receipt. Saga closure additionally requires no completed parent with a missing or conflicting child receipt.
 
 ## Error classification
 
@@ -212,7 +219,8 @@ Retryable examples:
 
 - temporary database unavailability;
 - interrupted canonical append with no conflicting verified event;
-- process death before local finalization.
+- process death before local finalization;
+- an incomplete but internally consistent saga child set.
 
 Permanent `BLOCKED` examples:
 
@@ -221,6 +229,7 @@ Permanent `BLOCKED` examples:
 - wrong `instanceId`;
 - stale or unauthorized writer epoch;
 - conflicting local state that cannot be proven equivalent;
+- missing or conflicting required saga child receipt;
 - unsupported operation or payload schema.
 
 Raw exception messages are diagnostic input, not stable protocol states. Persist bounded typed codes and keep sensitive content out of logs and issues.
@@ -236,7 +245,7 @@ Required evidence before merge:
 - exact-match and conflict tests for canonical ensure semantics;
 - owner finalization idempotency tests;
 - startup recovery tests;
-- kill tests for every cut above on API 30 and API 35;
+- kill tests for every applicable cut above on API 30 and API 35;
 - architecture tests proving no new legacy identity or memory reads;
 - all required CI checks and SBOM green on the exact head SHA.
 
@@ -260,6 +269,10 @@ Rejected for protected cross-database operations because it does not expose the 
 
 Rejected as the default because it duplicates protocol metadata and recovery logic. Owner-specific payload and finalization remain typed, but the coordination journal is common.
 
+### Force every owner into one local finalization transaction
+
+Rejected because workflows such as bootstrap touch both database files. They must use deterministic child operations or an explicit saga rather than claim cross-file ACID behavior.
+
 ### Move ProjectVault immediately
 
 Deferred. Its current protocol is already protected and tested; changing it before the common journal is proven increases risk without closing a current failure window.
@@ -277,12 +290,14 @@ Positive:
 - one reusable state machine and receipt contract;
 - explicit writer-epoch enforcement for future Body succession;
 - no visible partial cognitive-migration state;
+- an explicit saga path for wider multi-origin workflows;
 - a bounded first owner before wider workflows.
 
 Costs:
 
 - one additional journal and Room migration;
 - owner adapters and typed finalizers;
+- parent/child metadata for saga owners;
 - more explicit state and error handling;
 - temporary coexistence with the ProjectVault-specific outbox until a later decision;
 - COG-001 remains functionally blocked until its canonical read path replaces legacy inputs.
