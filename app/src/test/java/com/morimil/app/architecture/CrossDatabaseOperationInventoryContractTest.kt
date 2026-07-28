@@ -17,11 +17,9 @@ class CrossDatabaseOperationInventoryContractTest {
                 "Audited baseline: `main@612d91aef131f367140ffb87a60a19ef49adcbc8`"
             )
         )
-        assertTrue(
-            inventory.contains(
-                "STOP S5 remains open. This inventory does not authorize runtime changes."
-            )
-        )
+        assertTrue(inventory.contains("STOP S5 remains open"))
+        assertTrue(inventory.contains("#123 and #124"))
+        assertTrue(inventory.contains("This inventory does not authorize runtime changes."))
         REQUIRED_CLASSIFICATIONS.forEach { classification ->
             assertTrue("Missing inventory classification $classification", inventory.contains("`$classification`"))
         }
