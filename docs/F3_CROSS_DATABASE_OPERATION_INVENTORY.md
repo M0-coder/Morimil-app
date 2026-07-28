@@ -3,7 +3,8 @@
 # F3.2 — Cross-database operation inventory
 
 - Inventory version: `1`
-- Audited runtime baseline: `main@612d91aef131f367140ffb87a60a19ef49adcbc8`
+- Audited baseline: `main@612d91aef131f367140ffb87a60a19ef49adcbc8`
+- Baseline scope: production runtime and cross-database owner inventory.
 - Repository state reconciled: `main@5b32c0a6fb093b4c29c33ff56fb47b8c334916c2`
 - Tracker: `#88`
 - Execution gate: **STOP S5 remains open through #123 and #124. This inventory does not authorize runtime changes.**
