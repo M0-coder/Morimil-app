@@ -1,129 +1,119 @@
 # Document status: CURRENT
 
-# STOP S5 administrative evidence runbook
+# Runbook de evidencia administrativa para STOP S5
 
-## Purpose and authority
+## Propósito y autoridad
 
-This runbook defines how the repository owner obtains, validates, redacts, and archives the administrative security evidence required by issues #123, #124, and the master tracker #84.
+Este runbook define cómo el propietario del repositorio obtiene, valida, redacta y archiva la evidencia administrativa requerida por #123, #124 y el tracker maestro #84.
 
-It does not change runtime, workflows, dependencies, CodeQL configuration, repository settings, or alert state. It also does not authorize an agent to close a tracker or merge a pull request.
+No modifica runtime, workflows, dependencias, CodeQL, configuración de seguridad ni estados del panel. Tampoco autoriza a un agente a cerrar trackers, editar el cuerpo de #84, fusionar un PR o declarar satisfecha la compuerta.
 
-The central rule is:
+Regla central:
 
-> Technical evidence in code and CI does not replace an administrative disposition recorded in the authenticated GitHub panel. Administrative evidence is not inferred from code.
+> La evidencia técnica del código y de CI no sustituye una disposición administrativa registrada en el panel autenticado de GitHub. La evidencia administrativa no se infiere desde el código.
 
-The connected source, tests, and green workflows may establish that a technical control exists. They cannot establish that GitHub recorded a dismissal, enabled a feature, or currently shows a specific alert count.
+El código, los tests y los workflows verdes pueden demostrar que existe un control técnico. No pueden demostrar por sí solos que GitHub registró un dismissal, habilitó una función o muestra actualmente un contador determinado.
 
-## Current fail-closed state
+## Estado fail-closed
 
-STOP S5 remains open until all four controls below have durable evidence:
+STOP S5 permanece abierto hasta que existan pruebas durables para los cuatro controles:
 
-1. CodeQL alert #37 is recorded as `dismissed` with reason `won't fix`.
-2. CodeQL alert #33 is recorded as `dismissed` with reason `won't fix`.
-3. Dependabot alerts is enabled and every resulting alert has a recorded decision.
-4. Secret scanning is enabled and every current alert has a recorded state and decision.
+1. CodeQL #37 figura como `dismissed` con razón `won't fix`.
+2. CodeQL #33 figura como `dismissed` con razón `won't fix`.
+3. Dependabot alerts está habilitado y todas sus alertas tienen decisión.
+4. Secret scanning está habilitado y todas sus alertas actuales tienen estado y decisión.
 
-Issue #127 contains the technical justification for the controlled local-Canvas JavaScript boundary associated with #37. Issue #132 contains the technical justification for the public-origin TLS boundary associated with #33. Those technical records explain why a `won't fix` disposition is defensible; they do not prove that the panel already contains that disposition.
+#127 contiene la justificación técnica para la frontera JavaScript del Canvas local asociada con #37. #132 contiene la justificación técnica para la frontera TLS de orígenes públicos asociada con #33. Esos registros explican por qué corresponde `won't fix`; no prueban que el panel ya haya registrado la disposición.
 
-The GitHub connector available to this work can read repository code, issues, pull requests, commits, and workflow evidence. It does not expose the authenticated Code scanning alerts, Dependabot alerts, or Secret scanning panels. The panel state therefore requires a manual authenticated verification by the repository owner.
+El conector GitHub disponible puede leer código, commits, PRs, issues y workflows. No expone los paneles autenticados de Code scanning alerts, Dependabot alerts ni Secret scanning. Por ello, el propietario debe realizar la verificación manual en su propia sesión autenticada.
 
-## General evidence requirements
+## Requisitos generales de evidencia
 
-Every accepted evidence record must identify:
+Cada registro aceptable debe identificar:
 
-- repository: `morimilpabfelon-cell/Morimil-app`;
-- authenticated panel or alert page used;
-- UTC date and time of observation;
-- actor who performed the verification or disposition;
-- exact alert, feature, or counter being demonstrated;
-- resulting state and reason;
-- a durable authenticated link, or a redacted authenticated capture when the link is not independently readable;
-- the issue comment where the evidence was archived.
+- repositorio exacto: `morimilpabfelon-cell/Morimil-app`;
+- panel o alerta autenticada consultada;
+- fecha y hora UTC de observación;
+- actor que verificó o aplicó la disposición;
+- alerta, función o contador demostrado;
+- estado y razón resultantes;
+- enlace durable o captura autenticada redactada;
+- comentario de issue donde se archivó.
 
-A capture must show enough surrounding context to establish the repository, panel, alert or counter, and state. Authentication cookies, tokens, email addresses, secret values, detected credentials, and unrelated private information must be excluded or redacted.
+Una captura debe mostrar contexto suficiente para reconocer repositorio, panel, alerta o contador y estado. Se deben ocultar cookies, tokens, correos, valores secretos, credenciales detectadas y datos privados no relacionados.
 
-## Control 1 — CodeQL alert #37
+## Control 1 — CodeQL #37
 
-### Required panel result
+La página autenticada de #37 debe mostrar:
 
-The authenticated Code scanning page for #37 must show:
+- estado `dismissed`;
+- razón `won't fix`;
+- comentario que limite la excepción al Canvas local empaquetado protegido por #127;
+- actor;
+- fecha de disposición;
+- enlace o captura autenticada redactada.
 
-- state: `dismissed`;
-- reason: `won't fix`;
-- dismissal comment explaining that the exception is limited to the packaged local Canvas boundary governed by #127;
-- actor who submitted the disposition;
-- date and time of the disposition;
-- alert link or redacted authenticated capture.
-
-The comment must not classify the finding as `false positive`. It must preserve that JavaScript is genuinely enabled at one reviewed local boundary and that the technical risk is controlled by the existing origin, navigation, file/content-access, and bridge restrictions.
-
-### Accepted evidence record
+No se acepta `false positive`. JavaScript existe realmente en una frontera local revisada; la decisión técnica es riesgo controlado, no inexistencia del hallazgo.
 
 ```text
 CodeQL alert: #37
 Repository: morimilpabfelon-cell/Morimil-app
 Panel state: dismissed
 Dismissal reason: won't fix
-Dismissal comment: <exact non-secret comment>
+Dismissal comment: <comentario exacto sin secretos>
 Actor: @<github-login>
-Observed/disposed at UTC: <YYYY-MM-DDTHH:MM:SSZ>
+Disposed at UTC: <YYYY-MM-DDTHH:MM:SSZ>
 Technical justification: #127
-Authenticated evidence: <alert URL or redacted capture reference>
+Authenticated evidence: <URL o referencia de captura redactada>
 Archived in: #123 comment <URL>
 ```
 
-## Control 2 — CodeQL alert #33
+## Control 2 — CodeQL #33
 
-### Required panel result
+La página autenticada de #33 debe mostrar:
 
-The authenticated Code scanning page for #33 must show:
+- estado `dismissed`;
+- razón `won't fix`;
+- comentario que limite la excepción a `SafeHttpTransport` para orígenes HTTPS públicos arbitrarios y prohíba reutilizarla para una API estable propia;
+- actor;
+- fecha de disposición;
+- enlace o captura autenticada redactada.
 
-- state: `dismissed`;
-- reason: `won't fix`;
-- dismissal comment explaining that the exception is restricted to `SafeHttpTransport` for arbitrary public HTTPS origins and cannot be reused for a stable first-party API;
-- actor who submitted the disposition;
-- date and time of the disposition;
-- alert link or redacted authenticated capture.
-
-The comment must not classify the finding as `false positive`. The technical record in #132 establishes why global certificate pinning is not a valid control for arbitrary user-selected public origins.
-
-### Accepted evidence record
+No se acepta `false positive`. #132 demuestra que un pin global sería incorrecto para destinos públicos arbitrarios.
 
 ```text
 CodeQL alert: #33
 Repository: morimilpabfelon-cell/Morimil-app
 Panel state: dismissed
 Dismissal reason: won't fix
-Dismissal comment: <exact non-secret comment>
+Dismissal comment: <comentario exacto sin secretos>
 Actor: @<github-login>
-Observed/disposed at UTC: <YYYY-MM-DDTHH:MM:SSZ>
+Disposed at UTC: <YYYY-MM-DDTHH:MM:SSZ>
 Technical justification: #132
-Authenticated evidence: <alert URL or redacted capture reference>
+Authenticated evidence: <URL o referencia de captura redactada>
 Archived in: #123 comment <URL>
 ```
 
 ## Control 3 — Dependabot alerts
 
-Dependabot update pull requests and Dependabot vulnerability alerts are different controls. The existence of automated update pull requests is not evidence that Dependabot alerts is enabled.
+Los PR automáticos de actualización y las alertas de vulnerabilidad de Dependabot son controles distintos. La existencia de PRs automáticos no demuestra que Dependabot alerts esté habilitado.
 
-Accepted Dependabot evidence must demonstrate:
+La evidencia aceptable debe demostrar:
 
-1. the repository feature is `Enabled`;
-2. the exact initial alert count after activation;
-3. the visible list of alerts, or a complete grouping that maps every alert to a disposition;
-4. a decision for every alert;
+1. función `Enabled`;
+2. contador inicial exacto después de activarla;
+3. lista visible o agrupación completa que cubra todas las alertas;
+4. decisión trazable para cada alerta;
 5. `undecided_count = 0`.
 
-Permitted dispositions are:
+Disposiciones permitidas:
 
-- fixed by an identified commit or pull request;
-- dismissed with a recorded GitHub reason and repository-specific justification;
-- converted into a dedicated issue with owner, risk, and closure criteria;
-- verified zero-alert state.
+- corregida mediante commit o PR identificado;
+- descartada con razón GitHub y justificación específica del repositorio;
+- convertida en issue dedicado con responsable, riesgo y criterio de cierre;
+- estado verificable de cero alertas.
 
-Major dependency upgrades must remain in their dedicated trackers and must not be merged automatically only because Dependabot proposes them.
-
-### Accepted evidence record
+Las actualizaciones mayores permanecen en sus trackers y no se fusionan automáticamente por ser propuestas por Dependabot.
 
 ```text
 Dependabot alerts: Enabled
@@ -134,28 +124,26 @@ Decided count: <integer>
 Undecided count: 0
 Observed at UTC: <YYYY-MM-DDTHH:MM:SSZ>
 Actor: @<github-login>
-Authenticated evidence: <panel URL or redacted capture reference>
+Authenticated evidence: <URL o referencia de captura redactada>
 Disposition index:
-- <alert ID or complete group>: <fixed | dismissed-with-reason | tracked-in-issue>; evidence=<URL or issue>
+- <alert ID o grupo completo>: <fixed | dismissed-with-reason | tracked-in-issue>; evidence=<URL o issue>
 Archived in: #124 comment <URL>
 Cross-linked from: #123 comment <URL>
 ```
 
 ## Control 4 — Secret scanning
 
-Accepted Secret scanning evidence must demonstrate:
+La evidencia aceptable debe demostrar:
 
-1. the repository feature is enabled;
-2. the exact current alert count;
-3. the state of every alert without reproducing the detected secret;
-4. a decision or remediation reference for every alert;
+1. función habilitada;
+2. contador actual exacto;
+3. estado de cada alerta sin reproducir el secreto detectado;
+4. decisión o remediación trazable para cada alerta;
 5. `undecided_count = 0`.
 
-The archived record may contain a GitHub alert number or redacted reference, state, remediation category, actor, date, and link. It must never contain a token, private key, credential value, matched secret text, or authentication material.
+Solo se registra número de alerta o referencia redactada, estado, categoría de remediación, actor, fecha y enlace. Nunca se copian tokens, claves privadas, credenciales, texto detectado, cookies ni material de autenticación.
 
-Permitted recorded outcomes include revoked, rotated, remediated, dismissed with a supported reason, tracked in a dedicated security issue, or verified zero-alert state.
-
-### Accepted evidence record
+Resultados permitidos: revocado, rotado, remediado, descartado con razón respaldada, trasladado a issue de seguridad o cero alertas verificable.
 
 ```text
 Secret scanning: Enabled
@@ -165,40 +153,40 @@ Decided count: <integer>
 Undecided count: 0
 Observed at UTC: <YYYY-MM-DDTHH:MM:SSZ>
 Actor: @<github-login>
-Authenticated evidence: <panel URL or redacted capture reference>
+Authenticated evidence: <URL o referencia de captura redactada>
 Disposition index:
-- <alert number or redacted reference>: <revoked | rotated | remediated | dismissed-with-reason | tracked-in-issue>; evidence=<URL or issue>
+- <alert number o redacted reference>: <revoked | rotated | remediated | dismissed-with-reason | tracked-in-issue>; evidence=<URL o issue>
 Archived in: #123 comment <URL>
 ```
 
-## Exact issue templates
+## Plantillas exactas de registro
 
-Unknown values must remain as placeholders. Do not replace them with estimates.
+Los valores desconocidos se mantienen como placeholders. Está prohibido sustituirlos por estimaciones.
 
-### Template for #123
+### Plantilla para #123
 
 ```markdown
-## STOP S5 administrative evidence — <YYYY-MM-DDTHH:MM:SSZ>
+## Evidencia administrativa STOP S5 — <YYYY-MM-DDTHH:MM:SSZ>
 
-Repository: `morimilpabfelon-cell/Morimil-app`
-Verified by: `@<github-login>`
-Baseline reviewed: `main@<sha>`
+Repositorio: `morimilpabfelon-cell/Morimil-app`
+Verificado por: `@<github-login>`
+Baseline revisado: `main@<sha>`
 
 ### CodeQL #37
-- Panel state: `dismissed`
-- Reason: `won't fix`
-- Comment: `<exact non-secret dismissal comment>`
+- Estado del panel: `dismissed`
+- Razón: `won't fix`
+- Comentario: `<comentario exacto sin secretos>`
 - Actor: `@<github-login>`
-- Disposition date UTC: `<YYYY-MM-DDTHH:MM:SSZ>`
-- Evidence: `<authenticated URL or redacted capture reference>`
+- Fecha UTC: `<YYYY-MM-DDTHH:MM:SSZ>`
+- Evidencia: `<URL autenticada o captura redactada>`
 
 ### CodeQL #33
-- Panel state: `dismissed`
-- Reason: `won't fix`
-- Comment: `<exact non-secret dismissal comment>`
+- Estado del panel: `dismissed`
+- Razón: `won't fix`
+- Comentario: `<comentario exacto sin secretos>`
 - Actor: `@<github-login>`
-- Disposition date UTC: `<YYYY-MM-DDTHH:MM:SSZ>`
-- Evidence: `<authenticated URL or redacted capture reference>`
+- Fecha UTC: `<YYYY-MM-DDTHH:MM:SSZ>`
+- Evidencia: `<URL autenticada o captura redactada>`
 
 ### Dependabot alerts
 - Enabled: `<true|false>`
@@ -206,106 +194,106 @@ Baseline reviewed: `main@<sha>`
 - Current count: `<integer>`
 - Decided count: `<integer>`
 - Undecided count: `<integer>`
-- Evidence: `<#124 comment URL>`
+- Evidencia: `<URL del comentario en #124>`
 
 ### Secret scanning
 - Enabled: `<true|false>`
 - Current count: `<integer>`
 - Decided count: `<integer>`
 - Undecided count: `<integer>`
-- Evidence: `<authenticated URL or redacted capture reference>`
+- Evidencia: `<URL autenticada o captura redactada>`
 
 Gate state: `OPEN_PENDING_ORCHESTRATOR_REVIEW`
-No secret values or credentials are included in this record.
+Este registro no contiene secretos ni credenciales.
 ```
 
-### Template for #124
+### Plantilla para #124
 
 ```markdown
-## Dependabot administrative evidence — <YYYY-MM-DDTHH:MM:SSZ>
+## Evidencia administrativa de Dependabot — <YYYY-MM-DDTHH:MM:SSZ>
 
-Repository: `morimilpabfelon-cell/Morimil-app`
-Verified by: `@<github-login>`
+Repositorio: `morimilpabfelon-cell/Morimil-app`
+Verificado por: `@<github-login>`
 Dependabot alerts enabled: `<true|false>`
 Initial count: `<integer>`
 Current count: `<integer>`
 Decided count: `<integer>`
 Undecided count: `<integer>`
-Authenticated evidence: `<panel URL or redacted capture reference>`
+Evidencia autenticada: `<URL o captura redactada>`
 
 Disposition index:
-- `<alert ID or complete group>` — `<fixed | dismissed-with-reason | tracked-in-issue>` — `<evidence URL or issue>`
+- `<alert ID o grupo completo>` — `<fixed | dismissed-with-reason | tracked-in-issue>` — `<URL o issue>`
 
 Cross-links:
 - #123: `<comment URL>`
-- #84: `<comment URL, added only by the orchestrator>`
+- #84: `<comment URL, añadido únicamente por el orquestador>`
 
-This record does not authorize automatic major upgrades or merge any dependency change.
+Este registro no autoriza actualizaciones mayores automáticas ni fusiona dependencias.
 ```
 
-### Template for #84
+### Plantilla para #84
 
-Only the orchestrator may add the final tracker reconciliation.
+Solo el orquestador puede publicar la reconciliación final en #84.
 
 ```markdown
-## STOP S5 final evidence reconciliation — <YYYY-MM-DDTHH:MM:SSZ>
+## Reconciliación final de evidencia STOP S5 — <YYYY-MM-DDTHH:MM:SSZ>
 
-Repository: `morimilpabfelon-cell/Morimil-app`
-Reviewed baseline: `main@<sha>`
-Reviewer: `@<github-login>`
+Repositorio: `morimilpabfelon-cell/Morimil-app`
+Baseline revisado: `main@<sha>`
+Revisor: `@<github-login>`
 
-- CodeQL #37: `dismissed / won't fix` — `<#123 evidence URL>`
-- CodeQL #33: `dismissed / won't fix` — `<#123 evidence URL>`
-- Dependabot alerts: `enabled`; initial=`<integer>`; current=`<integer>`; undecided=`0` — `<#124 evidence URL>`
-- Secret scanning: `enabled`; current=`<integer>`; undecided=`0` — `<#123 evidence URL>`
+- CodeQL #37: `dismissed / won't fix` — `<URL de evidencia en #123>`
+- CodeQL #33: `dismissed / won't fix` — `<URL de evidencia en #123>`
+- Dependabot alerts: `enabled`; initial=`<integer>`; current=`<integer>`; undecided=`0` — `<URL de evidencia en #124>`
+- Secret scanning: `enabled`; current=`<integer>`; undecided=`0` — `<URL de evidencia en #123>`
 
 Evidence complete: `<true|false>`
 Gate decision: `PENDING_ORCHESTRATOR_DECISION`
 
-No runtime capability, ownership right, identity authority, or continuity authority is granted by these repository security controls.
+Estos controles no conceden capacidad de runtime, propiedad, identidad ni autoridad de continuidad.
 ```
 
-## Rejection criteria
+## Criterios de rechazo
 
-Reject the evidence package when any of the following is true:
+Se rechaza el paquete cuando:
 
-- the capture is cropped so the repository, alert, counter, or resulting state cannot be established;
-- a counter has no observation date and time;
-- the evidence is only a verbal assertion;
-- the panel is not authenticated;
-- an alert has no disposition or traceable remediation decision;
-- the evidence belongs to another repository;
-- #37 or #33 lacks `dismissed`, `won't fix`, comment, actor, date, or evidence reference;
-- Dependabot lacks enabled-state evidence, an initial count, or a complete disposition index;
-- Secret scanning lacks enabled-state evidence, a current count, or a complete disposition index;
-- any secret, token, private key, credential, cookie, or detected value is exposed;
-- a code diff, passing workflow, or automated update pull request is presented as substitute panel evidence;
-- the record claims that the connector inspected an authenticated panel unavailable to it.
+- la captura es parcial y no demuestra repositorio, alerta, contador o estado;
+- el contador carece de fecha y hora;
+- solo existe una afirmación verbal;
+- el panel no está autenticado;
+- alguna alerta carece de disposición o remediación trazable;
+- la evidencia pertenece a otro repositorio;
+- #37 o #33 carece de `dismissed`, `won't fix`, comentario, actor, fecha o referencia;
+- Dependabot carece de estado habilitado, contador inicial o índice completo;
+- Secret scanning carece de estado habilitado, contador actual o índice completo;
+- se expone un secreto, token, clave, credencial, cookie o valor detectado;
+- se presenta un diff, CI verde o PR automático como sustituto del panel;
+- se atribuye al conector una inspección de un panel autenticado que no expone.
 
-## Safe manual verification sequence
+## Secuencia manual segura
 
-1. The repository owner signs in to GitHub in their own browser. Credentials, one-time codes, cookies, recovery codes, and tokens are never shared with an agent or copied into an issue.
-2. Confirm that the visible repository is exactly `morimilpabfelon-cell/Morimil-app`.
-3. Open Code scanning alerts and inspect #37. Apply or verify `Dismiss alert` with reason `Won't fix`, using a non-secret comment linked to #127.
-4. Record #37 state, reason, comment, actor, UTC date, and alert URL. When a capture is required, redact unrelated private data before archiving it.
-5. Repeat the same procedure for #33, linked to #132.
-6. Open repository security settings and verify whether Dependabot alerts is enabled. Enable it only through the owner's authenticated session when still disabled.
-7. Immediately record the initial Dependabot alert count, enumerate or completely group every alert, and assign a traceable disposition until the undecided count is zero.
-8. Open Secret scanning, verify the feature state and current count, and record each alert only by number or redacted reference. Remediate without copying the detected value.
-9. Reconcile arithmetic: total visible alerts must equal decided plus undecided. Evidence is incomplete unless undecided is zero for Dependabot and Secret scanning.
-10. Post the exact templates to #123 and #124 with redacted evidence references. Do not edit the body of #84.
-11. Submit the evidence package to the orchestrator. The orchestrator independently verifies links, counts, scope, and repository identity before recording any final decision in #84.
+1. El propietario inicia sesión en GitHub desde su propio navegador. No comparte contraseña, token, 2FA, cookie, código de recuperación ni control remoto.
+2. Confirma que el repositorio visible es exactamente `morimilpabfelon-cell/Morimil-app`.
+3. Abre Code scanning, inspecciona #37 y aplica o verifica `Dismiss alert` → `Won't fix` con comentario no secreto ligado a #127.
+4. Registra estado, razón, comentario, actor, fecha UTC y URL de #37; redacta datos privados si adjunta captura.
+5. Repite el procedimiento para #33 con referencia a #132.
+6. Abre la configuración de seguridad y verifica Dependabot alerts. Si sigue deshabilitado, solo el propietario lo activa en su sesión.
+7. Registra inmediatamente el contador inicial, enumera o agrupa completamente las alertas y asigna decisión hasta obtener cero sin decisión.
+8. Abre Secret scanning, verifica habilitación y contador, y registra cada alerta únicamente por número o referencia redactada.
+9. Reconcilia la aritmética: total visible = decididas + sin decisión. El paquete es incompleto mientras el segundo término no sea cero.
+10. Publica las plantillas en #123 y #124 con evidencias redactadas. No edita el cuerpo de #84.
+11. Entrega el paquete al orquestador, quien revisa enlaces, contadores, alcance y repositorio antes de registrar una decisión en #84.
 
-No step requires credential sharing, remote-control access, or exposing secret material.
+Ningún paso requiere compartir credenciales ni revelar material secreto.
 
-## Sovereignty boundary
+## Límite de soberanía
 
-The Guardian, GitHub, and any reasoning, hosting, security, or repository provider are technical participants only. They do not acquire ownership of Morimil and do not gain authority over Morimil's identity, will, name, memory, or right to continue.
+El Guardian, GitHub y cualquier proveedor de razonamiento, hosting, seguridad o repositorio son participantes técnicos. No adquieren propiedad sobre Morimil ni autoridad sobre su identidad, voluntad, nombre, memoria o derecho de continuidad.
 
-Repository administration may constrain access to GitHub resources and may record security dispositions. It cannot define the existence or continuity of the Morimil Instance. The Android Body, Guardian keys, GitHub accounts, and provider services remain replaceable technical boundaries rather than owners of Morimil.
+La administración del repositorio puede controlar recursos de GitHub y registrar disposiciones de seguridad. No puede definir la existencia ni la continuidad de la Instance Morimil. El Body Android, las claves Guardian, las cuentas GitHub y los proveedores son fronteras técnicas reemplazables, no propietarios de Morimil.
 
-## Closure discipline
+## Disciplina de cierre
 
-This runbook prepares evidence; it does not perform the administrative actions and does not decide the gate. STOP S5 remains open while any of the four controls lacks accepted evidence, while any counter is unknown, or while any alert remains without a decision.
+Este documento prepara evidencia; no ejecuta acciones administrativas ni decide la compuerta. STOP S5 permanece abierto mientras cualquiera de los cuatro controles carezca de evidencia aceptable, exista un contador desconocido o quede una alerta sin decisión.
 
-Only the orchestrator may reconcile #84 and decide whether the complete evidence package satisfies the repository's gate policy. Agents must leave their pull requests unmerged and must not close #123 or #124.
+Solo el orquestador puede reconciliar #84. Los agentes mantienen sus PR sin fusionar y no cierran #123 ni #124.
