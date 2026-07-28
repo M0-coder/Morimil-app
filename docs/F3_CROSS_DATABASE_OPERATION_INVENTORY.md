@@ -5,8 +5,9 @@
 - Inventory version: `1`
 - Audited baseline: `main@612d91aef131f367140ffb87a60a19ef49adcbc8`
 - Baseline scope: production runtime and cross-database owner inventory.
-- Repository state reconciled: `main@5b32c0a6fb093b4c29c33ff56fb47b8c334916c2`
+- Repository state reconciled: `main@29b24d4167bea613a01059da02aa8f9040d0ec2a`
 - Tracker: `#88`
+- Protocol design: `docs/adr/ADR-0002-cross-database-operation-protocol.md`
 - Execution gate: **STOP S5 remains open through #123 and #124. This inventory does not authorize runtime changes.**
 
 ## Authority model
@@ -25,6 +26,14 @@ This inventory covers production Kotlin boundaries that can combine durable stat
 - observers and composition classes that do not perform a dual durable mutation.
 
 Production injects `canonicalLivingMemoryPort` into `MemoryRepository`. Therefore the active problem is cross-database atomicity and recovery, not authorization to write new legacy `memory_events` rows.
+
+## Accepted protocol design
+
+ADR-0002 defines the common recoverable journal for future `REQUIRES_PROTOCOL` owners. Its first functional owner is `COG-001` through `COG-004`, but implementation remains blocked by STOP S5.
+
+The accepted state sequence is `STAGED` → `PENDING_CANONICAL` → `CANONICAL_COMMITTED` → `PENDING_LOCAL_COMMIT` → `COMMITTED`, with terminal `BLOCKED` for permanent conflicts. Wall-clock values are metadata and cannot define operation, event, proposal, migration, or approval identity.
+
+ProjectVault remains the protected reference and is not rewritten by the first common-protocol implementation.
 
 ## Protocol states
 
@@ -83,10 +92,10 @@ The ProjectVault protocol is the transitional reference. It must not be copied m
 
 | ID | Entry point | Current sequence and failure window | Required closure |
 | --- | --- | --- | --- |
-| `COG-001` | `proposeCognitiveMigration` | Read memory-domain snapshot/events → insert a visible planned migration in organs. The proposal has no shared operation receipt and still reads legacy memory structures. | Use verified canonical inputs, deterministic proposal identity, and either canonical evidence before visibility or an explicitly rebuildable hidden projection. |
-| `COG-002` | `approveCognitiveMigration` | Update approval state only in organs; later execution relies on this authoritative state. | Bind approval to the deterministic migration operation and make replay/recovery explicit. Approval protects a Body operation; it does not grant ownership over Morimil. |
-| `COG-003` | `executeCognitiveMigration` | Append canonical execution event → audit canonical chain → mark organ migration completed/failed. Death after append can leave the migration approved while the event already exists. | Stable event ID, ensure/reuse semantics, persisted pending state, and recovery that finalizes without duplicate canonical events. |
-| `COG-004` | `rollbackCognitiveMigration` | Append canonical rollback event → mark organ migration rolled back. Death after append can leave local status unchanged and allow duplicate rollback attempts. | Stable rollback operation/event identity and idempotent recovery/finalization. |
+| `COG-001` | `proposeCognitiveMigration` | Read memory-domain snapshot/events → insert a visible planned migration in organs. The proposal has no shared operation receipt and still reads legacy memory structures. | Use verified canonical inputs, deterministic proposal identity, and canonical proposal evidence before visibility through ADR-0002. |
+| `COG-002` | `approveCognitiveMigration` | Update approval state only in organs; later execution relies on this authoritative state. | Bind approval to a deterministic operation, canonical approval receipt, and recoverable local finalization. Approval protects a Body operation; it does not grant ownership over Morimil. |
+| `COG-003` | `executeCognitiveMigration` | Append canonical execution event → audit canonical chain → mark organ migration completed/failed. Death after append can leave the migration approved while the event already exists. | Stable event ID, ensure/reuse semantics, persisted canonical receipt, and recovery that finalizes without duplicate events. |
+| `COG-004` | `rollbackCognitiveMigration` | Append canonical rollback event → mark organ migration rolled back. Death after append can leave local status unchanged and allow duplicate rollback attempts. | Stable rollback operation/event identity and idempotent recovery/finalization through the common journal. |
 
 ### Orchestration decisions
 
@@ -112,7 +121,7 @@ The ProjectVault protocol is the transitional reference. It must not be copied m
 
 | ID | Entry point | Current sequence and failure window | Required closure |
 | --- | --- | --- | --- |
-| `MIG-001` | `planMigration`, `markMigrationApproved`, `markMigrationCompleted`, `markMigrationFailed`, `markMigrationRolledBack` | Organ-only record mutation, with optional canonical constitution-denial evidence when a plan is denied before insertion. | Keep this class as a support boundary. The enclosing rest/cognitive operation owns outbox identity, recovery, canonical receipts, and visibility. Do not add an independent second protocol here. |
+| `MIG-001` | `planMigration`, `markMigrationApproved`, `markMigrationCompleted`, `markMigrationFailed`, `markMigrationRolledBack` | Organ-only record mutation, with optional canonical constitution-denial evidence when a plan is denied before insertion. | Keep this class as a support boundary. The enclosing rest/cognitive operation owns operation identity, recovery, canonical receipts, and visibility. Do not add an independent second protocol here. |
 
 ## Explicitly excluded from owner inventory
 
@@ -130,21 +139,23 @@ If any excluded class gains a second durable mutation boundary, it must enter th
 
 Every protected operation must define and test:
 
-1. deterministic `operationId`, payload digest, event ID, and operation type;
-2. one origin-database transaction that stages a hidden `pending` operation;
-3. no new user-visible or runtime-authoritative state before canonical evidence is verified;
-4. canonical `ensureCommitted` semantics: append once, reuse exact match, fail closed on conflicting content/provenance;
-5. one origin-database transaction that applies final local state and marks `committed`;
-6. explicit `blocked` state for permanent invariant conflicts;
-7. retryable failure metadata and bounded recovery;
-8. startup recovery before normal mutation paths;
-9. kill tests at these boundaries:
-   - before staging;
-   - after staging and before canonical append;
-   - after canonical append and before local finalization;
-   - during local finalization;
-   - after finalization followed by replay;
-10. proof that repeated recovery produces no duplicate canonical event and no duplicate visible organ state.
+1. deterministic `operationId`, `eventId`, payload digest, operation type/version, canonical `instanceId`, and writer Body/epoch; wall-clock time is metadata only;
+2. the ordered states `STAGED`, `PENDING_CANONICAL`, `CANONICAL_COMMITTED`, `PENDING_LOCAL_COMMIT`, `COMMITTED`, and terminal `BLOCKED`;
+3. one origin-database transaction that stages hidden immutable intent;
+4. no new user-visible or runtime-authoritative state before canonical evidence is verified;
+5. canonical `ensureCommitted` semantics: append once, reuse exact match, fail closed on conflicting content/provenance;
+6. a persisted canonical receipt before local finalization;
+7. one origin-database transaction that applies final local state and marks `COMMITTED`;
+8. typed retryable failure metadata, bounded recovery, and terminal blocking for permanent invariant conflicts;
+9. startup recovery before normal mutation paths;
+10. kill tests at these boundaries:
+    - before staging;
+    - after staging and before canonical append;
+    - after canonical append and before receipt persistence;
+    - after receipt persistence and before local finalization;
+    - during local finalization;
+    - after finalization followed by replay;
+11. proof that repeated recovery produces no duplicate canonical event and no duplicate visible organ state.
 
 ## Required contract for `DERIVED_REBUILD`
 
