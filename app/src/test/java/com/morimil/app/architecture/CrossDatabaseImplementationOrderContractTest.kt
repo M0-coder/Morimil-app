@@ -37,7 +37,12 @@ class CrossDatabaseImplementationOrderContractTest {
 
         assertTrue(
             inventory.contains(
-                "Audited runtime baseline: `main@612d91aef131f367140ffb87a60a19ef49adcbc8`"
+                "Audited baseline: `main@612d91aef131f367140ffb87a60a19ef49adcbc8`"
+            )
+        )
+        assertTrue(
+            inventory.contains(
+                "Baseline scope: production runtime and cross-database owner inventory."
             )
         )
         assertTrue(
