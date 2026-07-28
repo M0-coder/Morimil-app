@@ -47,7 +47,7 @@ class CrossDatabaseImplementationOrderContractTest {
         )
         assertTrue(
             inventory.contains(
-                "Repository state reconciled: `main@5b32c0a6fb093b4c29c33ff56fb47b8c334916c2`"
+                "Repository state reconciled: `main@29b24d4167bea613a01059da02aa8f9040d0ec2a`"
             )
         )
         assertTrue(inventory.contains("STOP S5 remains open through #123 and #124"))
