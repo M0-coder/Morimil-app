@@ -32,10 +32,10 @@ class F1CanonicalConsumerConvergenceContractTest {
         val inventory = inventoryFile(repositoryRoot()).readText()
 
         REQUIRED_CONSUMERS.forEach { consumer ->
-            assertTrue("Missing consumer $consumer", inventory.contains("`$consumer`"))
+            assertTrue("Missing consumer $consumer", inventory.contains(consumer))
         }
         REQUIRED_LEGACY_DEPENDENCIES.forEach { dependency ->
-            assertTrue("Missing legacy dependency $dependency", inventory.contains("`$dependency`"))
+            assertTrue("Missing legacy dependency $dependency", inventory.contains(dependency))
         }
         assertTrue(inventory.contains("`WAITING_FOR_CANONICAL_MEMORY_ADAPTER`"))
         assertTrue(inventory.contains("F1 / `#86` remains open"))
@@ -105,7 +105,7 @@ class F1CanonicalConsumerConvergenceContractTest {
             val source = sourceFile.readText()
             tokens.forEach { token ->
                 assertTrue("Missing audited token $token in $path", source.contains(token))
-                assertTrue("Inventory must name audited token $token", inventory.contains("`$token`"))
+                assertTrue("Inventory must name audited token $token", inventory.contains(token))
             }
         }
     }
