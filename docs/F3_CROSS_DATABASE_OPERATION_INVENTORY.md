@@ -4,8 +4,10 @@
 
 - Inventory version: `1`
 - Audited baseline: `main@612d91aef131f367140ffb87a60a19ef49adcbc8`
+- Baseline scope: production runtime and cross-database owner inventory.
+- Repository state reconciled: `main@5b32c0a6fb093b4c29c33ff56fb47b8c334916c2`
 - Tracker: `#88`
-- Execution gate: **STOP S5 remains open. This inventory does not authorize runtime changes.**
+- Execution gate: **STOP S5 remains open through #123 and #124. This inventory does not authorize runtime changes.**
 
 ## Authority model
 
@@ -158,11 +160,13 @@ A rebuildable projection must prove:
 
 ## Implementation order after STOP S5
 
-1. `REST-001` and `REST-002`;
-2. `COG-001` through `COG-004`;
-3. `ORCH-002` through `ORCH-004`;
-4. `AGENT-001` through `AGENT-006`;
-5. `BOOT-001`;
-6. `RECALL-001` and `ORCH-001` canonical rebuild paths.
+The first migration must be the smallest bounded owner that exercises the common protocol. The widest workflow is intentionally last.
+
+1. `COG-001` through `COG-004` — bounded reference migration for the common protocol;
+2. `ORCH-002` through `ORCH-004` — task decisions;
+3. `AGENT-001` through `AGENT-006` — lifecycle operations, including quarantine/replacement saga;
+4. `BOOT-001` — deterministic startup operation/epoch;
+5. `RECALL-001` and `ORCH-001` — canonical derived rebuild paths after the identity/memory adapters are ready;
+6. `REST-001` and `REST-002` — final migration because the rest-cycle workflow spans the most participants and local effects.
 
 Each group must be delivered in an isolated PR. F3.3 legacy removal does not begin until every F3.2 owner has a recorded disposition and its required kill tests are green.
