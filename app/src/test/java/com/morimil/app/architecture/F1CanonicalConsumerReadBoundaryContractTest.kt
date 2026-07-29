@@ -60,8 +60,8 @@ class F1CanonicalConsumerReadBoundaryContractTest {
 
         assertTrue(Regex("\\bGenesisUltraRuntimeIdentityRepository\\b").containsMatchIn(executable))
         assertTrue(Regex("\\bCanonicalMemoryRepository\\b").containsMatchIn(executable))
-        assertTrue(Regex("\\.readCommittedIdentity\\b").containsMatchIn(executable))
-        assertTrue(Regex("\\.readVerifiedSnapshot\\b").containsMatchIn(executable))
+        assertTrue(Regex("\\bidentityRepository\\s*::\\s*readCommittedIdentity\\b").containsMatchIn(executable))
+        assertTrue(Regex("\\bmemoryRepository\\s*::\\s*readVerifiedSnapshot\\b").containsMatchIn(executable))
         assertTrue(executable.contains("readIdentity"))
         assertTrue(executable.contains("readMemorySnapshot"))
         assertTrue(executable.contains("GenesisUltraHashProfile.hashFields"))
