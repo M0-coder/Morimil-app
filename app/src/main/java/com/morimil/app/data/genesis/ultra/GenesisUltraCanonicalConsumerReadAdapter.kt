@@ -204,7 +204,7 @@ internal class GenesisUltraCanonicalConsumerReadAdapter private constructor(
             )
         }
         validateEventAuthority(birthRoot, identity)
-        requireDigest(birthRoot.eventHash, "birth_root_event_hash")
+        requireEventHash(birthRoot.eventHash, "birth_root_event_hash")
         requireDigest(birthRoot.contentDigest, "birth_root_content_digest")
         requireDigest(birthRoot.provenanceDigest, "birth_root_provenance_digest")
 
@@ -223,6 +223,7 @@ internal class GenesisUltraCanonicalConsumerReadAdapter private constructor(
                     "canonical_read_sequence_not_ascending"
                 )
             }
+            requireEventHash(event.previousEventHash, "previous_event_hash")
             if (event.previousEventHash != previousEventHash) {
                 fail(
                     CanonicalReadFailureCode.CHAIN_CORRUPT,
@@ -433,7 +434,7 @@ internal class GenesisUltraCanonicalConsumerReadAdapter private constructor(
                 "canonical_read_event_metadata_invalid"
             )
         }
-        requireDigest(event.eventHash, "event_hash")
+        requireEventHash(event.eventHash, "event_hash")
         requireDigest(event.contentDigest, "content_digest")
         requireDigest(event.provenanceDigest, "provenance_digest")
     }
@@ -629,6 +630,16 @@ internal class GenesisUltraCanonicalConsumerReadAdapter private constructor(
                 CanonicalReadFailureCode.CHAIN_CORRUPT,
                 CanonicalReadDisposition.BLOCKED,
                 "canonical_read_digest_invalid_$field"
+            )
+        }
+    }
+
+    private fun requireEventHash(value: String, field: String) {
+        if (!EVENT_HASH_PATTERN.matches(value)) {
+            fail(
+                CanonicalReadFailureCode.CHAIN_CORRUPT,
+                CanonicalReadDisposition.BLOCKED,
+                "canonical_read_event_hash_invalid_$field"
             )
         }
     }
@@ -943,6 +954,7 @@ internal class GenesisUltraCanonicalConsumerReadAdapter private constructor(
         private const val MAX_HEALTH_LIMIT = 20
 
         private val DIGEST_PATTERN = Regex("^sha256:[a-f0-9]{64}$")
+        private val EVENT_HASH_PATTERN = Regex("^evsha256:[a-f0-9]{64}$")
         private val PROVENANCE_KEYS = setOf(
             "schema",
             "instance_id",
