@@ -34,6 +34,9 @@ class GenesisUltraCanonicalConsumerReadAdapterTest {
         assertEquals(fixture.identity.instanceId, ready.identity.instanceId)
         assertEquals(1, ready.events.size)
         assertEquals(CanonicalPayloadState.VERIFIED_PAYLOAD, ready.events.single().payloadState)
+        assertTrue(EVENT_HASH.matches(ready.lineage.birthRootEventHash))
+        assertTrue(EVENT_HASH.matches(ready.events.single().ref.eventHash))
+        assertTrue(EVENT_HASH.matches(ready.events.single().ref.previousEventHash))
     }
 
     @Test
@@ -117,7 +120,7 @@ class GenesisUltraCanonicalConsumerReadAdapterTest {
             identity = fixture.identity,
             sequence = first.event.sequence,
             previousEventHash = first.event.eventHash,
-            eventHash = digest('8')
+            eventHash = eventHash('8')
         )
         val snapshot = fixture.snapshot.copy(records = listOf(first, second))
 
@@ -135,7 +138,7 @@ class GenesisUltraCanonicalConsumerReadAdapterTest {
             root = fixture.snapshot.birthRoot,
             sequence = 1L,
             previousEventHash = fixture.snapshot.birthRoot.eventHash,
-            eventHash = digest('7'),
+            eventHash = eventHash('7'),
             contentDigest = digest('6'),
             provenanceDigest = digest('5')
         )
@@ -194,7 +197,7 @@ class GenesisUltraCanonicalConsumerReadAdapterTest {
             root = root,
             sequence = 1L,
             previousEventHash = root.eventHash,
-            eventHash = digest('4'),
+            eventHash = eventHash('4'),
             eventType = "instance.activation.confirmed",
             actor = "host_confirmed_system",
             contentType = "application/vnd.genesis.atomic-birth-authorization+json",
@@ -225,6 +228,7 @@ class GenesisUltraCanonicalConsumerReadAdapterTest {
         assertTrue(recalls.candidates.isEmpty())
         assertTrue(rest.sources.isEmpty())
         assertEquals(activation.eventHash, ready.lineage.lastEventHash)
+        assertTrue(EVENT_HASH.matches(ready.lineage.lastEventHash))
     }
 
     @Test
@@ -244,6 +248,8 @@ class GenesisUltraCanonicalConsumerReadAdapterTest {
         assertEquals(root.sequence, ready.lineage.lastSequence)
         assertEquals(root.eventHash, ready.lineage.lastEventHash)
         assertEquals(0, ready.lineage.postBirthEventCount)
+        assertTrue(EVENT_HASH.matches(ready.lineage.birthRootEventHash))
+        assertTrue(EVENT_HASH.matches(ready.lineage.lastEventHash))
     }
 
     @Test
@@ -288,11 +294,18 @@ class GenesisUltraCanonicalConsumerReadAdapterTest {
         val fixture = fixture()
         val first = ready(port(fixture.identity, fixture.snapshot).readVerifiedSnapshot())
         val second = ready(port(fixture.identity, fixture.snapshot).readVerifiedSnapshot())
+        val event = first.events.single().ref
 
+        assertTrue(EVENT_HASH.matches(first.lineage.birthRootEventHash))
+        assertTrue(EVENT_HASH.matches(first.lineage.lastEventHash))
+        assertTrue(EVENT_HASH.matches(event.eventHash))
+        assertTrue(EVENT_HASH.matches(event.previousEventHash))
         assertTrue(DIGEST.matches(first.lineage.snapshotDigest))
-        assertTrue(DIGEST.matches(first.events.single().ref.eventHash))
-        assertTrue(DIGEST.matches(first.events.single().ref.contentDigest))
-        assertTrue(DIGEST.matches(first.events.single().ref.provenanceDigest))
+        assertTrue(DIGEST.matches(event.contentDigest))
+        assertTrue(DIGEST.matches(event.provenanceDigest))
+        assertFalse(DIGEST.matches(event.eventHash))
+        assertFalse(EVENT_HASH.matches(event.contentDigest))
+        assertNotEquals(first.lineage.birthRootEventHash, first.lineage.snapshotDigest)
         assertEquals(first.lineage.snapshotDigest, second.lineage.snapshotDigest)
     }
 
@@ -305,7 +318,7 @@ class GenesisUltraCanonicalConsumerReadAdapterTest {
             identity = fixture.identity,
             sequence = 2L,
             previousEventHash = first.event.eventHash,
-            eventHash = digest('2')
+            eventHash = eventHash('2')
         )
         val corruptPayload = CanonicalMemoryRecord(
             event = corrupt.event,
@@ -335,6 +348,45 @@ class GenesisUltraCanonicalConsumerReadAdapterTest {
         assertEquals(1, firstRest.sources.size)
         assertEquals(1, recalls.candidates.size)
         assertEquals(fixture.snapshot.records.single().event.eventHash, recalls.candidates.single().event.eventHash)
+        assertTrue(EVENT_HASH.matches(firstRest.sources.single().event.eventHash))
+        assertTrue(DIGEST.matches(firstRest.sources.single().event.contentDigest))
+        assertTrue(DIGEST.matches(firstRest.sources.single().event.provenanceDigest))
+    }
+
+    @Test
+    fun generalDigestPrefixIsRejectedForEventHash() = runBlocking {
+        val fixture = fixture()
+        val record = fixture.snapshot.records.single()
+        setField(record.event, "eventHash", digest('9'))
+
+        val blocked = blocked(port(fixture.identity, fixture.snapshot).readVerifiedSnapshot())
+
+        assertEquals(CanonicalReadFailureCode.CHAIN_CORRUPT, blocked.code)
+        assertTrue(blocked.diagnosticCode.contains("event_hash"))
+    }
+
+    @Test
+    fun generalDigestPrefixIsRejectedForPreviousEventHash() = runBlocking {
+        val fixture = fixture()
+        val record = fixture.snapshot.records.single()
+        setField(record.event, "previousEventHash", digest('8'))
+
+        val blocked = blocked(port(fixture.identity, fixture.snapshot).readVerifiedSnapshot())
+
+        assertEquals(CanonicalReadFailureCode.CHAIN_CORRUPT, blocked.code)
+        assertTrue(blocked.diagnosticCode.contains("previous_event_hash"))
+    }
+
+    @Test
+    fun eventHashPrefixIsRejectedForGeneralDigest() = runBlocking {
+        val fixture = fixture()
+        val record = fixture.snapshot.records.single()
+        setField(record.event, "contentDigest", eventHash('7'))
+
+        val blocked = blocked(port(fixture.identity, fixture.snapshot).readVerifiedSnapshot())
+
+        assertEquals(CanonicalReadFailureCode.CHAIN_CORRUPT, blocked.code)
+        assertTrue(blocked.diagnosticCode.contains("content_digest"))
     }
 
     private fun fixture(): Fixture {
@@ -345,7 +397,7 @@ class GenesisUltraCanonicalConsumerReadAdapterTest {
             identity = identity,
             sequence = 1L,
             previousEventHash = root.eventHash,
-            eventHash = digest('3')
+            eventHash = eventHash('3')
         )
         return Fixture(
             identity = identity,
@@ -592,6 +644,8 @@ class GenesisUltraCanonicalConsumerReadAdapterTest {
 
     private fun digest(character: Char): String = "sha256:" + character.toString().repeat(64)
 
+    private fun eventHash(character: Char): String = "evsha256:" + character.toString().repeat(64)
+
     private data class Fixture(
         val identity: GenesisUltraRuntimeIdentity,
         val snapshot: CanonicalMemorySnapshot
@@ -599,5 +653,6 @@ class GenesisUltraCanonicalConsumerReadAdapterTest {
 
     private companion object {
         val DIGEST = Regex("^sha256:[a-f0-9]{64}$")
+        val EVENT_HASH = Regex("^evsha256:[a-f0-9]{64}$")
     }
 }
