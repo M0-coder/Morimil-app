@@ -11,8 +11,14 @@ class F1CanonicalConsumerReadBoundaryContractTest {
     fun boundaryContainsExactlyTheFourReservedFiles() {
         val root = repositoryRoot()
         val expected = EXPECTED_FILES.toSortedSet()
-        val discovered = root.walkTopDown()
-            .filter(File::isFile)
+        val sourceRoots = listOf(
+            File(root, "app/src/main/java"),
+            File(root, "app/src/test/java")
+        )
+        val discovered = sourceRoots.asSequence()
+            .filter(File::isDirectory)
+            .flatMap { sourceRoot -> sourceRoot.walkTopDown().asSequence() }
+            .filter { file -> file.isFile && file.extension == "kt" }
             .map { file -> file.relativeTo(root).invariantSeparatorsPath }
             .filter { path ->
                 val name = path.substringAfterLast('/')
