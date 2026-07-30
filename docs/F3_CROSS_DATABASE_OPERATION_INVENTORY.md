@@ -29,7 +29,10 @@ Production injects `canonicalLivingMemoryPort` into `MemoryRepository`. Therefor
 
 ## Accepted protocol design
 
-ADR-0002 defines the common recoverable journal for future `REQUIRES_PROTOCOL` owners. Its first functional owner is `COG-001` through `COG-004`, but implementation remains blocked by STOP S5.
+ADR-0002 defines the common recoverable journal for `REQUIRES_PROTOCOL` owners. Its first
+candidate implementation covers `COG-001` through `COG-004`. Acceptance remains gated by
+independent review, the complete interruption/recovery matrix, CI, and merge; the candidate
+does not close STOP S5 by its existence.
 
 The accepted state sequence is `STAGED` → `PENDING_CANONICAL` → `CANONICAL_COMMITTED` → `PENDING_LOCAL_COMMIT` → `COMMITTED`, with terminal `BLOCKED` for permanent conflicts. Wall-clock values are metadata and cannot define operation, event, proposal, migration, or approval identity.
 
@@ -145,6 +148,9 @@ Every protected operation must define and test:
 4. no new user-visible or runtime-authoritative state before canonical evidence is verified;
 5. canonical `ensureCommitted` semantics: append once, reuse exact match, fail closed on conflicting content/provenance;
 6. a persisted canonical receipt before local finalization;
+   whether `ensureCommitted` appended or reused an event is transient execution evidence
+   checked by recovery tests, not part of the content-addressed owner result; the committed
+   local result and digest must be identical across interruption boundaries;
 7. one origin-database transaction that applies final local state and marks `COMMITTED`;
 8. typed retryable failure metadata, bounded recovery, and terminal blocking for permanent invariant conflicts;
 9. startup recovery before normal mutation paths;

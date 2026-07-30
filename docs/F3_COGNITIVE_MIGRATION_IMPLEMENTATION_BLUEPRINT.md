@@ -753,3 +753,31 @@ After a shipped database migration, rollback is forward-only: disable entry poin
 A developer must be able to implement the first functional PR without inventing schema, IDs, payload/evidence versions, ports, DAO transactions, states, receipts, finalization, errors, recovery, kill cuts, migration tests, file scope or rollback criteria.
 
 It remains preparation only. `#88` stays open, STOP S5 stays open, no runtime was implemented, and no merge authority is delegated to Agente Chat 3.
+
+## 18. CP5 candidate amendment
+
+The isolated CP5 candidate supersedes the planning identity and result schemas described
+above without rewriting their historical meaning:
+
+```text
+plan core: morimil.cognitive_migration.plan_core.v4
+plan identity: morimil.cognitive_migration.plan_identity.v2
+planned record: morimil.cognitive_migration.planned_record.v2
+COG-001 payload: morimil.cognitive_migration.cog_001.payload.v2
+COG-001..004 local results: morimil.cognitive_migration.cog_00N.local_result.v2
+```
+
+The `planning_anchor_digest` is the digest of the selected eligible canonical source set.
+Full-chain tip and snapshot metadata remain audit inputs only and cannot affect plan identity,
+proposal payload, or operation identity. The persisted `preSnapshotId` field stores this
+planning anchor for the v2 planned record; it does not claim to be the full canonical tip.
+
+Append-versus-reuse telemetry is transient recovery evidence. It is verified by recovery
+tests and must not enter a content-addressed owner result or its digest. The v1 vectors remain
+historical fixtures; the v2 vectors are the current CP5 candidate contract.
+
+This branch was never deployed. Recovery now executes a pre-replay journal query proving
+zero non-committed COG-001 payload v1 operations. If that count is non-zero, recovery and
+activation are blocked before any canonical append until a separate compatibility recovery
+is specified, implemented, tested, and audited. A pending v1 operation must not be silently
+finalized under v2 rules.

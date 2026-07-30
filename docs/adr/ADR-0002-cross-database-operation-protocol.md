@@ -234,6 +234,11 @@ Permanent `BLOCKED` examples:
 
 Raw exception messages are diagnostic input, not stable protocol states. Persist bounded typed codes and keep sensitive content out of logs and issues.
 
+Execution-path telemetry such as whether `ensureCommitted` appended or reused an existing
+event is not owner state. It must not alter a content-addressed local result or digest.
+Planning identity must depend only on eligible selected source evidence; excluded protocol
+events may advance the audited canonical tip but cannot create a new logical proposal.
+
 ## Implementation sequence after STOP
 
 The first functional PR is isolated to the common journal, its coordinator/commit-port contracts, Room migration, recovery tests, and `COG-001` through `COG-004`. It must not migrate orchestration, agents, bootstrap, recalls, RestCycle, or ProjectVault.

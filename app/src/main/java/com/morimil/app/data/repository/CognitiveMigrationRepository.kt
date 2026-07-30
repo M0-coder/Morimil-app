@@ -214,7 +214,7 @@ class CognitiveMigrationRepository internal constructor(
     }
 }
 
-private object CognitiveMigrationOperationFactory {
+internal object CognitiveMigrationOperationFactory {
     fun propose(
         input: VerifiedCognitiveMigrationPlanningInput,
         plan: VerifiedCognitiveMigrationPlan
@@ -222,8 +222,6 @@ private object CognitiveMigrationOperationFactory {
         val payload = CrossDatabaseOperationIdentity.canonicalJson(
             mapOf(
                 "canonical_birth_root_hash" to input.canonicalBirthRootHash,
-                "canonical_last_sequence" to input.canonicalLastSequence,
-                "canonical_pre_snapshot_hash" to input.canonicalPreSnapshotHash,
                 "from_version" to CognitiveMigrationPlanner.FROM_VERSION,
                 "migration_id" to plan.migrationId,
                 "migration_type" to CognitiveMigrationPlanner.MIGRATION_TYPE,
@@ -232,6 +230,7 @@ private object CognitiveMigrationOperationFactory {
                 "plan_schema" to CognitiveMigrationPlanner.VERIFIED_PLAN_SCHEMA,
                 "planned_record" to JSONObject(plan.plannedRecordJson),
                 "planned_record_digest" to plan.plannedRecordDigest,
+                "planning_anchor_digest" to input.sourceSetDigest,
                 "proposal_id" to plan.proposalId,
                 "schema" to COG_001_PAYLOAD_SCHEMA,
                 "source_event_hashes_sorted" to
@@ -490,7 +489,7 @@ private object CognitiveMigrationOperationFactory {
     )
 
     private const val COG_001_PAYLOAD_SCHEMA =
-        "morimil.cognitive_migration.cog_001.payload.v1"
+        "morimil.cognitive_migration.cog_001.payload.v2"
     private const val COG_002_PAYLOAD_SCHEMA =
         "morimil.cognitive_migration.cog_002.payload.v1"
     private const val COG_003_PAYLOAD_SCHEMA =

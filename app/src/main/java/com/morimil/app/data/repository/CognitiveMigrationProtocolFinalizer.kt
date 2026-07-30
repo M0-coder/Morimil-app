@@ -78,7 +78,6 @@ internal class CognitiveMigrationProtocolFinalizer(
                 "planned_record_digest" to plannedRecordDigest,
                 "proposal_id" to candidate.proposalId,
                 "record_inserted" to inserted,
-                "reused_existing_event" to false,
                 "schema" to COG_001_LOCAL_RESULT_SCHEMA
             )
         )
@@ -133,7 +132,6 @@ internal class CognitiveMigrationProtocolFinalizer(
                 "owner_status" to STATUS_APPROVED,
                 "planned_record_digest" to plannedRecordDigest,
                 "record_updated" to updated,
-                "reused_existing_event" to false,
                 "schema" to COG_002_LOCAL_RESULT_SCHEMA
             )
         )
@@ -199,7 +197,6 @@ internal class CognitiveMigrationProtocolFinalizer(
                 "planned_record_digest" to plannedRecordDigest,
                 "post_snapshot_id" to postSnapshotId,
                 "record_updated" to true,
-                "reused_existing_event" to false,
                 "schema" to COG_003_LOCAL_RESULT_SCHEMA
             )
         )
@@ -256,7 +253,6 @@ internal class CognitiveMigrationProtocolFinalizer(
                 "planned_record_digest" to plannedRecordDigest,
                 "predecessor_operation_id" to predecessorOperationId,
                 "record_updated" to true,
-                "reused_existing_event" to false,
                 "rollback_operation_id" to operation.operationId,
                 "rollback_strategy_digest" to rollbackStrategyDigest,
                 "schema" to COG_004_LOCAL_RESULT_SCHEMA
@@ -405,7 +401,7 @@ internal class CognitiveMigrationProtocolFinalizer(
 
     private companion object {
         const val COG_001_PAYLOAD_SCHEMA =
-            "morimil.cognitive_migration.cog_001.payload.v1"
+            "morimil.cognitive_migration.cog_001.payload.v2"
         const val COG_002_PAYLOAD_SCHEMA =
             "morimil.cognitive_migration.cog_002.payload.v1"
         const val COG_003_PAYLOAD_SCHEMA =
@@ -414,13 +410,13 @@ internal class CognitiveMigrationProtocolFinalizer(
             "morimil.cognitive_migration.cog_004.payload.v1"
 
         const val COG_001_LOCAL_RESULT_SCHEMA =
-            "morimil.cognitive_migration.cog_001.local_result.v1"
+            "morimil.cognitive_migration.cog_001.local_result.v2"
         const val COG_002_LOCAL_RESULT_SCHEMA =
-            "morimil.cognitive_migration.cog_002.local_result.v1"
+            "morimil.cognitive_migration.cog_002.local_result.v2"
         const val COG_003_LOCAL_RESULT_SCHEMA =
-            "morimil.cognitive_migration.cog_003.local_result.v1"
+            "morimil.cognitive_migration.cog_003.local_result.v2"
         const val COG_004_LOCAL_RESULT_SCHEMA =
-            "morimil.cognitive_migration.cog_004.local_result.v1"
+            "morimil.cognitive_migration.cog_004.local_result.v2"
 
         const val STATUS_PLANNED = "planned"
         const val STATUS_APPROVED = "approved"

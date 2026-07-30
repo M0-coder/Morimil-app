@@ -1,10 +1,22 @@
 # Document status: CURRENT
 
-> **Audited runtime baseline:** `5533f6b5eeeb414798c41688820b6bc6a614a80e`
+> **Historical audited runtime baseline:** `5533f6b5eeeb414798c41688820b6bc6a614a80e`
+>
+> **Isolated CP5 candidate base:**
+> `agent/f3-cog-001-004-durable-protocol-v1@3248b3c5cd8c97d2d159de31fddefd4cd0eee861`.
+> The final candidate head is bound by the CP5 checkpoint and CI evidence after
+> publication; it is not a `main` baseline and is not self-declared by this file.
 >
 > This document describes the runtime connected to the normal application flow and the
-> evidence-backed phase state reconciled on 2026-07-27. A class, prototype, benchmark,
-> proposal, or unverified panel action is not a current capability or a completed gate.
+> evidence-backed phase state, including isolated candidate amendments on the named branch.
+> A class, prototype, benchmark, proposal, or unverified panel action is not a current
+> capability or a completed gate.
+>
+> **CP5 activation precondition:** this isolated branch has never been deployed. Before
+> replay advances any row, the runtime queries the durable journal and proves zero non-committed
+> `morimil.cognitive_migration.cog_001.payload.v1` operations. A non-zero count blocks
+> recovery/activation and requires an explicitly audited compatibility recovery; CP5 must never
+> reinterpret a pending v1 proposal as v2.
 
 # Current runtime contract
 
@@ -50,10 +62,20 @@ The startup gate refuses to continue unless all of these conditions hold:
 
 After identity verification, startup performs this order:
 
-1. converge the verified legacy memory lineage into Genesis Ultra;
-2. recover pending ProjectVault outbox operations;
-3. stop if any ProjectVault operation is blocked;
-4. bootstrap the remaining runtime from the verified identity.
+1. read verified canonical input through the F1-A consumer boundary;
+2. recover the durable cognitive-migration journal and stop on blocked or incomplete recovery;
+3. converge the verified legacy memory lineage into Genesis Ultra;
+4. recover pending ProjectVault outbox operations;
+5. stop if any ProjectVault operation is blocked;
+6. bootstrap the remaining runtime from the verified identity.
+
+Cognitive-migration planning accepts only verified payloads whose provenance uses a
+recognized living-memory or legacy-import note schema. Missing or unknown semantics,
+`chat_noise`, and events emitted by the cognitive-migration protocol itself are excluded.
+Operational receipts cannot feed new migration proposals either directly or indirectly:
+plan identity, proposal payload, and the planning anchor depend only on the selected
+eligible source set. Receipt append/reuse is transient recovery evidence and cannot change
+the committed content-addressed owner result.
 
 Bundled Genesis assets and `GenesisReader` are not valid normal-runtime identity sources.
 `GenesisReader` is still constructed by the container without a normal-runtime consumer

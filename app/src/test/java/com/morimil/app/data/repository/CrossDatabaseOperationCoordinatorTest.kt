@@ -14,6 +14,7 @@ import com.morimil.app.data.local.CrossDatabaseOperationStatus
 import java.nio.charset.StandardCharsets
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -39,6 +40,7 @@ class CrossDatabaseOperationCoordinatorTest {
             assertEquals(CrossDatabaseOperationStatus.PENDING_LOCAL_COMMIT, operation.status)
             assertEquals(operation.canonicalEventHash, operationReceipt.eventHash)
             assertNotNull(operation.canonicalProvenanceDigest)
+            assertFalse(operationReceipt.reusedExistingEvent)
             val json = CrossDatabaseOperationIdentity.canonicalJson(
                 mapOf(
                     "owner_status" to "planned",
@@ -114,12 +116,56 @@ class CrossDatabaseOperationCoordinatorTest {
         assertTrue(store.stateLog.isEmpty())
     }
 
+    @Test
+    fun pendingCog001V1BlocksRecoveryBeforeCanonicalAppend() = runBlocking {
+        val identity = identity()
+        val legacy = command(
+            identity = identity,
+            payloadSchema = "morimil.cognitive_migration.cog_001.payload.v1"
+        )
+        val store = FakeStore()
+        var canonicalCalls = 0
+        val coordinator = CrossDatabaseOperationCoordinator.forTest(
+            store = store,
+            canonicalEnsurePort = object : CrossDatabaseCanonicalEnsurePort {
+                override suspend fun ensureCommitted(
+                    command: CrossDatabaseCanonicalCommand
+                ): CrossDatabaseCanonicalReceipt {
+                    canonicalCalls += 1
+                    return receipt(command.eventId)
+                }
+            },
+            finalizers = listOf(
+                RecordingFinalizer { _, _ ->
+                    error("finalizer_must_not_run_for_pending_v1")
+                }
+            ),
+            clockMillis = IncrementingClock()
+        )
+        coordinator.stageExact(legacy)
+
+        val failure = runCatching {
+            coordinator.recoverAtStartup(identity, 20)
+        }.exceptionOrNull() as CrossDatabaseProtocolFailure
+
+        assertEquals(
+            CrossDatabaseProtocolErrors.UNSUPPORTED_PAYLOAD_SCHEMA,
+            failure.stableCode
+        )
+        assertEquals(0, canonicalCalls)
+        assertEquals(
+            CrossDatabaseOperationStatus.STAGED,
+            coordinator.load(legacy.operationId)?.status
+        )
+    }
+
     private fun command(
         identity: GenesisUltraRuntimeIdentity,
-        writerEpoch: String = identity.activeBody.keyEpochId
+        writerEpoch: String = identity.activeBody.keyEpochId,
+        payloadSchema: String = "test.payload.v1"
     ): CrossDatabaseStageCommand {
         val payload = CrossDatabaseOperationIdentity.canonicalJson(
-            mapOf("schema" to "test.payload.v1", "subject" to MIGRATION_ID)
+            mapOf("schema" to payloadSchema, "subject" to MIGRATION_ID)
         )
         val payloadDigest = CrossDatabaseOperationIdentity.digestCanonicalJson(payload)
         val operationId = CrossDatabaseOperationIdentity.operationId(
@@ -155,7 +201,7 @@ class CrossDatabaseOperationCoordinatorTest {
             subjectId = MIGRATION_ID,
             parentOperationId = null,
             childPhase = null,
-            payloadSchema = "test.payload.v1",
+            payloadSchema = payloadSchema,
             payloadJson = payload,
             payloadDigest = payloadDigest,
             eventId = eventId,
@@ -317,6 +363,19 @@ class CrossDatabaseOperationCoordinatorTest {
             }.take(limit)
         }
 
+        override suspend fun countNonTerminalByInstanceOwnerAndPayloadSchema(
+            instanceId: String,
+            ownerType: String,
+            payloadSchema: String
+        ): Int {
+            return listOfNotNull(record).count {
+                it.instanceId == instanceId &&
+                    it.ownerType == ownerType &&
+                    it.payloadSchema == payloadSchema &&
+                    it.status != CrossDatabaseOperationStatus.COMMITTED
+            }
+        }
+
         override suspend fun transitionStaged(operationId: String, clockMillis: Long) {
             update(CrossDatabaseOperationStatus.PENDING_CANONICAL, clockMillis)
         }
@@ -368,17 +427,18 @@ class CrossDatabaseOperationCoordinatorTest {
             operationId: String,
             identity: GenesisUltraRuntimeIdentity,
             finalizer: CrossDatabaseTypedFinalizer,
+            receiptObservedThisExecution: CrossDatabaseCanonicalReceipt?,
             clockMillis: Long
         ): CrossDatabaseOperationRecord {
             val pending = requireNotNull(record)
             val result = finalizer.finalizeInsideTransaction(
                 pending,
-                CrossDatabaseCanonicalReceipt(
+                receiptObservedThisExecution ?: CrossDatabaseCanonicalReceipt(
                     eventId = pending.eventId,
                     eventHash = requireNotNull(pending.canonicalEventHash),
                     sequence = requireNotNull(pending.canonicalSequence),
                     provenanceDigest = requireNotNull(pending.canonicalProvenanceDigest),
-                    reusedExistingEvent = false
+                    reusedExistingEvent = true
                 )
             )
             record = pending.copy(

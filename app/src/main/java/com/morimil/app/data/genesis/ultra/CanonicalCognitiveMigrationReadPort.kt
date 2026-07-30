@@ -58,45 +58,7 @@ internal class CanonicalCognitiveMigrationReadPort private constructor(
         }
         requireExactIdentity(identity, snapshot)
 
-        val sources = snapshot.events
-            .asSequence()
-            .filter { event ->
-                event.payloadState == CanonicalPayloadState.VERIFIED_PAYLOAD &&
-                    event.content != null &&
-                    event.provenance != null &&
-                    event.semantics?.memoryKind != "chat_noise"
-            }
-            .sortedWith(
-                compareByDescending<CanonicalConsumerEvent> {
-                    it.semantics?.userConfirmed == true
-                }
-                    .thenByDescending { it.semantics?.importance ?: 0 }
-                    .thenByDescending { it.semantics?.confidence ?: 0 }
-                    .thenByDescending { it.ref.sequence }
-            )
-            .take(MAX_PLANNING_SOURCES)
-            .map { event ->
-                VerifiedCognitiveMigrationSource(
-                    eventId = event.ref.eventId,
-                    eventHash = event.ref.eventHash,
-                    sequence = event.ref.sequence,
-                    eventType = event.ref.eventType,
-                    actor = event.ref.actor,
-                    content = requireNotNull(event.content),
-                    observedAt = event.ref.observedAt,
-                    provenanceDigest = event.ref.provenanceDigest
-                )
-            }
-            .toList()
-
-        val sourceHashes = sources.map { source -> source.eventHash }.sorted()
-        val sourceSetJson = CrossDatabaseOperationIdentity.canonicalJson(
-            mapOf(
-                "instance_id" to identity.instanceId,
-                "schema" to SOURCE_SET_SCHEMA,
-                "source_event_hashes_sorted" to sourceHashes
-            )
-        )
+        val sources = selectPlanningSources(snapshot.events)
         val recordSetJson = CrossDatabaseOperationIdentity.canonicalJson(
             mapOf(
                 "canonical_last_event_hash" to snapshot.lineage.lastEventHash,
@@ -122,8 +84,7 @@ internal class CanonicalCognitiveMigrationReadPort private constructor(
             canonicalRecordSetDigest =
                 CrossDatabaseOperationIdentity.digestCanonicalJson(recordSetJson),
             canonicalPreSnapshotHash = snapshot.lineage.snapshotDigest,
-            sourceSetDigest =
-                CrossDatabaseOperationIdentity.digestCanonicalJson(sourceSetJson),
+            sourceSetDigest = sourceSetDigest(identity.instanceId, sources),
             sources = sources
         )
     }
@@ -215,10 +176,82 @@ internal class CanonicalCognitiveMigrationReadPort private constructor(
 
     internal companion object {
         private const val MAX_PLANNING_SOURCES = 16
+        private const val COGNITIVE_PROTOCOL_ACTOR = "cognitive_migration_protocol"
+        private const val COGNITIVE_PROTOCOL_CLASSIFICATION =
+            "durable_cognitive_migration_transition"
+        private const val COGNITIVE_PROTOCOL_EVENT_PREFIX = "cognitive_migration."
+        private const val COGNITIVE_PROTOCOL_NOTE_SCHEMA =
+            "morimil.cross_database_operation.canonical_commit.v1"
+        private const val COGNITIVE_PROTOCOL_SOURCE = "cross_database_operations"
+        private const val LIVING_MEMORY_NOTE_SCHEMA = "morimil.living_memory_write.v1"
+        private const val LEGACY_MEMORY_NOTE_SCHEMA = "morimil.legacy_memory_import.v1"
         private const val SOURCE_SET_SCHEMA =
             "morimil.cognitive_migration.source_set.v1"
         private const val RECORD_SET_SCHEMA =
             "morimil.cognitive_migration.canonical_record_set.v1"
+        private val ALLOWED_PLANNING_NOTE_SCHEMAS = setOf(
+            LIVING_MEMORY_NOTE_SCHEMA,
+            LEGACY_MEMORY_NOTE_SCHEMA
+        )
+
+        internal fun isAllowedPlanningSource(event: CanonicalConsumerEvent): Boolean {
+            val provenance = event.provenance ?: return false
+            val memoryKind = event.semantics?.memoryKind ?: return false
+            return event.payloadState == CanonicalPayloadState.VERIFIED_PAYLOAD &&
+                event.content != null &&
+                provenance.noteSchema in ALLOWED_PLANNING_NOTE_SCHEMAS &&
+                memoryKind != "chat_noise" &&
+                provenance.source != COGNITIVE_PROTOCOL_SOURCE &&
+                provenance.classification != COGNITIVE_PROTOCOL_CLASSIFICATION &&
+                provenance.noteSchema != COGNITIVE_PROTOCOL_NOTE_SCHEMA &&
+                event.ref.actor != COGNITIVE_PROTOCOL_ACTOR &&
+                !event.ref.eventType.startsWith(COGNITIVE_PROTOCOL_EVENT_PREFIX)
+        }
+
+        internal fun selectPlanningSources(
+            events: List<CanonicalConsumerEvent>
+        ): List<VerifiedCognitiveMigrationSource> {
+            return events
+                .asSequence()
+                .filter(::isAllowedPlanningSource)
+                .sortedWith(
+                    compareByDescending<CanonicalConsumerEvent> {
+                        it.semantics?.userConfirmed == true
+                    }
+                        .thenByDescending { it.semantics?.importance ?: 0 }
+                        .thenByDescending { it.semantics?.confidence ?: 0 }
+                        .thenByDescending { it.ref.sequence }
+                )
+                .take(MAX_PLANNING_SOURCES)
+                .map { event ->
+                    VerifiedCognitiveMigrationSource(
+                        eventId = event.ref.eventId,
+                        eventHash = event.ref.eventHash,
+                        sequence = event.ref.sequence,
+                        eventType = event.ref.eventType,
+                        actor = event.ref.actor,
+                        content = requireNotNull(event.content),
+                        observedAt = event.ref.observedAt,
+                        provenanceDigest = event.ref.provenanceDigest
+                    )
+                }
+                .toList()
+        }
+
+        internal fun sourceSetDigest(
+            instanceId: String,
+            sources: List<VerifiedCognitiveMigrationSource>
+        ): String {
+            val sourceSetJson = CrossDatabaseOperationIdentity.canonicalJson(
+                mapOf(
+                    "instance_id" to instanceId,
+                    "schema" to SOURCE_SET_SCHEMA,
+                    "source_event_hashes_sorted" to
+                        sources.map { source -> source.eventHash }.sorted()
+                )
+            )
+            return CrossDatabaseOperationIdentity.digestCanonicalJson(sourceSetJson)
+        }
 
         fun production(
             identityRepository: GenesisUltraRuntimeIdentityRepository,

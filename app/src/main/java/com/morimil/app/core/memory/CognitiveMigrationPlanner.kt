@@ -35,12 +35,12 @@ data class CognitiveMigrationPlan(
 
 object CognitiveMigrationPlanner {
     const val PLAN_SCHEMA = "morimil.cognitive_migration_plan.v2"
-    const val VERIFIED_PLAN_SCHEMA = "morimil.cognitive_migration.plan_core.v3"
+    const val VERIFIED_PLAN_SCHEMA = "morimil.cognitive_migration.plan_core.v4"
     const val PLANNED_RECORD_SCHEMA =
-        "morimil.cognitive_migration.planned_record.v1"
+        "morimil.cognitive_migration.planned_record.v2"
     const val MIGRATION_TYPE = "cognitive.memory_refinement"
     const val FROM_VERSION = "canonical_memory_current"
-    const val TO_VERSION = "canonical_memory_refined_v3"
+    const val TO_VERSION = "canonical_memory_refined_v4"
 
     internal fun buildVerifiedPlan(
         input: VerifiedCognitiveMigrationPlanningInput
@@ -74,25 +74,24 @@ object CognitiveMigrationPlanner {
             "low"
         }
         val expectedEffect = buildString {
-            appendLine("COGNITIVE_MIGRATION_CANONICAL_PLAN_V3")
+            appendLine("COGNITIVE_MIGRATION_CANONICAL_PLAN_V4")
             appendLine("schema=$VERIFIED_PLAN_SCHEMA")
             appendLine("source_count=${orderedSources.size}")
             appendLine("source_set_digest=${input.sourceSetDigest}")
-            appendLine("canonical_pre_snapshot_hash=${input.canonicalPreSnapshotHash}")
+            appendLine("planning_anchor_digest=${input.sourceSetDigest}")
             appendLine("policy=append_only_original_memory_unchanged")
         }.trim()
         val rollbackStrategy = buildString {
-            appendLine("COGNITIVE_MIGRATION_ROLLBACK_V3")
+            appendLine("COGNITIVE_MIGRATION_ROLLBACK_V4")
             appendLine("compensation_mode=append_only")
-            appendLine("canonical_pre_snapshot_hash=${input.canonicalPreSnapshotHash}")
+            appendLine("planning_anchor_digest=${input.sourceSetDigest}")
             append("original_events_deleted=false")
         }
         val planCoreJson = CrossDatabaseOperationIdentity.canonicalJson(
             mapOf(
                 "affected_artifacts" to affectedArtifacts,
-                "canonical_last_event_hash" to input.canonicalLastEventHash,
-                "canonical_last_sequence" to input.canonicalLastSequence,
                 "expected_effect" to expectedEffect,
+                "planning_anchor_digest" to input.sourceSetDigest,
                 "risk_level" to riskLevel,
                 "rollback_strategy" to rollbackStrategy,
                 "schema" to VERIFIED_PLAN_SCHEMA,
@@ -115,9 +114,8 @@ object CognitiveMigrationPlanner {
             CrossDatabaseOperationIdentity.digestCanonicalJson(planCoreJson)
         val planIdentityJson = CrossDatabaseOperationIdentity.canonicalJson(
             mapOf(
-                "canonical_pre_snapshot_hash" to input.canonicalPreSnapshotHash,
                 "plan_core_digest" to planCoreDigest,
-                "schema" to "morimil.cognitive_migration.plan_identity.v1",
+                "schema" to "morimil.cognitive_migration.plan_identity.v2",
                 "source_event_hashes" to orderedSources.map { source -> source.eventHash },
                 "source_set_digest" to input.sourceSetDigest
             )
@@ -125,12 +123,12 @@ object CognitiveMigrationPlanner {
         val planIntentDigest =
             CrossDatabaseOperationIdentity.digestCanonicalJson(planIdentityJson)
         val proposalId = "cog_proposal_" + StableIdDigest.shortSha256Hex(
-            namespace = "morimil.cognitive_migration.proposal_id.v1",
+            namespace = "morimil.cognitive_migration.proposal_id.v2",
             parts = listOf(input.instanceId, planIntentDigest),
             hexLength = 64
         )
         val migrationId = "cog_migration_" + StableIdDigest.shortSha256Hex(
-            namespace = "morimil.cognitive_migration.migration_id.v1",
+            namespace = "morimil.cognitive_migration.migration_id.v2",
             parts = listOf(input.instanceId, proposalId, MIGRATION_TYPE),
             hexLength = 64
         )
@@ -151,7 +149,7 @@ object CognitiveMigrationPlanner {
                 "migration_id" to migrationId,
                 "migration_type" to MIGRATION_TYPE,
                 "post_snapshot_id" to null,
-                "pre_snapshot_id" to input.canonicalPreSnapshotHash,
+                "pre_snapshot_id" to input.sourceSetDigest,
                 "proposal_id" to proposalId,
                 "risk_level" to riskLevel,
                 "rollback_available" to true,

@@ -97,6 +97,21 @@ interface CrossDatabaseOperationDao {
 
     @Query(
         """
+        SELECT COUNT(*) FROM cross_database_operations
+        WHERE instanceId = :instanceId
+          AND ownerType = :ownerType
+          AND payloadSchema = :payloadSchema
+          AND status != 'COMMITTED'
+        """
+    )
+    suspend fun countNonTerminalByInstanceOwnerAndPayloadSchema(
+        instanceId: String,
+        ownerType: String,
+        payloadSchema: String
+    ): Int
+
+    @Query(
+        """
         UPDATE cross_database_operations
         SET status = 'PENDING_CANONICAL',
             lastErrorCode = NULL,

@@ -10,9 +10,16 @@ import java.time.Instant
 import java.time.temporal.ChronoUnit
 import org.json.JSONObject
 
-internal class CanonicalCognitiveMigrationCommitPort(
-    private val repository: CanonicalMemoryRepository
+internal class CanonicalCognitiveMigrationCommitPort private constructor(
+    private val appendText:
+        suspend (CanonicalMemoryAppendCommand) -> CanonicalMemoryRecord,
+    private val readVerifiedSnapshot: suspend () -> CanonicalMemorySnapshot
 ) : CrossDatabaseCanonicalEnsurePort {
+    internal constructor(repository: CanonicalMemoryRepository) : this(
+        appendText = repository::appendText,
+        readVerifiedSnapshot = repository::readVerifiedSnapshot
+    )
+
     override suspend fun ensureCommitted(
         command: CrossDatabaseCanonicalCommand
     ): CrossDatabaseCanonicalReceipt {
@@ -21,7 +28,7 @@ internal class CanonicalCognitiveMigrationCommitPort(
         }
 
         val appended = try {
-            repository.appendText(command.toAppendCommand())
+            appendText(command.toAppendCommand())
         } catch (failure: Throwable) {
             CrossDatabaseProtocolErrors.rethrowCancellation(failure)
             val recovered = findVerified(command)
@@ -40,7 +47,7 @@ internal class CanonicalCognitiveMigrationCommitPort(
     private suspend fun findVerified(
         command: CrossDatabaseCanonicalCommand
     ): CrossDatabaseCanonicalReceipt? {
-        val snapshot = repository.readVerifiedSnapshot()
+        val snapshot = readVerifiedSnapshot()
         if (snapshot.instanceId != command.instanceId) {
             throw CrossDatabaseProtocolErrors.permanent(
                 CrossDatabaseProtocolErrors.WRONG_INSTANCE
@@ -74,6 +81,8 @@ internal class CanonicalCognitiveMigrationCommitPort(
             record.event.bodyId == command.writerBodyId &&
             record.event.signature.keyEpochId == command.writerEpoch &&
             record.event.observedAt == observedAt(command.occurredAtMillis) &&
+            record.event.contentType == CONTENT_TYPE &&
+            record.event.privacy == PRIVACY &&
             record.textContent == command.eventBody
         if (!exactEvent) {
             throw CrossDatabaseProtocolErrors.permanent(
@@ -88,7 +97,10 @@ internal class CanonicalCognitiveMigrationCommitPort(
         val provenance = JSONObject(provenanceBytes.toString(StandardCharsets.UTF_8))
         val expectedUserConfirmed =
             command.operationType != CognitiveMigrationProtocolTypes.PROPOSE
-        val exactProvenance = provenance.getString("source") == SOURCE &&
+        val exactProvenance = provenance.getString("schema") == PROVENANCE_SCHEMA &&
+            provenance.getString("instance_id") == command.instanceId &&
+            provenance.getString("body_id") == command.writerBodyId &&
+            provenance.getString("source") == SOURCE &&
             provenance.getString("classification") == CLASSIFICATION &&
             provenance.getBoolean("user_confirmed") == expectedUserConfirmed &&
             provenance.getString("source_id") == command.operationId
@@ -160,8 +172,21 @@ internal class CanonicalCognitiveMigrationCommitPort(
         return Instant.ofEpochMilli(millis).truncatedTo(ChronoUnit.SECONDS).toString()
     }
 
-    private companion object {
+    internal companion object {
+        fun testing(
+            appendText: suspend (CanonicalMemoryAppendCommand) -> CanonicalMemoryRecord,
+            readVerifiedSnapshot: suspend () -> CanonicalMemorySnapshot
+        ): CanonicalCognitiveMigrationCommitPort {
+            return CanonicalCognitiveMigrationCommitPort(
+                appendText = appendText,
+                readVerifiedSnapshot = readVerifiedSnapshot
+            )
+        }
+
         const val ACTOR = "cognitive_migration_protocol"
+        const val CONTENT_TYPE = "text/plain"
+        const val PRIVACY = "private_local"
+        const val PROVENANCE_SCHEMA = "morimil.canonical_memory.provenance.v1"
         const val SOURCE = "cross_database_operations"
         const val CLASSIFICATION = "durable_cognitive_migration_transition"
         const val NOTE_SCHEMA = "morimil.cross_database_operation.canonical_commit.v1"
