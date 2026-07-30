@@ -86,24 +86,26 @@ class CognitiveMigrationProtocolContractTest {
         val coordinator = source(
             "data/repository/CrossDatabaseOperationCoordinator.kt"
         ).readText()
+        val dao = source("data/local/CrossDatabaseOperationDao.kt").readText()
         val finalizer = source(
             "data/repository/CognitiveMigrationProtocolFinalizer.kt"
         ).readText()
 
         val preparation = coordinator.indexOf("finalizer.prepareOutsideTransaction")
         val dispatch = coordinator.indexOf("store.finalizeCommitted", preparation)
-        val transaction = coordinator.indexOf("return database.withTransaction", dispatch)
+        val transaction = dao.indexOf("return database.withTransaction")
 
         assertTrue(preparation >= 0)
         assertTrue(dispatch > preparation)
-        assertTrue(transaction > dispatch)
+        assertTrue(transaction >= 0)
+        assertTrue(dao.contains("finalizer.finalizePreparedInsideTransaction"))
         assertTrue(finalizer.contains("override suspend fun prepareOutsideTransaction"))
         assertTrue(finalizer.contains("finalizePreparedInsideTransaction"))
         assertTrue(finalizer.contains("audit_preparation.v1"))
     }
 
     @Test
-    fun coordinatorUsesTypedErrorsAndDurableRemainderCounts() {
+    fun coordinatorUsesTypedErrorsDurableRemaindersAndConcurrentCasGuards() {
         val coordinator = source(
             "data/repository/CrossDatabaseOperationCoordinator.kt"
         ).readText()
@@ -113,6 +115,13 @@ class CognitiveMigrationProtocolContractTest {
         assertFalse(coordinator.contains("Regex(\"mismatch|invalid|conflict"))
         assertTrue(coordinator.contains("countRecoverableForInstance"))
         assertTrue(coordinator.contains("countRecoverableForOwner"))
+        assertTrue(coordinator.contains("if (countRemaining() > retryable)"))
+        assertTrue(coordinator.contains("OPERATION_MUTEXES"))
+        assertTrue(coordinator.contains("withOperationLock"))
+        assertTrue(coordinator.contains("loadCompatibleAfterLostCas"))
+        assertTrue(coordinator.contains("expectedStatus = operation.status"))
+        assertTrue(dao.contains("markBlockedIfStatus"))
+        assertTrue(dao.contains("AND status = :expectedStatus"))
         assertTrue(dao.contains("status NOT IN ('COMMITTED', 'BLOCKED')"))
     }
 
