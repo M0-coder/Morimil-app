@@ -9,7 +9,6 @@ import com.morimil.app.data.repository.CrossDatabaseOperationCoordinator
 internal val MorimilAppContainer.canonicalCognitiveMigrationReadPort:
     CanonicalCognitiveMigrationReadPort
     get() = CanonicalCognitiveMigrationReadPort.production(
-        identityRepository = genesisUltraRuntimeIdentityRepository,
         consumerReadPort = GenesisUltraCanonicalConsumerReadAdapter.production(
             identityRepository = genesisUltraRuntimeIdentityRepository,
             memoryRepository = canonicalMemoryRepository
@@ -35,3 +34,4 @@ internal val MorimilAppContainer.cognitiveMigrationProtocolCoordinator:
             )
         )
     }
+}
