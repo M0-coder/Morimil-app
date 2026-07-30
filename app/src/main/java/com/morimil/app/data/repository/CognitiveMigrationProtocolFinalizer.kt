@@ -2,6 +2,7 @@ package com.morimil.app.data.repository
 
 import com.morimil.app.core.memory.CognitiveMigrationPlanner
 import com.morimil.app.data.genesis.ultra.CognitiveMigrationCanonicalAuditPort
+import com.morimil.app.data.local.CrossDatabaseOperationEntity
 import com.morimil.app.data.local.CrossDatabaseOperationStatus
 import com.morimil.app.data.local.MemoryOrganDatabase
 import com.morimil.app.data.local.MigrationRecordEntity
@@ -18,23 +19,81 @@ internal class CognitiveMigrationProtocolFinalizer(
     override val supportedOperationTypes: Set<String> =
         CognitiveMigrationProtocolTypes.CLOSED_REGISTRY.keys
 
+    override suspend fun prepareOutsideTransaction(
+        operation: CrossDatabaseOperationRecord,
+        receipt: CrossDatabaseCanonicalReceipt
+    ): CrossDatabaseFinalizationPreparation? {
+        if (operation.operationType != CognitiveMigrationProtocolTypes.EXECUTE) return null
+        val audit = canonicalAuditPort.auditVerifiedCanonicalChain()
+        if (audit.verified && audit.snapshotDigest == null) {
+            throw CrossDatabaseProtocolErrors.permanent(
+                CrossDatabaseProtocolErrors.FINALIZATION_PREPARATION_CONFLICT
+            )
+        }
+        audit.snapshotDigest?.let { digest ->
+            if (!digest.matches(CrossDatabaseOperationEntity.SHA256_DIGEST)) {
+                throw CrossDatabaseProtocolErrors.permanent(
+                    CrossDatabaseProtocolErrors.FINALIZATION_PREPARATION_CONFLICT
+                )
+            }
+        }
+        val json = CrossDatabaseOperationIdentity.canonicalJson(
+            mapOf(
+                "audit_notes" to audit.notes,
+                "audit_verified" to audit.verified,
+                "operation_id" to operation.operationId,
+                "payload_digest" to operation.payloadDigest,
+                "receipt_event_hash" to receipt.eventHash,
+                "schema" to AUDIT_PREPARATION_SCHEMA,
+                "snapshot_digest" to audit.snapshotDigest
+            )
+        )
+        return CrossDatabaseFinalizationPreparation(
+            operationId = operation.operationId,
+            receiptEventHash = receipt.eventHash,
+            payloadDigest = operation.payloadDigest,
+            schema = AUDIT_PREPARATION_SCHEMA,
+            json = json,
+            digest = CrossDatabaseOperationIdentity.digestCanonicalJson(json)
+        )
+    }
+
     override suspend fun finalizeInsideTransaction(
         operation: CrossDatabaseOperationRecord,
         receipt: CrossDatabaseCanonicalReceipt
     ): CrossDatabaseLocalResult {
-        require(operation.status == CrossDatabaseOperationStatus.PENDING_LOCAL_COMMIT) {
-            "xop_finalizer_status_invalid"
-        }
-        require(operation.operationVersion == CognitiveMigrationProtocolTypes.VERSION) {
-            throw CrossDatabaseProtocolErrors.permanent(
-                CrossDatabaseProtocolErrors.UNSUPPORTED_OPERATION_VERSION
-            )
-        }
+        return finalizePreparedInsideTransaction(operation, receipt, preparation = null)
+    }
+
+    override suspend fun finalizePreparedInsideTransaction(
+        operation: CrossDatabaseOperationRecord,
+        receipt: CrossDatabaseCanonicalReceipt,
+        preparation: CrossDatabaseFinalizationPreparation?
+    ): CrossDatabaseLocalResult {
+        permanentCheck(
+            operation.status == CrossDatabaseOperationStatus.PENDING_LOCAL_COMMIT,
+            CrossDatabaseProtocolErrors.OWNER_TRANSITION_CONFLICT
+        )
+        permanentCheck(
+            operation.operationVersion == CognitiveMigrationProtocolTypes.VERSION,
+            CrossDatabaseProtocolErrors.UNSUPPORTED_OPERATION_VERSION
+        )
         return when (operation.operationType) {
-            CognitiveMigrationProtocolTypes.PROPOSE -> finalizeProposal(operation, receipt)
-            CognitiveMigrationProtocolTypes.APPROVE -> finalizeApproval(operation, receipt)
-            CognitiveMigrationProtocolTypes.EXECUTE -> finalizeExecution(operation, receipt)
-            CognitiveMigrationProtocolTypes.ROLLBACK -> finalizeRollback(operation, receipt)
+            CognitiveMigrationProtocolTypes.PROPOSE -> {
+                permanentCheck(preparation == null)
+                finalizeProposal(operation, receipt)
+            }
+            CognitiveMigrationProtocolTypes.APPROVE -> {
+                permanentCheck(preparation == null)
+                finalizeApproval(operation, receipt)
+            }
+            CognitiveMigrationProtocolTypes.EXECUTE -> {
+                finalizeExecution(operation, receipt, preparation)
+            }
+            CognitiveMigrationProtocolTypes.ROLLBACK -> {
+                permanentCheck(preparation == null)
+                finalizeRollback(operation, receipt)
+            }
             else -> throw CrossDatabaseProtocolErrors.permanent(
                 CrossDatabaseProtocolErrors.UNSUPPORTED_OPERATION_VERSION
             )
@@ -47,17 +106,14 @@ internal class CognitiveMigrationProtocolFinalizer(
     ): CrossDatabaseLocalResult {
         val payload = requirePayload(operation, COG_001_PAYLOAD_SCHEMA)
         val plannedRecordObject = payload.getJSONObject("planned_record")
-        val plannedRecordJson =
-            CrossDatabaseOperationIdentity.canonicalJson(plannedRecordObject)
+        val plannedRecordJson = CrossDatabaseOperationIdentity.canonicalJson(plannedRecordObject)
         val plannedRecordDigest = payload.getString("planned_record_digest")
         requireDigestMatches(plannedRecordJson, plannedRecordDigest)
-        require(payload.getString("migration_id") == operation.subjectId) {
-            "xop_cog_001_subject_mismatch"
-        }
+        permanentCheck(payload.getString("migration_id") == operation.subjectId)
         val candidate = plannedRecordObject.toEntity(operation)
-        require(
+        permanentCheck(
             MigrationRecordRepository.plannedRecordDigestOf(candidate) == plannedRecordDigest
-        ) { "xop_cog_001_projection_digest_mismatch" }
+        )
 
         val existing = organDao.loadMigrationRecord(candidate.migrationId)
         val inserted = if (existing == null) {
@@ -81,12 +137,7 @@ internal class CognitiveMigrationProtocolFinalizer(
                 "schema" to COG_001_LOCAL_RESULT_SCHEMA
             )
         )
-        return CrossDatabaseLocalResult(
-            schema = COG_001_LOCAL_RESULT_SCHEMA,
-            json = json,
-            digest = CrossDatabaseOperationIdentity.digestCanonicalJson(json),
-            ownerStatus = STATUS_PLANNED
-        )
+        return localResult(COG_001_LOCAL_RESULT_SCHEMA, json, STATUS_PLANNED)
     }
 
     private suspend fun finalizeApproval(
@@ -97,21 +148,18 @@ internal class CognitiveMigrationProtocolFinalizer(
         val record = requireOwnerRecord(operation, payload)
         val plannedRecordDigest = payload.getString("planned_record_digest")
         requirePlannedDigest(record, plannedRecordDigest)
-        require(payload.getString("expected_owner_status") == STATUS_PLANNED) {
-            "xop_cog_002_expected_status_invalid"
-        }
-        require(payload.getString("decision") == "approve") {
-            "xop_cog_002_decision_invalid"
-        }
+        permanentCheck(payload.getString("expected_owner_status") == STATUS_PLANNED)
+        permanentCheck(payload.getString("decision") == "approve")
         val updated = when {
             record.status == STATUS_PLANNED -> {
-                require(
+                permanentCheck(
                     organDao.approveMigrationRecordIfPlanned(
                         migrationId = record.migrationId,
                         approvalId = operation.operationId,
                         updatedAtMillis = operation.updatedAtMillis
-                    ) == 1
-                ) { "xop_cog_002_owner_transition_failed" }
+                    ) == 1,
+                    CrossDatabaseProtocolErrors.OWNER_TRANSITION_CONFLICT
+                )
                 true
             }
             record.status == STATUS_APPROVED &&
@@ -140,53 +188,46 @@ internal class CognitiveMigrationProtocolFinalizer(
 
     private suspend fun finalizeExecution(
         operation: CrossDatabaseOperationRecord,
-        receipt: CrossDatabaseCanonicalReceipt
+        receipt: CrossDatabaseCanonicalReceipt,
+        preparation: CrossDatabaseFinalizationPreparation?
     ): CrossDatabaseLocalResult {
         val payload = requirePayload(operation, COG_003_PAYLOAD_SCHEMA)
         val record = requireOwnerRecord(operation, payload)
         val plannedRecordDigest = payload.getString("planned_record_digest")
         requirePlannedDigest(record, plannedRecordDigest)
-        require(record.status == STATUS_APPROVED && record.approvedByUser) {
-            throw CrossDatabaseProtocolErrors.permanent(
-                CrossDatabaseProtocolErrors.OWNER_STATE_CONFLICT
-            )
-        }
+        permanentCheck(record.status == STATUS_APPROVED && record.approvedByUser)
         val approvalOperationId = payload.getString("approval_operation_id")
-        require(record.approvalId == approvalOperationId) {
-            throw CrossDatabaseProtocolErrors.permanent(
-                CrossDatabaseProtocolErrors.PREDECESSOR_RECEIPT_MISSING
-            )
-        }
+        permanentCheck(
+            record.approvalId == approvalOperationId,
+            CrossDatabaseProtocolErrors.PREDECESSOR_RECEIPT_MISSING
+        )
         requirePredecessorReceipt(
             operationId = approvalOperationId,
             eventHash = payload.getString("approval_event_hash"),
             sequence = payload.getLong("approval_sequence"),
             provenanceDigest = payload.getString("approval_provenance_digest"),
-            subjectId = record.migrationId
+            subjectId = record.migrationId,
+            expectedOperationType = CognitiveMigrationProtocolTypes.APPROVE
         )
 
-        val audit = canonicalAuditPort.auditVerifiedCanonicalChain()
+        val audit = requireAuditPreparation(operation, receipt, preparation)
         val outcome = if (audit.verified) STATUS_COMPLETED else STATUS_FAILED
-        val notes = if (audit.verified) {
-            listOf("canonical_chain_verified", "append_only_refinement_committed")
-        } else {
-            listOf("canonical_chain_audit_failed")
-        }
-        val postSnapshotId = "sha256:" + receipt.eventHash.removePrefix("evsha256:")
-        require(
+        val postSnapshotId = audit.snapshotDigest
+        permanentCheck(
             organDao.finishMigrationRecordIfApproved(
                 migrationId = record.migrationId,
                 approvalId = approvalOperationId,
                 outcome = outcome,
                 postSnapshotId = postSnapshotId,
-                errorsJson = JSONArray(notes).toString(),
+                errorsJson = JSONArray(audit.notes).toString(),
                 updatedAtMillis = operation.updatedAtMillis
-            ) == 1
-        ) { "xop_cog_003_owner_transition_failed" }
+            ) == 1,
+            CrossDatabaseProtocolErrors.OWNER_TRANSITION_CONFLICT
+        )
         val json = localResult(
             mapOf(
                 "audit_chain_verified" to audit.verified,
-                "audit_notes" to notes,
+                "audit_notes" to audit.notes,
                 "canonical_event_hash" to receipt.eventHash,
                 "canonical_event_id" to receipt.eventId,
                 "canonical_provenance_digest" to receipt.provenanceDigest,
@@ -211,36 +252,39 @@ internal class CognitiveMigrationProtocolFinalizer(
         val record = requireOwnerRecord(operation, payload)
         val plannedRecordDigest = payload.getString("planned_record_digest")
         requirePlannedDigest(record, plannedRecordDigest)
-        require(record.status in setOf(STATUS_APPROVED, STATUS_COMPLETED, STATUS_FAILED)) {
-            throw CrossDatabaseProtocolErrors.permanent(
-                CrossDatabaseProtocolErrors.OWNER_STATE_CONFLICT
-            )
-        }
+        permanentCheck(record.status in setOf(STATUS_APPROVED, STATUS_COMPLETED, STATUS_FAILED))
         val predecessorOperationId = payload.getString("predecessor_operation_id")
+        val expectedPredecessorType = if (record.status == STATUS_APPROVED) {
+            CognitiveMigrationProtocolTypes.APPROVE
+        } else {
+            CognitiveMigrationProtocolTypes.EXECUTE
+        }
         requirePredecessorReceipt(
             operationId = predecessorOperationId,
             eventHash = payload.getString("predecessor_event_hash"),
             sequence = payload.getLong("predecessor_sequence"),
             provenanceDigest = payload.getString("predecessor_provenance_digest"),
-            subjectId = record.migrationId
+            subjectId = record.migrationId,
+            expectedOperationType = expectedPredecessorType
         )
         val rollbackStrategyDigest = payload.getString("rollback_strategy_digest")
-        require(
+        permanentCheck(
             rollbackStrategyDigest ==
                 CrossDatabaseOperationIdentity.digestUtf8(record.rollbackStrategy)
-        ) { "xop_cog_004_strategy_digest_mismatch" }
+        )
         val notes = listOf(
             "rollback_requested_by_user",
             "append_only_compensation"
         )
-        require(
+        permanentCheck(
             organDao.rollbackMigrationRecordIfAllowed(
                 migrationId = record.migrationId,
                 rollbackEventHash = receipt.eventHash,
                 notesJson = JSONArray(notes).toString(),
                 updatedAtMillis = operation.updatedAtMillis
-            ) == 1
-        ) { "xop_cog_004_owner_transition_failed" }
+            ) == 1,
+            CrossDatabaseProtocolErrors.OWNER_TRANSITION_CONFLICT
+        )
         val json = localResult(
             mapOf(
                 "canonical_event_hash" to receipt.eventHash,
@@ -261,6 +305,61 @@ internal class CognitiveMigrationProtocolFinalizer(
         return localResult(COG_004_LOCAL_RESULT_SCHEMA, json, STATUS_ROLLED_BACK)
     }
 
+    private fun requireAuditPreparation(
+        operation: CrossDatabaseOperationRecord,
+        receipt: CrossDatabaseCanonicalReceipt,
+        preparation: CrossDatabaseFinalizationPreparation?
+    ): PreparedAudit {
+        val prepared = preparation ?: throw CrossDatabaseProtocolErrors.permanent(
+            CrossDatabaseProtocolErrors.FINALIZATION_PREPARATION_CONFLICT
+        )
+        permanentCheck(
+            prepared.schema == AUDIT_PREPARATION_SCHEMA &&
+                prepared.operationId == operation.operationId &&
+                prepared.receiptEventHash == receipt.eventHash &&
+                prepared.payloadDigest == operation.payloadDigest,
+            CrossDatabaseProtocolErrors.FINALIZATION_PREPARATION_CONFLICT
+        )
+        val json = try {
+            JSONObject(prepared.json)
+        } catch (failure: Throwable) {
+            throw CrossDatabaseProtocolErrors.permanent(
+                CrossDatabaseProtocolErrors.FINALIZATION_PREPARATION_CONFLICT,
+                failure
+            )
+        }
+        permanentCheck(
+            json.getString("schema") == AUDIT_PREPARATION_SCHEMA &&
+                json.getString("operation_id") == operation.operationId &&
+                json.getString("receipt_event_hash") == receipt.eventHash &&
+                json.getString("payload_digest") == operation.payloadDigest,
+            CrossDatabaseProtocolErrors.FINALIZATION_PREPARATION_CONFLICT
+        )
+        val verified = json.getBoolean("audit_verified")
+        val snapshotDigest = if (json.isNull("snapshot_digest")) {
+            null
+        } else {
+            json.getString("snapshot_digest")
+        }
+        if (verified) {
+            permanentCheck(
+                snapshotDigest?.matches(CrossDatabaseOperationEntity.SHA256_DIGEST) == true,
+                CrossDatabaseProtocolErrors.FINALIZATION_PREPARATION_CONFLICT
+            )
+        } else {
+            permanentCheck(
+                snapshotDigest == null,
+                CrossDatabaseProtocolErrors.FINALIZATION_PREPARATION_CONFLICT
+            )
+        }
+        val notesArray = json.getJSONArray("audit_notes")
+        val notes = (0 until notesArray.length()).map { index ->
+            notesArray.getString(index)
+        }
+        permanentCheck(notes.isNotEmpty())
+        return PreparedAudit(verified, snapshotDigest, notes)
+    }
+
     private fun requirePayload(
         operation: CrossDatabaseOperationRecord,
         expectedSchema: String
@@ -270,7 +369,14 @@ internal class CognitiveMigrationProtocolFinalizer(
                 CrossDatabaseProtocolErrors.UNSUPPORTED_PAYLOAD_SCHEMA
             )
         }
-        val payload = JSONObject(operation.payloadJson)
+        val payload = try {
+            JSONObject(operation.payloadJson)
+        } catch (failure: Throwable) {
+            throw CrossDatabaseProtocolErrors.permanent(
+                CrossDatabaseProtocolErrors.UNSUPPORTED_PAYLOAD_SCHEMA,
+                failure
+            )
+        }
         if (payload.getString("schema") != expectedSchema) {
             throw CrossDatabaseProtocolErrors.permanent(
                 CrossDatabaseProtocolErrors.UNSUPPORTED_PAYLOAD_SCHEMA
@@ -283,9 +389,7 @@ internal class CognitiveMigrationProtocolFinalizer(
         operation: CrossDatabaseOperationRecord,
         payload: JSONObject
     ): MigrationRecordEntity {
-        require(payload.getString("migration_id") == operation.subjectId) {
-            "xop_owner_subject_mismatch"
-        }
+        permanentCheck(payload.getString("migration_id") == operation.subjectId)
         return organDao.loadMigrationRecord(operation.subjectId)
             ?: throw CrossDatabaseProtocolErrors.permanent(
                 CrossDatabaseProtocolErrors.OWNER_STATE_CONFLICT
@@ -296,11 +400,9 @@ internal class CognitiveMigrationProtocolFinalizer(
         record: MigrationRecordEntity,
         expectedDigest: String
     ) {
-        if (MigrationRecordRepository.plannedRecordDigestOf(record) != expectedDigest) {
-            throw CrossDatabaseProtocolErrors.permanent(
-                CrossDatabaseProtocolErrors.OWNER_STATE_CONFLICT
-            )
-        }
+        permanentCheck(
+            MigrationRecordRepository.plannedRecordDigestOf(record) == expectedDigest
+        )
     }
 
     private suspend fun requirePredecessorReceipt(
@@ -308,13 +410,17 @@ internal class CognitiveMigrationProtocolFinalizer(
         eventHash: String,
         sequence: Long,
         provenanceDigest: String,
-        subjectId: String
+        subjectId: String,
+        expectedOperationType: String
     ) {
         val predecessor = operationDao.loadOperation(operationId)
             ?: throw CrossDatabaseProtocolErrors.permanent(
                 CrossDatabaseProtocolErrors.PREDECESSOR_RECEIPT_MISSING
             )
-        val exact = predecessor.subjectId == subjectId &&
+        val exact = predecessor.ownerType == CognitiveMigrationProtocolTypes.OWNER_TYPE &&
+            predecessor.operationType == expectedOperationType &&
+            predecessor.operationVersion == CognitiveMigrationProtocolTypes.VERSION &&
+            predecessor.subjectId == subjectId &&
             predecessor.status == CrossDatabaseOperationStatus.COMMITTED &&
             predecessor.canonicalEventHash == eventHash &&
             predecessor.canonicalSequence == sequence &&
@@ -331,28 +437,22 @@ internal class CognitiveMigrationProtocolFinalizer(
         candidate: MigrationRecordEntity,
         expectedDigest: String
     ) {
-        if (
-            existing.migrationId != candidate.migrationId ||
-            MigrationRecordRepository.plannedRecordDigestOf(existing) != expectedDigest
-        ) {
-            throw CrossDatabaseProtocolErrors.permanent(
-                CrossDatabaseProtocolErrors.OWNER_STATE_CONFLICT
-            )
-        }
+        permanentCheck(
+            existing.migrationId == candidate.migrationId &&
+                MigrationRecordRepository.plannedRecordDigestOf(existing) == expectedDigest
+        )
     }
 
     private fun requireDigestMatches(json: String, expectedDigest: String) {
-        require(CrossDatabaseOperationIdentity.digestCanonicalJson(json) == expectedDigest) {
-            "xop_projection_digest_mismatch"
-        }
+        permanentCheck(
+            CrossDatabaseOperationIdentity.digestCanonicalJson(json) == expectedDigest
+        )
     }
 
     private fun JSONObject.toEntity(
         operation: CrossDatabaseOperationRecord
     ): MigrationRecordEntity {
-        require(getString("schema") == CognitiveMigrationPlanner.PLANNED_RECORD_SCHEMA) {
-            "xop_planned_record_schema_invalid"
-        }
+        permanentCheck(getString("schema") == CognitiveMigrationPlanner.PLANNED_RECORD_SCHEMA)
         return MigrationRecordEntity(
             migrationId = getString("migration_id"),
             instanceId = getString("instance_id"),
@@ -382,6 +482,13 @@ internal class CognitiveMigrationProtocolFinalizer(
         )
     }
 
+    private fun permanentCheck(
+        condition: Boolean,
+        code: String = CrossDatabaseProtocolErrors.OWNER_STATE_CONFLICT
+    ) {
+        if (!condition) throw CrossDatabaseProtocolErrors.permanent(code)
+    }
+
     private fun localResult(values: Map<String, Any?>): String {
         return CrossDatabaseOperationIdentity.canonicalJson(values)
     }
@@ -399,7 +506,16 @@ internal class CognitiveMigrationProtocolFinalizer(
         )
     }
 
+    private data class PreparedAudit(
+        val verified: Boolean,
+        val snapshotDigest: String?,
+        val notes: List<String>
+    )
+
     private companion object {
+        const val AUDIT_PREPARATION_SCHEMA =
+            "morimil.cognitive_migration.audit_preparation.v1"
+
         const val COG_001_PAYLOAD_SCHEMA =
             "morimil.cognitive_migration.cog_001.payload.v2"
         const val COG_002_PAYLOAD_SCHEMA =
