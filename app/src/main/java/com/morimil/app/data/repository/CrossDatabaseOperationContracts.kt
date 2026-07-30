@@ -142,13 +142,49 @@ internal data class CrossDatabaseLocalResult(
     }
 }
 
+internal data class CrossDatabaseFinalizationPreparation(
+    val operationId: String,
+    val receiptEventHash: String,
+    val payloadDigest: String,
+    val schema: String,
+    val json: String,
+    val digest: String
+) {
+    init {
+        require(operationId.matches(CrossDatabaseOperationEntity.OPERATION_ID)) {
+            "xop_preparation_operation_id_invalid"
+        }
+        require(receiptEventHash.matches(CrossDatabaseOperationEntity.EVENT_HASH)) {
+            "xop_preparation_event_hash_invalid"
+        }
+        require(payloadDigest.matches(CrossDatabaseOperationEntity.SHA256_DIGEST)) {
+            "xop_preparation_payload_digest_invalid"
+        }
+        require(schema.isNotBlank()) { "xop_preparation_schema_empty" }
+        require(digest == CrossDatabaseOperationIdentity.digestCanonicalJson(json)) {
+            "xop_preparation_digest_mismatch"
+        }
+    }
+}
+
 internal interface CrossDatabaseTypedFinalizer {
     val supportedOperationTypes: Set<String>
+
+    suspend fun prepareOutsideTransaction(
+        operation: CrossDatabaseOperationRecord,
+        receipt: CrossDatabaseCanonicalReceipt
+    ): CrossDatabaseFinalizationPreparation? = null
 
     suspend fun finalizeInsideTransaction(
         operation: CrossDatabaseOperationRecord,
         receipt: CrossDatabaseCanonicalReceipt
     ): CrossDatabaseLocalResult
+
+    suspend fun finalizePreparedInsideTransaction(
+        operation: CrossDatabaseOperationRecord,
+        receipt: CrossDatabaseCanonicalReceipt,
+        preparation: CrossDatabaseFinalizationPreparation?
+    ): CrossDatabaseLocalResult = finalizeInsideTransaction(operation, receipt)
 }
 
 internal data class CrossDatabaseRecoveryReport(
@@ -201,6 +237,8 @@ internal object CrossDatabaseProtocolErrors {
     const val CANONICAL_EVENT_MISMATCH = "XOP_CANONICAL_EVENT_MISMATCH"
     const val CANONICAL_PROVENANCE_MISMATCH = "XOP_CANONICAL_PROVENANCE_MISMATCH"
     const val CANONICAL_RECEIPT_CONFLICT = "XOP_CANONICAL_RECEIPT_CONFLICT"
+    const val FINALIZATION_PREPARATION_CONFLICT =
+        "XOP_FINALIZATION_PREPARATION_CONFLICT"
     const val WRONG_INSTANCE = "XOP_WRONG_INSTANCE"
     const val UNAUTHORIZED_WRITER_BODY = "XOP_UNAUTHORIZED_WRITER_BODY"
     const val STALE_WRITER_EPOCH = "XOP_STALE_WRITER_EPOCH"
