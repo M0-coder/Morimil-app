@@ -188,7 +188,7 @@ interface MemoryOrganDao {
         migrationId: String,
         approvalId: String,
         outcome: String,
-        postSnapshotId: String,
+        postSnapshotId: String?,
         errorsJson: String,
         updatedAtMillis: Long
     ): Int
