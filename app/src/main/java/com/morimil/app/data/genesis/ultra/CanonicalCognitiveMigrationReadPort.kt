@@ -44,47 +44,28 @@ internal data class CanonicalCognitiveMigrationAudit(
 )
 
 internal class CanonicalCognitiveMigrationReadPort private constructor(
-    private val identityRepository: GenesisUltraRuntimeIdentityRepository,
     private val consumerReadPort: CanonicalConsumerReadPort
 ) : CognitiveMigrationCanonicalReadPort, CognitiveMigrationCanonicalAuditPort {
     override suspend fun readVerifiedPlanningInput(): VerifiedCognitiveMigrationPlanningInput {
-        val identity = identityRepository.readCommittedIdentity()
-            ?: throw CrossDatabaseProtocolErrors.retryable(
-                CrossDatabaseProtocolErrors.CANONICAL_READ_TEMPORARY_UNAVAILABLE
-            )
         val snapshot = when (val result = consumerReadPort.readVerifiedSnapshot()) {
             is CanonicalReadResult.Ready -> result.value
             is CanonicalReadResult.Blocked -> throw mapFailure(result.failure)
         }
-        requireExactIdentity(identity, snapshot)
+        requireSnapshotBindings(snapshot)
 
         val sources = selectPlanningSources(snapshot.events)
-        val recordSetJson = CrossDatabaseOperationIdentity.canonicalJson(
-            mapOf(
-                "canonical_last_event_hash" to snapshot.lineage.lastEventHash,
-                "canonical_last_sequence" to snapshot.lineage.lastSequence,
-                "event_refs" to snapshot.events.map { event ->
-                    mapOf(
-                        "event_hash" to event.ref.eventHash,
-                        "event_id" to event.ref.eventId,
-                        "sequence" to event.ref.sequence
-                    )
-                },
-                "instance_id" to identity.instanceId,
-                "schema" to RECORD_SET_SCHEMA
-            )
-        )
+        val recordSetDigest = canonicalRecordSetDigest(snapshot.events)
+        val preSnapshotHash = canonicalPreSnapshotHash(snapshot, recordSetDigest)
         return VerifiedCognitiveMigrationPlanningInput(
-            instanceId = identity.instanceId,
-            writerBodyId = identity.activeBody.bodyId,
-            writerEpoch = identity.activeBody.keyEpochId,
+            instanceId = snapshot.identity.instanceId,
+            writerBodyId = snapshot.writer.writerBodyId,
+            writerEpoch = snapshot.writer.writerEpochId,
             canonicalBirthRootHash = snapshot.lineage.birthRootEventHash,
             canonicalLastSequence = snapshot.lineage.lastSequence,
             canonicalLastEventHash = snapshot.lineage.lastEventHash,
-            canonicalRecordSetDigest =
-                CrossDatabaseOperationIdentity.digestCanonicalJson(recordSetJson),
-            canonicalPreSnapshotHash = snapshot.lineage.snapshotDigest,
-            sourceSetDigest = sourceSetDigest(identity.instanceId, sources),
+            canonicalRecordSetDigest = recordSetDigest,
+            canonicalPreSnapshotHash = preSnapshotHash,
+            sourceSetDigest = sourceSetDigest(snapshot.identity.instanceId, sources),
             sources = sources
         )
     }
@@ -109,33 +90,31 @@ internal class CanonicalCognitiveMigrationReadPort private constructor(
             )
         } catch (failure: CancellationException) {
             throw failure
-        } catch (_: Throwable) {
-            CanonicalCognitiveMigrationAudit(
-                verified = false,
-                snapshotDigest = null,
-                notes = listOf("canonical_chain_audit_failed")
+        } catch (failure: Throwable) {
+            throw CrossDatabaseProtocolErrors.retryable(
+                CrossDatabaseProtocolErrors.CANONICAL_READ_TEMPORARY_UNAVAILABLE,
+                failure
             )
         }
     }
 
-    private fun requireExactIdentity(
-        identity: GenesisUltraRuntimeIdentity,
-        snapshot: CanonicalConsumerSnapshot
-    ) {
-        if (snapshot.identity.instanceId != identity.instanceId) {
+    private fun requireSnapshotBindings(snapshot: CanonicalConsumerSnapshot) {
+        if (snapshot.lineage.instanceId != snapshot.identity.instanceId) {
             throw CrossDatabaseProtocolErrors.permanent(
                 CrossDatabaseProtocolErrors.WRONG_INSTANCE
             )
         }
-        if (snapshot.writer.writerBodyId != identity.activeBody.bodyId) {
+        if (snapshot.writer.writerBodyId == snapshot.identity.instanceId) {
             throw CrossDatabaseProtocolErrors.permanent(
                 CrossDatabaseProtocolErrors.UNAUTHORIZED_WRITER_BODY
             )
         }
-        if (snapshot.writer.writerEpochId != identity.activeBody.keyEpochId) {
-            throw CrossDatabaseProtocolErrors.permanent(
-                CrossDatabaseProtocolErrors.STALE_WRITER_EPOCH
-            )
+        snapshot.events.forEach { event ->
+            if (event.ref.instanceId != snapshot.identity.instanceId) {
+                throw CrossDatabaseProtocolErrors.permanent(
+                    CrossDatabaseProtocolErrors.WRONG_INSTANCE
+                )
+            }
         }
     }
 
@@ -156,7 +135,10 @@ internal class CanonicalCognitiveMigrationReadPort private constructor(
                 )
             CanonicalReadFailureCode.PAYLOAD_MISSING,
             CanonicalReadFailureCode.PAYLOAD_INTEGRITY_INVALID,
-            CanonicalReadFailureCode.PROVENANCE_UNVERIFIABLE ->
+            CanonicalReadFailureCode.PROVENANCE_UNVERIFIABLE,
+            CanonicalReadFailureCode.CHAIN_CORRUPT,
+            CanonicalReadFailureCode.SNAPSHOT_INCOMPLETE,
+            CanonicalReadFailureCode.IDENTITY_INCONSISTENT ->
                 CrossDatabaseProtocolErrors.permanent(
                     CrossDatabaseProtocolErrors.LEGACY_CANONICAL_INPUT_FORBIDDEN
                 )
@@ -186,9 +168,11 @@ internal class CanonicalCognitiveMigrationReadPort private constructor(
         private const val LIVING_MEMORY_NOTE_SCHEMA = "morimil.living_memory_write.v1"
         private const val LEGACY_MEMORY_NOTE_SCHEMA = "morimil.legacy_memory_import.v1"
         private const val SOURCE_SET_SCHEMA =
-            "morimil.cognitive_migration.source_set.v1"
+            "morimil.cognitive_migration.source_set.v2"
         private const val RECORD_SET_SCHEMA =
-            "morimil.cognitive_migration.canonical_record_set.v1"
+            "morimil.cognitive_migration.canonical_record_set.v2"
+        private const val PRE_SNAPSHOT_SCHEMA =
+            "morimil.cognitive_migration.pre_snapshot.v2"
         private val ALLOWED_PLANNING_NOTE_SCHEMAS = setOf(
             LIVING_MEMORY_NOTE_SCHEMA,
             LEGACY_MEMORY_NOTE_SCHEMA
@@ -221,6 +205,7 @@ internal class CanonicalCognitiveMigrationReadPort private constructor(
                         .thenByDescending { it.semantics?.importance ?: 0 }
                         .thenByDescending { it.semantics?.confidence ?: 0 }
                         .thenByDescending { it.ref.sequence }
+                        .thenBy { it.ref.eventHash }
                 )
                 .take(MAX_PLANNING_SOURCES)
                 .map { event ->
@@ -246,19 +231,94 @@ internal class CanonicalCognitiveMigrationReadPort private constructor(
                 mapOf(
                     "instance_id" to instanceId,
                     "schema" to SOURCE_SET_SCHEMA,
-                    "source_event_hashes_sorted" to
-                        sources.map { source -> source.eventHash }.sorted()
+                    "sources_sorted" to sources
+                        .sortedWith(compareBy({ it.eventHash }, { it.eventId }))
+                        .map { source ->
+                            mapOf(
+                                "actor" to source.actor,
+                                "event_hash" to source.eventHash,
+                                "event_id" to source.eventId,
+                                "event_type" to source.eventType,
+                                "observed_at" to source.observedAt,
+                                "provenance_digest" to source.provenanceDigest,
+                                "sequence" to source.sequence
+                            )
+                        }
                 )
             )
             return CrossDatabaseOperationIdentity.digestCanonicalJson(sourceSetJson)
         }
 
+        internal fun canonicalRecordSetDigest(
+            events: List<CanonicalConsumerEvent>
+        ): String {
+            val recordSetJson = CrossDatabaseOperationIdentity.canonicalJson(
+                mapOf(
+                    "events" to events.sortedBy { it.ref.sequence }.map { event ->
+                        mapOf(
+                            "actor" to event.ref.actor,
+                            "body_id" to event.ref.bodyId,
+                            "content_digest" to event.ref.contentDigest,
+                            "content_type" to event.ref.contentType,
+                            "event_hash" to event.ref.eventHash,
+                            "event_id" to event.ref.eventId,
+                            "event_type" to event.ref.eventType,
+                            "instance_id" to event.ref.instanceId,
+                            "observed_at" to event.ref.observedAt,
+                            "payload_state" to event.payloadState.name,
+                            "previous_event_hash" to event.ref.previousEventHash,
+                            "privacy" to event.ref.privacy,
+                            "provenance_digest" to event.ref.provenanceDigest,
+                            "sequence" to event.ref.sequence,
+                            "signer_epoch_id" to event.ref.signerEpochId,
+                            "signer_id" to event.ref.signerId,
+                            "signer_public_key_ref" to event.ref.signerPublicKeyRef
+                        )
+                    },
+                    "schema" to RECORD_SET_SCHEMA
+                )
+            )
+            return CrossDatabaseOperationIdentity.digestCanonicalJson(recordSetJson)
+        }
+
+        internal fun canonicalPreSnapshotHash(
+            snapshot: CanonicalConsumerSnapshot,
+            recordSetDigest: String = canonicalRecordSetDigest(snapshot.events)
+        ): String {
+            val preSnapshotJson = CrossDatabaseOperationIdentity.canonicalJson(
+                mapOf(
+                    "identity" to mapOf(
+                        "companion_name" to snapshot.identity.companionName,
+                        "identity_digest" to snapshot.identity.identityDigest,
+                        "instance_id" to snapshot.identity.instanceId
+                    ),
+                    "lineage" to mapOf(
+                        "birth_root_event_hash" to snapshot.lineage.birthRootEventHash,
+                        "birth_root_sequence" to snapshot.lineage.birthRootSequence,
+                        "last_event_hash" to snapshot.lineage.lastEventHash,
+                        "last_sequence" to snapshot.lineage.lastSequence,
+                        "post_birth_event_count" to snapshot.lineage.postBirthEventCount,
+                        "source_snapshot_digest" to snapshot.lineage.snapshotDigest
+                    ),
+                    "record_set_digest" to recordSetDigest,
+                    "schema" to PRE_SNAPSHOT_SCHEMA,
+                    "writer" to mapOf(
+                        "registry_digest" to snapshot.writer.registryDigest,
+                        "registry_epoch" to snapshot.writer.registryEpoch,
+                        "writer_body_id" to snapshot.writer.writerBodyId,
+                        "writer_epoch_digest" to snapshot.writer.writerEpochDigest,
+                        "writer_epoch_id" to snapshot.writer.writerEpochId,
+                        "writer_public_key_ref" to snapshot.writer.writerPublicKeyRef
+                    )
+                )
+            )
+            return CrossDatabaseOperationIdentity.digestCanonicalJson(preSnapshotJson)
+        }
+
         fun production(
-            identityRepository: GenesisUltraRuntimeIdentityRepository,
             consumerReadPort: CanonicalConsumerReadPort
         ): CanonicalCognitiveMigrationReadPort {
             return CanonicalCognitiveMigrationReadPort(
-                identityRepository = identityRepository,
                 consumerReadPort = consumerReadPort
             )
         }
