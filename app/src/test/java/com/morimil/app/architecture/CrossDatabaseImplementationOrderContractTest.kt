@@ -1,6 +1,7 @@
 package com.morimil.app.architecture
 
 import java.io.File
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -30,28 +31,26 @@ class CrossDatabaseImplementationOrderContractTest {
     }
 
     @Test
-    fun inventorySeparatesRuntimeAuditFromRepositoryReconciliation() {
+    fun inventorySeparatesHistoricalAuditProtectedMainAndDraftCandidate() {
         val inventory = repositoryFile(
             "docs/F3_CROSS_DATABASE_OPERATION_INVENTORY.md"
         ).readText()
 
         assertTrue(
             inventory.contains(
-                "Audited baseline: `main@612d91aef131f367140ffb87a60a19ef49adcbc8`"
+                "Historical audited baseline: `main@612d91aef131f367140ffb87a60a19ef49adcbc8`"
             )
         )
         assertTrue(
             inventory.contains(
-                "Baseline scope: production runtime and cross-database owner inventory."
+                "Current protected main: `main@7e98d3345d7cc3fbf1983babd35b61ff5c523208`"
             )
         )
-        assertTrue(
-            inventory.contains(
-                "Repository state reconciled: `main@29b24d4167bea613a01059da02aa8f9040d0ec2a`"
-            )
-        )
-        assertTrue(inventory.contains("STOP S5 remains open through #123 and #124"))
-        assertTrue(inventory.contains("This inventory does not authorize runtime changes."))
+        assertTrue(inventory.contains("draft PR `#149`"))
+        assertTrue(inventory.contains("`STOP_S5=CLOSED`"))
+        assertTrue(inventory.contains("`MERGE_AUTHORIZED=false`"))
+        assertTrue(inventory.contains("The candidate does not close #88"))
+        assertFalse(inventory.contains("STOP S5 remains open through #123 and #124"))
     }
 
     private fun repositoryFile(relativePath: String): File {
