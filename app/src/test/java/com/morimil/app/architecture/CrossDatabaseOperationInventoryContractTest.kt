@@ -92,7 +92,9 @@ class CrossDatabaseOperationInventoryContractTest {
                     (
                         MORIMIL_DATABASE_PATTERN.containsMatchIn(source) ||
                             MEMORY_REPOSITORY_PATTERN.containsMatchIn(source) ||
-                            PROJECT_VAULT_COMMIT_PORT_PATTERN.containsMatchIn(source)
+                            PROJECT_VAULT_COMMIT_PORT_PATTERN.containsMatchIn(source) ||
+                            CROSS_DATABASE_COORDINATOR_DEPENDENCY_PATTERN
+                                .containsMatchIn(source)
                         )
             }
             .map { file -> file.relativeTo(root).invariantSeparatorsPath }
@@ -124,6 +126,9 @@ class CrossDatabaseOperationInventoryContractTest {
         val MORIMIL_DATABASE_PATTERN = Regex("\\bMorimilDatabase\\b")
         val MEMORY_REPOSITORY_PATTERN = Regex("\\bMemoryRepository\\b")
         val PROJECT_VAULT_COMMIT_PORT_PATTERN = Regex("\\bProjectVaultCommitPort\\b")
+        val CROSS_DATABASE_COORDINATOR_DEPENDENCY_PATTERN = Regex(
+            "\\bprivate\\s+val\\s+protocol\\s*:\\s*CrossDatabaseOperationCoordinator\\b"
+        )
 
         val REQUIRED_CLASSIFICATIONS = setOf(
             "PROTECTED_REFERENCE",

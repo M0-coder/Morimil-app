@@ -29,7 +29,7 @@ Both production Room stores are opened through their encrypted production adapte
 | Store | Schema version | Current responsibility |
 | --- | ---: | --- |
 | `MorimilDatabase` | `15` | Genesis Ultra birth, canonical identity, canonical memory lineage, and the operational reasoning transcript; legacy identity and memory tables remain quarantined for convergence/removal. |
-| `MemoryOrganDatabase` | `8` | Derived memory organs, schedules, links, projects, agents, and the ProjectVault transactional outbox. |
+| `MemoryOrganDatabase` | `9` | Derived memory organs, schedules, links, projects, agents, the preserved ProjectVault transactional outbox, and the durable cognitive-migration operation journal. |
 
 Android backup is disabled. Production release signing fails closed when signing material
 is absent.

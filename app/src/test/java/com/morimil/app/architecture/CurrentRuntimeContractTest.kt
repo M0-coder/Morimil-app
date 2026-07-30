@@ -24,6 +24,14 @@ class CurrentRuntimeContractTest {
         assertFalse(contract.contains(retiredRuntimeBaseline))
 
         assertEquals(
+            15,
+            roomVersion(productionFile("com/morimil/app/data/local/MorimilDatabase.kt"))
+        )
+        assertEquals(
+            9,
+            roomVersion(productionFile("com/morimil/app/data/local/MemoryOrganDatabase.kt"))
+        )
+        assertEquals(
             roomVersion(productionFile("com/morimil/app/data/local/MorimilDatabase.kt")),
             tableVersion("MorimilDatabase")
         )
