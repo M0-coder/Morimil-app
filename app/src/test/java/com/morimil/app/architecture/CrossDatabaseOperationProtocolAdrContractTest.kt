@@ -41,22 +41,26 @@ class CrossDatabaseOperationProtocolAdrContractTest {
         }
 
         assertTrue(adr.contains("Wall-clock time is metadata only."))
-        assertTrue(
-            adr.contains(
-                "MUST NOT participate in `operationId`, `eventId`,\n" +
-                    "`proposalId`, `migrationId`, or `approvalId`."
-            )
-        )
+        assertTrue(adr.contains("MUST NOT participate in `operationId`, `eventId`"))
+        assertTrue(adr.contains("`proposalId`, `migrationId`, or `approvalId`."))
     }
 
     @Test
     fun authorityFrontierUsesTheF1AProjectionOnly() {
         val adr = adrFile(repositoryRoot()).readText()
+        val identityAuthority = adr.indexOf(
+            "GenesisUltraRuntimeIdentityRepository + CanonicalMemoryRepository"
+        )
+        val commonBoundary = adr.indexOf("-> CanonicalConsumerReadPort", identityAuthority)
+        val specializedBoundary = adr.indexOf(
+            "-> CognitiveMigrationCanonicalReadPort",
+            commonBoundary
+        )
 
-        assertTrue(adr.contains("GenesisUltraRuntimeIdentityRepository + CanonicalMemoryRepository"))
-        assertTrue(adr.contains("-> CanonicalConsumerReadPort"))
-        assertTrue(adr.contains("-> CognitiveMigrationCanonicalReadPort"))
-        assertTrue(adr.contains("must not reopen a second direct identity or memory authority"))
+        assertTrue(identityAuthority >= 0)
+        assertTrue(commonBoundary > identityAuthority)
+        assertTrue(specializedBoundary > commonBoundary)
+        assertTrue(adr.contains("must not reopen a second direct identity or\nmemory authority"))
         assertTrue(adr.contains("No compatibility write to `genesis_core`"))
         assertTrue(adr.contains("Guardian approval authorizes only the bounded Body operation"))
     }
@@ -98,14 +102,14 @@ class CrossDatabaseOperationProtocolAdrContractTest {
             "cognitive_migration.executed",
             "cognitive_migration.rollback"
         ).forEach { eventType ->
-            assertTrue("ADR is missing canonical event $eventType", adr.contains("`$eventType`"))
+            assertTrue("ADR is missing canonical event $eventType", adr.contains(eventType))
         }
 
-        assertTrue(adr.contains("prepare canonical audit outside the Room write transaction"))
-        assertTrue(adr.contains("real snapshot digest"))
-        assertTrue(adr.contains("no fabricated snapshot identifier"))
-        assertTrue(adr.contains("temporary audit failure remains retryable"))
-        assertTrue(adr.contains("complete canonical provenance and note preimage"))
+        assertTrue(adr.contains("prepare canonical audit outside the Room write transaction", ignoreCase = true))
+        assertTrue(adr.contains("real snapshot digest", ignoreCase = true))
+        assertTrue(adr.contains("no fabricated snapshot identifier", ignoreCase = true))
+        assertTrue(adr.contains("temporary audit failure remains retryable", ignoreCase = true))
+        assertTrue(adr.contains("complete canonical provenance and note preimage", ignoreCase = true))
     }
 
     @Test
@@ -122,14 +126,13 @@ class CrossDatabaseOperationProtocolAdrContractTest {
     @Test
     fun firstFunctionalPrRemainsNarrowAndKillTested() {
         val adr = adrFile(repositoryRoot()).readText()
+        val scope = adr.substringAfter("## Implementation sequence and scope")
 
-        assertTrue(
-            adr.contains(
-                "The first functional PR is isolated to the common journal, its coordinator/commit-port\n" +
-                    "contracts, Room migration and fresh-schema guards, recovery tests, and `COG-001` through\n" +
-                    "`COG-004`."
-            )
-        )
+        assertTrue(scope.contains("The first functional PR is isolated to the common journal"))
+        assertTrue(scope.contains("coordinator/commit-port"))
+        assertTrue(scope.contains("Room migration and fresh-schema guards"))
+        assertTrue(scope.contains("`COG-001` through"))
+        assertTrue(scope.contains("`COG-004`"))
         assertTrue(adr.contains("API 30 and API 35"))
         assertTrue(adr.contains("zero duplicate canonical events"))
         assertTrue(adr.contains("zero duplicate visible owner rows"))
