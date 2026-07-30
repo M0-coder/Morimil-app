@@ -7,23 +7,18 @@ import org.junit.Test
 
 class CognitiveMigrationImplementationBlueprintContractTest {
     @Test
-    fun blueprintIsCurrentTrackedAndStopGated() {
+    fun blueprintIsCurrentTrackedAndDraftMergeGated() {
         val blueprint = blueprintFile(repositoryRoot()).readText()
 
         assertTrue(blueprint.startsWith("# Document status: CURRENT"))
         assertTrue(blueprint.contains("ADR-0002"))
-        assertTrue(blueprint.contains("`#88`"))
-        assertTrue(blueprint.contains("STOP S5 remains open"))
-        assertTrue(blueprint.contains("This blueprint does not authorize runtime changes."))
-        assertTrue(
-            blueprint.contains(
-                "The `cross_database_operations` table and the common cognitive-migration " +
-                    "protocol do not exist in production at this baseline."
-            )
-        )
-        assertFalse(blueprint.contains("STOP S5 is closed"))
-        assertFalse(blueprint.contains("Status: implemented"))
-        assertFalse(blueprint.contains("protocol is active in production"))
+        assertTrue(blueprint.contains("`#88` — open"))
+        assertTrue(blueprint.contains("`STOP_S5=CLOSED`"))
+        assertTrue(blueprint.contains("draft PR `#149`"))
+        assertTrue(blueprint.contains("`MERGE_AUTHORIZED=false`"))
+        assertTrue(blueprint.contains("not production merely because its source exists"))
+        assertFalse(blueprint.contains("STOP S5 remains open"))
+        assertFalse(blueprint.contains("protocol is active in protected `main`"))
     }
 
     @Test
@@ -91,23 +86,42 @@ class CognitiveMigrationImplementationBlueprintContractTest {
     }
 
     @Test
-    fun cog001UsesACompleteVerifiedCanonicalPlanningContract() {
+    fun cog001UsesCompleteVerifiedCanonicalPlanningDescriptors() {
         val blueprint = blueprintFile(repositoryRoot()).readText()
 
         listOf(
             "CognitiveMigrationCanonicalReadPort",
             "VerifiedCognitiveMigrationPlanningInput",
-            "morimil.cognitive_migration.snapshot_descriptor.v1",
+            "morimil.cognitive_migration.canonical_record_set.v2",
+            "morimil.cognitive_migration.pre_snapshot.v2",
+            "morimil.cognitive_migration.source_set.v2",
             "canonicalRecordSetDigest",
             "canonicalPreSnapshotHash",
             "planCoreJson",
             "planCoreDigest",
-            "plan_core_digest"
+            "plannedRecordDigest"
         ).forEach { requirement ->
             assertTrue("Missing COG-001 planning requirement $requirement", blueprint.contains(requirement))
         }
-        assertTrue(blueprint.contains("The descriptor covers the complete verified snapshot"))
+        assertTrue(blueprint.contains("content digest and type"))
         assertTrue(blueprint.contains("fails closed before staging"))
+    }
+
+    @Test
+    fun f3ConsumesOnlyTheF1ACommonAuthority() {
+        val blueprint = blueprintFile(repositoryRoot()).readText()
+
+        assertTrue(
+            blueprint.contains(
+                "CanonicalConsumerReadPort\n    -> CognitiveMigrationCanonicalReadPort"
+            )
+        )
+        assertTrue(
+            blueprint.contains(
+                "The specialized F3 port consumes `CanonicalConsumerReadPort`"
+            )
+        )
+        assertTrue(blueprint.contains("must not open a second direct identity or memory authority"))
     }
 
     @Test
@@ -129,6 +143,20 @@ class CognitiveMigrationImplementationBlueprintContractTest {
         assertTrue(blueprint.contains("After append, before persisting receipt"))
         assertTrue(blueprint.contains("Repeated same user action"))
         assertTrue(blueprint.contains("stale writer epoch", ignoreCase = true))
+        assertTrue(blueprint.contains("fresh version-9 database"))
+    }
+
+    @Test
+    fun auditAndPredecessorSemanticsAreExplicit() {
+        val blueprint = blueprintFile(repositoryRoot()).readText()
+
+        assertTrue(blueprint.contains("canonical audit preparation runs outside"))
+        assertTrue(blueprint.contains("temporary identity, database or canonical-read failure remains retryable"))
+        assertTrue(blueprint.contains("postSnapshotId = real audited snapshot digest"))
+        assertTrue(blueprint.contains("postSnapshotId = null"))
+        assertTrue(blueprint.contains("ownerType = cognitive_migration"))
+        assertTrue(blueprint.contains("operationVersion = 1"))
+        assertTrue(blueprint.contains("complete canonical provenance and note preimage"))
     }
 
     @Test
@@ -164,6 +192,24 @@ class CognitiveMigrationImplementationBlueprintContractTest {
             )
         )
         assertTrue(blueprint.contains("instanceId != bodyId"))
+    }
+
+    @Test
+    fun cp5SchemasAndHistoricalVectorsRemainSeparated() {
+        val blueprint = blueprintFile(repositoryRoot()).readText()
+
+        listOf(
+            "plan_core.v4",
+            "plan_identity.v2",
+            "planned_record.v2",
+            "cog_001.payload.v2",
+            "cog_001.local_result.v2",
+            "cog_004.local_result.v2"
+        ).forEach { schema ->
+            assertTrue("Missing current schema $schema", blueprint.contains(schema))
+        }
+        assertTrue(blueprint.contains("historical v1 vectors remain immutable fixtures"))
+        assertTrue(blueprint.contains("pending payload-v1 proposal must not be silently finalized"))
     }
 
     private fun blueprintFile(root: File): File {
