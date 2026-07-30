@@ -94,11 +94,13 @@ class FullChainDatabaseMigrationTest {
     }
 
     @Test
-    fun memoryOrganCurrentSchemaTerminatesAtV9WithDurableJournal() {
+    fun memoryOrganCurrentSchemaTerminatesAtV9WithDurableGuardedJournal() {
         val database = Room.inMemoryDatabaseBuilder(
             context,
             MemoryOrganDatabase::class.java
-        ).build()
+        )
+            .addCallback(MemoryOrganDatabaseMigrationV9.CALLBACK)
+            .build()
 
         try {
             val current = database.openHelper.writableDatabase
@@ -108,9 +110,50 @@ class FullChainDatabaseMigrationTest {
                 0,
                 current.singleInt("SELECT COUNT(*) FROM cross_database_operations")
             )
+            assertTrue(
+                current.triggerNames().containsAll(
+                    setOf(
+                        "cross_database_operations_validate_insert",
+                        "cross_database_operations_validate_update"
+                    )
+                )
+            )
+            val rejected = runCatching {
+                current.execSQL(invalidJournalInsert())
+            }.isFailure
+            assertTrue("Fresh v9 store accepted a malformed journal row", rejected)
+            assertEquals(
+                0,
+                current.singleInt("SELECT COUNT(*) FROM cross_database_operations")
+            )
         } finally {
             database.close()
         }
+    }
+
+    private fun invalidJournalInsert(): String {
+        val operationId = "xop_" + "a".repeat(64)
+        val eventId = "xevt_" + "b".repeat(64)
+        val evidenceDigest = "sha256:" + "c".repeat(64)
+        return """
+            INSERT INTO cross_database_operations (
+                operationId, ownerType, operationType, operationVersion, instanceId,
+                writerBodyId, writerEpoch, subjectId, parentOperationId, childPhase,
+                payloadSchema, payloadJson, payloadDigest, eventId, eventType, eventBody,
+                evidenceSchema, evidenceJson, evidenceDigest, status, attemptCount,
+                lastErrorCode, canonicalEventHash, canonicalSequence,
+                canonicalProvenanceDigest, localResultSchema, localResultJson,
+                localResultDigest, occurredAtMillis, createdAtMillis, updatedAtMillis,
+                committedAtMillis
+            ) VALUES (
+                '$operationId', 'cognitive_migration', 'cognitive_migration.propose', 1,
+                'instance-test', 'body-test', 'epoch-test', 'migration-test', NULL, NULL,
+                'test.payload.v1', '{}', 'sha256:bad', '$eventId',
+                'cognitive_migration.proposed', 'body', 'test.evidence.v1', '{}',
+                '$evidenceDigest', 'STAGED', 0, NULL, NULL, NULL, NULL, NULL, NULL,
+                NULL, 1000, 1000, 1000, NULL
+            )
+        """.trimIndent()
     }
 
     private fun createVersion1Database() {
@@ -182,6 +225,14 @@ class FullChainDatabaseMigrationTest {
 
     private fun SupportSQLiteDatabase.tableNames(): Set<String> {
         return query("SELECT name FROM sqlite_master WHERE type = 'table'").use { cursor ->
+            buildSet {
+                while (cursor.moveToNext()) add(cursor.getString(0))
+            }
+        }
+    }
+
+    private fun SupportSQLiteDatabase.triggerNames(): Set<String> {
+        return query("SELECT name FROM sqlite_master WHERE type = 'trigger'").use { cursor ->
             buildSet {
                 while (cursor.moveToNext()) add(cursor.getString(0))
             }
