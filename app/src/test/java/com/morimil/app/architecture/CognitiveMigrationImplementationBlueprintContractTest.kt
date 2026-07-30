@@ -16,9 +16,14 @@ class CognitiveMigrationImplementationBlueprintContractTest {
         assertTrue(blueprint.contains("`STOP_S5=CLOSED`"))
         assertTrue(blueprint.contains("draft PR `#149`"))
         assertTrue(blueprint.contains("`MERGE_AUTHORIZED=false`"))
-        assertTrue(blueprint.contains("not production merely because its source exists"))
+        assertTrue(
+            blueprint.contains(
+                "It does not claim that the\n" +
+                    "protocol is active in protected `main`, deployed, released, or accepted for merge."
+            )
+        )
         assertFalse(blueprint.contains("STOP S5 remains open"))
-        assertFalse(blueprint.contains("protocol is active in protected `main`"))
+        assertFalse(blueprint.contains("MERGE_AUTHORIZED=true"))
     }
 
     @Test
@@ -110,18 +115,24 @@ class CognitiveMigrationImplementationBlueprintContractTest {
     @Test
     fun f3ConsumesOnlyTheF1ACommonAuthority() {
         val blueprint = blueprintFile(repositoryRoot()).readText()
-
-        assertTrue(
-            blueprint.contains(
-                "CanonicalConsumerReadPort\n    -> CognitiveMigrationCanonicalReadPort"
-            )
+        val identityAuthority = blueprint.indexOf(
+            "GenesisUltraRuntimeIdentityRepository + CanonicalMemoryRepository"
         )
+        val commonBoundary = blueprint.indexOf("-> CanonicalConsumerReadPort", identityAuthority)
+        val specializedBoundary = blueprint.indexOf(
+            "-> CognitiveMigrationCanonicalReadPort",
+            commonBoundary
+        )
+
+        assertTrue(identityAuthority >= 0)
+        assertTrue(commonBoundary > identityAuthority)
+        assertTrue(specializedBoundary > commonBoundary)
         assertTrue(
             blueprint.contains(
                 "The specialized F3 port consumes `CanonicalConsumerReadPort`"
             )
         )
-        assertTrue(blueprint.contains("must not open a second direct identity or memory authority"))
+        assertTrue(blueprint.contains("must not\nopen a second direct identity or memory authority"))
     }
 
     @Test
@@ -150,8 +161,13 @@ class CognitiveMigrationImplementationBlueprintContractTest {
     fun auditAndPredecessorSemanticsAreExplicit() {
         val blueprint = blueprintFile(repositoryRoot()).readText()
 
-        assertTrue(blueprint.contains("canonical audit preparation runs outside"))
-        assertTrue(blueprint.contains("temporary identity, database or canonical-read failure remains retryable"))
+        assertTrue(blueprint.contains("canonical audit preparation runs outside", ignoreCase = true))
+        assertTrue(
+            blueprint.contains(
+                "temporary identity, database or canonical-read failure remains retryable",
+                ignoreCase = true
+            )
+        )
         assertTrue(blueprint.contains("postSnapshotId = real audited snapshot digest"))
         assertTrue(blueprint.contains("postSnapshotId = null"))
         assertTrue(blueprint.contains("ownerType = cognitive_migration"))
