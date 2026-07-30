@@ -60,6 +60,25 @@ interface CrossDatabaseOperationDao {
 
     @Query(
         """
+        SELECT COUNT(*) FROM cross_database_operations
+        WHERE instanceId = :instanceId
+          AND status NOT IN ('COMMITTED', 'BLOCKED')
+        """
+    )
+    suspend fun countRecoverableForInstance(instanceId: String): Int
+
+    @Query(
+        """
+        SELECT COUNT(*) FROM cross_database_operations
+        WHERE instanceId = :instanceId
+          AND ownerType = :ownerType
+          AND status NOT IN ('COMMITTED', 'BLOCKED')
+        """
+    )
+    suspend fun countRecoverableForOwner(instanceId: String, ownerType: String): Int
+
+    @Query(
+        """
         SELECT * FROM cross_database_operations
         WHERE ownerType = :ownerType
           AND subjectId = :subjectId
