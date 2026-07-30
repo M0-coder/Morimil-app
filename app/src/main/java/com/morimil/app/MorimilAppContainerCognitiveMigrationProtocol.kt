@@ -34,4 +34,3 @@ internal val MorimilAppContainer.cognitiveMigrationProtocolCoordinator:
             )
         )
     }
-}
