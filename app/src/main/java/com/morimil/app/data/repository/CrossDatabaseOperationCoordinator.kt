@@ -53,7 +53,9 @@ internal class CrossDatabaseOperationCoordinator private constructor(
         return recover(
             identity = identity,
             operations = store.loadRecoverableForInstance(identity.instanceId, limit),
-            limit = limit
+            countRemaining = {
+                store.countRecoverableForInstance(identity.instanceId)
+            }
         )
     }
 
@@ -63,7 +65,7 @@ internal class CrossDatabaseOperationCoordinator private constructor(
         limit: Int
     ): CrossDatabaseRecoveryReport {
         require(limit in 1..MAX_RECOVERY_BATCH) { "xop_recovery_limit_invalid" }
-        require(ownerType in setOf(CognitiveMigrationProtocolTypes.OWNER_TYPE)) {
+        require(ownerType == CognitiveMigrationProtocolTypes.OWNER_TYPE) {
             "xop_recovery_owner_unsupported"
         }
         requireNoPendingCog001V1(identity.instanceId)
@@ -74,7 +76,9 @@ internal class CrossDatabaseOperationCoordinator private constructor(
                 ownerType = ownerType,
                 limit = limit
             ),
-            limit = limit
+            countRemaining = {
+                store.countRecoverableForOwner(identity.instanceId, ownerType)
+            }
         )
     }
 
@@ -95,7 +99,7 @@ internal class CrossDatabaseOperationCoordinator private constructor(
     private suspend fun recover(
         identity: GenesisUltraRuntimeIdentity,
         operations: List<CrossDatabaseOperationRecord>,
-        limit: Int
+        countRemaining: suspend () -> Int
     ): CrossDatabaseRecoveryReport {
         var recovered = 0
         var retryable = 0
@@ -114,10 +118,7 @@ internal class CrossDatabaseOperationCoordinator private constructor(
             }
         }
 
-        val moreRemain = operations.size == limit && operations.any {
-            it.status != CrossDatabaseOperationStatus.BLOCKED
-        }
-        if (moreRemain) retryable += 1
+        if (countRemaining() > 0) retryable += 1
 
         return CrossDatabaseRecoveryReport(
             stagedCount = originalCounts[CrossDatabaseOperationStatus.STAGED] ?: 0,
@@ -141,9 +142,10 @@ internal class CrossDatabaseOperationCoordinator private constructor(
     ): CrossDatabaseOperationRecord {
         var receiptObservedThisExecution: CrossDatabaseCanonicalReceipt? = null
         repeat(MAX_STATE_ADVANCES) {
-            val operation = requireNotNull(store.load(operationId)) {
-                "xop_operation_disappeared"
-            }
+            val operation = store.load(operationId)
+                ?: throw CrossDatabaseProtocolErrors.permanent(
+                    CrossDatabaseProtocolErrors.OWNER_STATE_CONFLICT
+                )
             try {
                 requireOperationWriter(operation, identity)
                 when (operation.status) {
@@ -170,11 +172,14 @@ internal class CrossDatabaseOperationCoordinator private constructor(
                             ?: throw CrossDatabaseProtocolErrors.permanent(
                                 CrossDatabaseProtocolErrors.UNSUPPORTED_OPERATION_VERSION
                             )
+                        val receipt = operation.resolveReceipt(receiptObservedThisExecution)
+                        val preparation = finalizer.prepareOutsideTransaction(operation, receipt)
                         return store.finalizeCommitted(
                             operationId = operationId,
                             identity = identity,
                             finalizer = finalizer,
-                            receiptObservedThisExecution = receiptObservedThisExecution,
+                            receipt = receipt,
+                            preparation = preparation,
                             clockMillis = clockMillis()
                         )
                     }
@@ -203,9 +208,13 @@ internal class CrossDatabaseOperationCoordinator private constructor(
         val exhausted = CrossDatabaseProtocolErrors.retryable(
             CrossDatabaseProtocolErrors.RECOVERY_BATCH_EXHAUSTED
         )
+        val current = store.load(operationId)
+            ?: throw CrossDatabaseProtocolErrors.permanent(
+                CrossDatabaseProtocolErrors.OWNER_STATE_CONFLICT
+            )
         store.recordRetryableFailure(
             operationId = operationId,
-            expectedStatus = requireNotNull(store.load(operationId)).status,
+            expectedStatus = current.status,
             errorCode = exhausted.stableCode,
             clockMillis = clockMillis()
         )
@@ -233,30 +242,17 @@ internal class CrossDatabaseOperationCoordinator private constructor(
         failure: Throwable
     ): CrossDatabaseProtocolFailure {
         CrossDatabaseProtocolErrors.rethrowCancellation(failure)
-        val diagnostic = failure.message.orEmpty()
-        val permanent = when {
-            diagnostic.contains("event_mismatch") ->
-                CrossDatabaseProtocolErrors.CANONICAL_EVENT_MISMATCH
-            diagnostic.contains("provenance_mismatch") ->
-                CrossDatabaseProtocolErrors.CANONICAL_PROVENANCE_MISMATCH
-            diagnostic.contains("event_id_duplicate") ->
-                CrossDatabaseProtocolErrors.EVENT_ID_CONFLICT
-            status == CrossDatabaseOperationStatus.PENDING_LOCAL_COMMIT &&
-                diagnostic.contains(
-                    Regex("mismatch|invalid|conflict|unsupported|subject")
-                ) ->
-                CrossDatabaseProtocolErrors.OWNER_STATE_CONFLICT
-            status == CrossDatabaseOperationStatus.PENDING_LOCAL_COMMIT ->
-                return CrossDatabaseProtocolErrors.retryable(
-                    CrossDatabaseProtocolErrors.LOCAL_FINALIZATION_INTERRUPTED,
-                    failure
-                )
-            else -> return CrossDatabaseProtocolErrors.retryable(
+        return if (status == CrossDatabaseOperationStatus.PENDING_LOCAL_COMMIT) {
+            CrossDatabaseProtocolErrors.retryable(
+                CrossDatabaseProtocolErrors.LOCAL_FINALIZATION_INTERRUPTED,
+                failure
+            )
+        } else {
+            CrossDatabaseProtocolErrors.retryable(
                 CrossDatabaseProtocolErrors.CANONICAL_APPEND_INTERRUPTED,
                 failure
             )
         }
-        return CrossDatabaseProtocolErrors.permanent(permanent, failure)
     }
 
     private fun validateClosedRegistry(command: CrossDatabaseStageCommand) {
@@ -278,8 +274,7 @@ internal class CrossDatabaseOperationCoordinator private constructor(
                 CrossDatabaseProtocolErrors.EVENT_ID_CONFLICT
             )
         }
-        val finalizer = finalizerByType[command.operationType]
-        if (finalizer == null) {
+        if (finalizerByType[command.operationType] == null) {
             throw CrossDatabaseProtocolErrors.permanent(
                 CrossDatabaseProtocolErrors.UNSUPPORTED_OPERATION_VERSION
             )
@@ -408,6 +403,10 @@ internal interface CrossDatabaseOperationStore {
         limit: Int
     ): List<CrossDatabaseOperationRecord>
 
+    suspend fun countRecoverableForInstance(instanceId: String): Int
+
+    suspend fun countRecoverableForOwner(instanceId: String, ownerType: String): Int
+
     suspend fun countNonTerminalByInstanceOwnerAndPayloadSchema(
         instanceId: String,
         ownerType: String,
@@ -437,7 +436,8 @@ internal interface CrossDatabaseOperationStore {
         operationId: String,
         identity: GenesisUltraRuntimeIdentity,
         finalizer: CrossDatabaseTypedFinalizer,
-        receiptObservedThisExecution: CrossDatabaseCanonicalReceipt?,
+        receipt: CrossDatabaseCanonicalReceipt,
+        preparation: CrossDatabaseFinalizationPreparation?,
         clockMillis: Long
     ): CrossDatabaseOperationRecord
 }
@@ -473,9 +473,10 @@ private class RoomCrossDatabaseOperationStore(
             }
             val inserted = command.toEntity(clockMillis)
             dao.insertOperationAbort(inserted)
-            requireNotNull(dao.loadOperation(inserted.operationId)) {
-                "xop_stage_insert_missing"
-            }
+            dao.loadOperation(inserted.operationId)
+                ?: throw CrossDatabaseProtocolErrors.permanent(
+                    CrossDatabaseProtocolErrors.OWNER_STATE_CONFLICT
+                )
         }
     }
 
@@ -498,6 +499,17 @@ private class RoomCrossDatabaseOperationStore(
         return dao.loadRecoverableForOwner(instanceId, ownerType, limit)
     }
 
+    override suspend fun countRecoverableForInstance(instanceId: String): Int {
+        return dao.countRecoverableForInstance(instanceId)
+    }
+
+    override suspend fun countRecoverableForOwner(
+        instanceId: String,
+        ownerType: String
+    ): Int {
+        return dao.countRecoverableForOwner(instanceId, ownerType)
+    }
+
     override suspend fun countNonTerminalByInstanceOwnerAndPayloadSchema(
         instanceId: String,
         ownerType: String,
@@ -511,8 +523,10 @@ private class RoomCrossDatabaseOperationStore(
     }
 
     override suspend fun transitionStaged(operationId: String, clockMillis: Long) {
-        require(dao.transitionStagedToPendingCanonical(operationId, clockMillis) == 1) {
-            "xop_stage_transition_conflict"
+        if (dao.transitionStagedToPendingCanonical(operationId, clockMillis) != 1) {
+            throw CrossDatabaseProtocolErrors.permanent(
+                CrossDatabaseProtocolErrors.OWNER_TRANSITION_CONFLICT
+            )
         }
     }
 
@@ -521,33 +535,44 @@ private class RoomCrossDatabaseOperationStore(
         receipt: CrossDatabaseCanonicalReceipt,
         clockMillis: Long
     ) {
-        val current = requireNotNull(dao.loadOperation(operationId))
+        val current = dao.loadOperation(operationId)
+            ?: throw CrossDatabaseProtocolErrors.permanent(
+                CrossDatabaseProtocolErrors.OWNER_STATE_CONFLICT
+            )
         if (current.eventId != receipt.eventId) {
             throw CrossDatabaseProtocolErrors.permanent(
                 CrossDatabaseProtocolErrors.CANONICAL_RECEIPT_CONFLICT
             )
         }
-        require(
+        if (
             dao.persistCanonicalReceipt(
                 operationId = operationId,
                 canonicalEventHash = receipt.eventHash,
                 canonicalSequence = receipt.sequence,
                 canonicalProvenanceDigest = receipt.provenanceDigest,
                 updatedAtMillis = clockMillis
-            ) == 1
-        ) { "xop_receipt_transition_conflict" }
+            ) != 1
+        ) {
+            throw CrossDatabaseProtocolErrors.permanent(
+                CrossDatabaseProtocolErrors.CANONICAL_RECEIPT_CONFLICT
+            )
+        }
     }
 
     override suspend fun transitionCanonicalCommitted(
         operationId: String,
         clockMillis: Long
     ) {
-        require(
+        if (
             dao.transitionCanonicalCommittedToPendingLocalCommit(
                 operationId,
                 clockMillis
-            ) == 1
-        ) { "xop_local_transition_conflict" }
+            ) != 1
+        ) {
+            throw CrossDatabaseProtocolErrors.permanent(
+                CrossDatabaseProtocolErrors.OWNER_TRANSITION_CONFLICT
+            )
+        }
     }
 
     override suspend fun recordRetryableFailure(
@@ -571,41 +596,50 @@ private class RoomCrossDatabaseOperationStore(
         operationId: String,
         identity: GenesisUltraRuntimeIdentity,
         finalizer: CrossDatabaseTypedFinalizer,
-        receiptObservedThisExecution: CrossDatabaseCanonicalReceipt?,
+        receipt: CrossDatabaseCanonicalReceipt,
+        preparation: CrossDatabaseFinalizationPreparation?,
         clockMillis: Long
     ): CrossDatabaseOperationRecord {
         return database.withTransaction {
-            val operation = requireNotNull(dao.loadOperation(operationId)) {
-                "xop_finalization_operation_missing"
-            }
+            val operation = dao.loadOperation(operationId)
+                ?: throw CrossDatabaseProtocolErrors.permanent(
+                    CrossDatabaseProtocolErrors.OWNER_STATE_CONFLICT
+                )
             if (operation.status == CrossDatabaseOperationStatus.COMMITTED) {
                 return@withTransaction operation
             }
-            require(operation.status == CrossDatabaseOperationStatus.PENDING_LOCAL_COMMIT) {
-                "xop_finalization_status_conflict"
+            if (operation.status != CrossDatabaseOperationStatus.PENDING_LOCAL_COMMIT) {
+                throw CrossDatabaseProtocolErrors.permanent(
+                    CrossDatabaseProtocolErrors.OWNER_TRANSITION_CONFLICT
+                )
             }
-            require(
-                operation.instanceId == identity.instanceId &&
-                    operation.writerBodyId == identity.activeBody.bodyId &&
-                    operation.writerEpoch == identity.activeBody.keyEpochId
-            ) { "xop_finalization_writer_conflict" }
-            val persistedReceipt = operation.toReceipt()
-            val receipt = receiptObservedThisExecution?.also { observed ->
-                require(observed.eventId == persistedReceipt.eventId) {
-                    "xop_finalization_receipt_event_conflict"
+            if (
+                operation.instanceId != identity.instanceId ||
+                operation.writerBodyId != identity.activeBody.bodyId ||
+                operation.writerEpoch != identity.activeBody.keyEpochId
+            ) {
+                throw CrossDatabaseProtocolErrors.permanent(
+                    CrossDatabaseProtocolErrors.STALE_WRITER_EPOCH
+                )
+            }
+            val persistedReceipt = operation.resolveReceipt(receipt)
+            preparation?.let { prepared ->
+                if (
+                    prepared.operationId != operation.operationId ||
+                    prepared.receiptEventHash != persistedReceipt.eventHash ||
+                    prepared.payloadDigest != operation.payloadDigest
+                ) {
+                    throw CrossDatabaseProtocolErrors.permanent(
+                        CrossDatabaseProtocolErrors.FINALIZATION_PREPARATION_CONFLICT
+                    )
                 }
-                require(observed.eventHash == persistedReceipt.eventHash) {
-                    "xop_finalization_receipt_hash_conflict"
-                }
-                require(observed.sequence == persistedReceipt.sequence) {
-                    "xop_finalization_receipt_sequence_conflict"
-                }
-                require(observed.provenanceDigest == persistedReceipt.provenanceDigest) {
-                    "xop_finalization_receipt_provenance_conflict"
-                }
-            } ?: persistedReceipt
-            val result = finalizer.finalizeInsideTransaction(operation, receipt)
-            require(
+            }
+            val result = finalizer.finalizePreparedInsideTransaction(
+                operation = operation,
+                receipt = persistedReceipt,
+                preparation = preparation
+            )
+            if (
                 dao.markCommittedWithLocalResult(
                     operationId = operation.operationId,
                     localResultSchema = result.schema,
@@ -613,11 +647,16 @@ private class RoomCrossDatabaseOperationStore(
                     localResultDigest = result.digest,
                     updatedAtMillis = clockMillis,
                     committedAtMillis = clockMillis
-                ) == 1
-            ) { "xop_finalization_commit_conflict" }
-            requireNotNull(dao.loadOperation(operationId)) {
-                "xop_finalization_commit_missing"
+                ) != 1
+            ) {
+                throw CrossDatabaseProtocolErrors.permanent(
+                    CrossDatabaseProtocolErrors.OWNER_TRANSITION_CONFLICT
+                )
             }
+            dao.loadOperation(operationId)
+                ?: throw CrossDatabaseProtocolErrors.permanent(
+                    CrossDatabaseProtocolErrors.OWNER_STATE_CONFLICT
+                )
         }
     }
 
@@ -625,7 +664,8 @@ private class RoomCrossDatabaseOperationStore(
         existing: CrossDatabaseOperationRecord,
         command: CrossDatabaseStageCommand
     ) {
-        if (existing.payloadDigest != command.payloadDigest ||
+        if (
+            existing.payloadDigest != command.payloadDigest ||
             existing.payloadJson != command.payloadJson ||
             existing.payloadSchema != command.payloadSchema
         ) {
@@ -633,7 +673,8 @@ private class RoomCrossDatabaseOperationStore(
                 CrossDatabaseProtocolErrors.OPERATION_ID_PAYLOAD_CONFLICT
             )
         }
-        if (existing.evidenceDigest != command.evidenceDigest ||
+        if (
+            existing.evidenceDigest != command.evidenceDigest ||
             existing.evidenceJson != command.evidenceJson ||
             existing.evidenceSchema != command.evidenceSchema
         ) {
@@ -698,22 +739,37 @@ private class RoomCrossDatabaseOperationStore(
             committedAtMillis = null
         )
     }
+}
 
-    private fun CrossDatabaseOperationRecord.toReceipt(): CrossDatabaseCanonicalReceipt {
-        return CrossDatabaseCanonicalReceipt(
-            eventId = eventId,
-            eventHash = requireNotNull(canonicalEventHash) {
-                "xop_finalization_receipt_hash_missing"
-            },
-            sequence = requireNotNull(canonicalSequence) {
-                "xop_finalization_receipt_sequence_missing"
-            },
-            provenanceDigest = requireNotNull(canonicalProvenanceDigest) {
-                "xop_finalization_receipt_provenance_missing"
-            },
-            // A resumed finalization is reusing a receipt already durable in the journal.
-            // The immediate append path supplies its observed receipt as an override.
-            reusedExistingEvent = true
+private fun CrossDatabaseOperationRecord.resolveReceipt(
+    observed: CrossDatabaseCanonicalReceipt?
+): CrossDatabaseCanonicalReceipt {
+    val persisted = CrossDatabaseCanonicalReceipt(
+        eventId = eventId,
+        eventHash = canonicalEventHash
+            ?: throw CrossDatabaseProtocolErrors.permanent(
+                CrossDatabaseProtocolErrors.CANONICAL_RECEIPT_CONFLICT
+            ),
+        sequence = canonicalSequence
+            ?: throw CrossDatabaseProtocolErrors.permanent(
+                CrossDatabaseProtocolErrors.CANONICAL_RECEIPT_CONFLICT
+            ),
+        provenanceDigest = canonicalProvenanceDigest
+            ?: throw CrossDatabaseProtocolErrors.permanent(
+                CrossDatabaseProtocolErrors.CANONICAL_RECEIPT_CONFLICT
+            ),
+        reusedExistingEvent = true
+    )
+    if (observed == null) return persisted
+    if (
+        observed.eventId != persisted.eventId ||
+        observed.eventHash != persisted.eventHash ||
+        observed.sequence != persisted.sequence ||
+        observed.provenanceDigest != persisted.provenanceDigest
+    ) {
+        throw CrossDatabaseProtocolErrors.permanent(
+            CrossDatabaseProtocolErrors.CANONICAL_RECEIPT_CONFLICT
         )
     }
+    return observed
 }
