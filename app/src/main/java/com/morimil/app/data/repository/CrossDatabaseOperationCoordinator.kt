@@ -118,7 +118,7 @@ internal class CrossDatabaseOperationCoordinator private constructor(
             }
         }
 
-        if (countRemaining() > 0) retryable += 1
+        if (countRemaining() > retryable) retryable += 1
 
         return CrossDatabaseRecoveryReport(
             stagedCount = originalCounts[CrossDatabaseOperationStatus.STAGED] ?: 0,
