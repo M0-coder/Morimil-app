@@ -93,6 +93,26 @@ class FullChainDatabaseMigrationTest {
         }
     }
 
+    @Test
+    fun memoryOrganCurrentSchemaTerminatesAtV9WithDurableJournal() {
+        val database = Room.inMemoryDatabaseBuilder(
+            context,
+            MemoryOrganDatabase::class.java
+        ).build()
+
+        try {
+            val current = database.openHelper.writableDatabase
+            assertEquals(9, current.userVersion())
+            assertTrue(current.tableNames().contains("cross_database_operations"))
+            assertEquals(
+                0,
+                current.singleInt("SELECT COUNT(*) FROM cross_database_operations")
+            )
+        } finally {
+            database.close()
+        }
+    }
+
     private fun createVersion1Database() {
         context.deleteDatabase(TEST_DATABASE)
         val file = context.getDatabasePath(TEST_DATABASE)

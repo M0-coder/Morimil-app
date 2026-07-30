@@ -63,7 +63,8 @@ internal object MemoryOrganDatabaseEncryption {
                 MemoryOrganDatabase.MIGRATION_4_5,
                 MemoryOrganDatabase.MIGRATION_5_6,
                 MemoryOrganDatabase.MIGRATION_6_7,
-                MemoryOrganDatabaseMigrationV8.MIGRATION_7_8
+                MemoryOrganDatabaseMigrationV8.MIGRATION_7_8,
+                MemoryOrganDatabaseMigrationV9.MIGRATION_8_9
             )
             .build()
     }

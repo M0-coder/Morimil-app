@@ -2,8 +2,25 @@ package com.morimil.app.core.memory
 
 import com.morimil.app.data.local.MemoryEventEntity
 import com.morimil.app.data.local.MigrationRecordEntity
+import com.morimil.app.core.identity.StableIdDigest
+import com.morimil.app.data.genesis.ultra.VerifiedCognitiveMigrationPlanningInput
+import com.morimil.app.data.repository.CrossDatabaseOperationIdentity
 import org.json.JSONArray
 import kotlin.math.roundToInt
+
+internal data class VerifiedCognitiveMigrationPlan(
+    val proposalId: String,
+    val migrationId: String,
+    val planCoreJson: String,
+    val planCoreDigest: String,
+    val plannedRecordJson: String,
+    val plannedRecordDigest: String,
+    val affectedArtifacts: List<String>,
+    val steps: List<String>,
+    val expectedEffect: String,
+    val riskLevel: String,
+    val rollbackStrategy: String
+)
 
 data class CognitiveMigrationPlan(
     val schema: String,
@@ -18,6 +35,148 @@ data class CognitiveMigrationPlan(
 
 object CognitiveMigrationPlanner {
     const val PLAN_SCHEMA = "morimil.cognitive_migration_plan.v2"
+    const val VERIFIED_PLAN_SCHEMA = "morimil.cognitive_migration.plan_core.v3"
+    const val PLANNED_RECORD_SCHEMA =
+        "morimil.cognitive_migration.planned_record.v1"
+    const val MIGRATION_TYPE = "cognitive.memory_refinement"
+    const val FROM_VERSION = "canonical_memory_current"
+    const val TO_VERSION = "canonical_memory_refined_v3"
+
+    internal fun buildVerifiedPlan(
+        input: VerifiedCognitiveMigrationPlanningInput
+    ): VerifiedCognitiveMigrationPlan {
+        require(input.sources.map { source -> source.eventHash }.distinct().size == input.sources.size) {
+            "cognitive_migration_duplicate_source_hash"
+        }
+        require(input.canonicalLastSequence >= 1L) {
+            "cognitive_migration_last_sequence_invalid"
+        }
+        val orderedSources = input.sources.sortedBy { source -> source.eventHash }
+        val affectedArtifacts = orderedSources.map { source ->
+            "canonical_event:${source.eventHash}"
+        }
+        val steps = listOf(
+            "verify_canonical_source_set",
+            "derive_refinement_candidates",
+            "append_execution_event_without_rewriting_memory",
+            "audit_full_verified_canonical_chain",
+            "preserve_original_events",
+            "rollback_by_append_only_compensation"
+        )
+        val riskLevel = if (
+            orderedSources.any { source ->
+                source.eventType.contains("identity") ||
+                    source.eventType.contains("correction")
+            }
+        ) {
+            "medium"
+        } else {
+            "low"
+        }
+        val expectedEffect = buildString {
+            appendLine("COGNITIVE_MIGRATION_CANONICAL_PLAN_V3")
+            appendLine("schema=$VERIFIED_PLAN_SCHEMA")
+            appendLine("source_count=${orderedSources.size}")
+            appendLine("source_set_digest=${input.sourceSetDigest}")
+            appendLine("canonical_pre_snapshot_hash=${input.canonicalPreSnapshotHash}")
+            appendLine("policy=append_only_original_memory_unchanged")
+        }.trim()
+        val rollbackStrategy = buildString {
+            appendLine("COGNITIVE_MIGRATION_ROLLBACK_V3")
+            appendLine("compensation_mode=append_only")
+            appendLine("canonical_pre_snapshot_hash=${input.canonicalPreSnapshotHash}")
+            append("original_events_deleted=false")
+        }
+        val planCoreJson = CrossDatabaseOperationIdentity.canonicalJson(
+            mapOf(
+                "affected_artifacts" to affectedArtifacts,
+                "canonical_last_event_hash" to input.canonicalLastEventHash,
+                "canonical_last_sequence" to input.canonicalLastSequence,
+                "expected_effect" to expectedEffect,
+                "risk_level" to riskLevel,
+                "rollback_strategy" to rollbackStrategy,
+                "schema" to VERIFIED_PLAN_SCHEMA,
+                "source_summaries" to orderedSources.map { source ->
+                    mapOf(
+                        "actor" to source.actor,
+                        "content" to source.content.take(MAX_SOURCE_CONTENT_CHARS),
+                        "event_hash" to source.eventHash,
+                        "event_id" to source.eventId,
+                        "event_type" to source.eventType,
+                        "observed_at" to source.observedAt,
+                        "provenance_digest" to source.provenanceDigest,
+                        "sequence" to source.sequence
+                    )
+                },
+                "steps" to steps
+            )
+        )
+        val planCoreDigest =
+            CrossDatabaseOperationIdentity.digestCanonicalJson(planCoreJson)
+        val planIdentityJson = CrossDatabaseOperationIdentity.canonicalJson(
+            mapOf(
+                "canonical_pre_snapshot_hash" to input.canonicalPreSnapshotHash,
+                "plan_core_digest" to planCoreDigest,
+                "schema" to "morimil.cognitive_migration.plan_identity.v1",
+                "source_event_hashes" to orderedSources.map { source -> source.eventHash },
+                "source_set_digest" to input.sourceSetDigest
+            )
+        )
+        val planIntentDigest =
+            CrossDatabaseOperationIdentity.digestCanonicalJson(planIdentityJson)
+        val proposalId = "cog_proposal_" + StableIdDigest.shortSha256Hex(
+            namespace = "morimil.cognitive_migration.proposal_id.v1",
+            parts = listOf(input.instanceId, planIntentDigest),
+            hexLength = 64
+        )
+        val migrationId = "cog_migration_" + StableIdDigest.shortSha256Hex(
+            namespace = "morimil.cognitive_migration.migration_id.v1",
+            parts = listOf(input.instanceId, proposalId, MIGRATION_TYPE),
+            hexLength = 64
+        )
+        val plannedRecordJson = CrossDatabaseOperationIdentity.canonicalJson(
+            mapOf(
+                "affected_artifacts" to affectedArtifacts,
+                "approval_id" to null,
+                "approval_required" to true,
+                "approved_by_user" to false,
+                "backup_required" to true,
+                "chain_verified" to true,
+                "created_by" to "cognitive_migration_protocol",
+                "errors" to emptyList<String>(),
+                "expected_effect" to expectedEffect,
+                "from_version" to FROM_VERSION,
+                "genesis_core_hash" to input.canonicalBirthRootHash,
+                "instance_id" to input.instanceId,
+                "migration_id" to migrationId,
+                "migration_type" to MIGRATION_TYPE,
+                "post_snapshot_id" to null,
+                "pre_snapshot_id" to input.canonicalPreSnapshotHash,
+                "proposal_id" to proposalId,
+                "risk_level" to riskLevel,
+                "rollback_available" to true,
+                "rollback_strategy" to rollbackStrategy,
+                "schema" to PLANNED_RECORD_SCHEMA,
+                "status" to "planned",
+                "steps" to steps,
+                "to_version" to TO_VERSION
+            )
+        )
+        return VerifiedCognitiveMigrationPlan(
+            proposalId = proposalId,
+            migrationId = migrationId,
+            planCoreJson = planCoreJson,
+            planCoreDigest = planCoreDigest,
+            plannedRecordJson = plannedRecordJson,
+            plannedRecordDigest =
+                CrossDatabaseOperationIdentity.digestCanonicalJson(plannedRecordJson),
+            affectedArtifacts = affectedArtifacts,
+            steps = steps,
+            expectedEffect = expectedEffect,
+            riskLevel = riskLevel,
+            rollbackStrategy = rollbackStrategy
+        )
+    }
 
     fun buildPlan(
         events: List<MemoryEventEntity>,
@@ -261,4 +420,6 @@ object CognitiveMigrationPlanner {
         val strength: Double,
         val reason: String
     )
+
+    private const val MAX_SOURCE_CONTENT_CHARS = 1200
 }
