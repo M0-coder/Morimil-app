@@ -115,9 +115,9 @@ class CognitiveMigrationRepositoryTest {
             CP5_VECTOR_COG_002 to
                 "451697eef8fcb2205b674f604bad2b4fe49f5a7c7a8d0e2edfa91eddab628d4c",
             CP5_VECTOR_COG_003_COMPLETED to
-                "56eeb1b956d4bd0cbc2713da3746f8baf4a9cc831435edcae179cffdf65d5af8",
+                "143866e15982b60eb35e961740a198265d55808e8d29be570c4151b41948c9e5",
             CP5_VECTOR_COG_003_FAILED to
-                "cde1f0d9dbcdd91cae35089cb613c630126d04c035750406bce7ec5e4e40c9c1",
+                "e2392e67cebad3edb036ffb417450eaf17edeaec218e6b2167408fb880f044cc",
             CP5_VECTOR_COG_004 to
                 "0906c50e78fab193abcf0f4f18a26de0d5ed31dcb1fe0abce2ca01be9c2231bb"
         )
@@ -130,6 +130,12 @@ class CognitiveMigrationRepositoryTest {
                 CrossDatabaseOperationIdentity.digestCanonicalJson(json)
             )
         }
+        assertTrue(CP5_VECTOR_COG_003_FAILED.contains("\"post_snapshot_id\":null"))
+        assertFalse(
+            CP5_VECTOR_COG_003_COMPLETED.contains(
+                "\"post_snapshot_id\":\"sha256:8333333333333333333333333333333333333333333333333333333333333333\""
+            )
+        )
     }
 
     private fun verifiedInput(): VerifiedCognitiveMigrationPlanningInput {
@@ -164,11 +170,12 @@ class CognitiveMigrationRepositoryTest {
         const val CP5_VECTOR_COG_002 =
             """{"approval_id":"xop_fd5bf2a290896d2dab465d28b1497e9e56b1056c5abc499de0a2dd67ca6bba37","canonical_event_hash":"evsha256:8222222222222222222222222222222222222222222222222222222222222222","canonical_event_id":"xevt_58b11ddec834e0134f06ba3a51cc999de47c724e78ee093e4fbf924f9e84babf","canonical_provenance_digest":"sha256:8322222222222222222222222222222222222222222222222222222222222222","canonical_sequence":102,"migration_id":"cog_migration_07529f57cb85d4a36a7b57a7e8d383a5d997c798fec097e55a2c98d36643857a","owner_status":"approved","planned_record_digest":"sha256:a0c73a3fd3020e5ad4eacdcf054e04faa113669df03fce087cd74e95e6bdecd1","record_updated":true,"schema":"morimil.cognitive_migration.cog_002.local_result.v2"}"""
         const val CP5_VECTOR_COG_003_COMPLETED =
-            """{"audit_chain_verified":true,"audit_notes":["canonical_chain_verified","append_only_refinement_committed"],"canonical_event_hash":"evsha256:8333333333333333333333333333333333333333333333333333333333333333","canonical_event_id":"xevt_5e5895a52af4313f50522313756daf03152ca2baa737309f3738975dbae0819f","canonical_provenance_digest":"sha256:8433333333333333333333333333333333333333333333333333333333333333","canonical_sequence":103,"migration_id":"cog_migration_07529f57cb85d4a36a7b57a7e8d383a5d997c798fec097e55a2c98d36643857a","migration_outcome":"completed","owner_status":"completed","planned_record_digest":"sha256:a0c73a3fd3020e5ad4eacdcf054e04faa113669df03fce087cd74e95e6bdecd1","post_snapshot_id":"sha256:8333333333333333333333333333333333333333333333333333333333333333","record_updated":true,"schema":"morimil.cognitive_migration.cog_003.local_result.v2"}"""
+            """{"audit_chain_verified":true,"audit_notes":["canonical_chain_verified","append_only_refinement_committed"],"canonical_event_hash":"evsha256:8333333333333333333333333333333333333333333333333333333333333333","canonical_event_id":"xevt_5e5895a52af4313f50522313756daf03152ca2baa737309f3738975dbae0819f","canonical_provenance_digest":"sha256:8433333333333333333333333333333333333333333333333333333333333333","canonical_sequence":103,"migration_id":"cog_migration_07529f57cb85d4a36a7b57a7e8d383a5d997c798fec097e55a2c98d36643857a","migration_outcome":"completed","owner_status":"completed","planned_record_digest":"sha256:a0c73a3fd3020e5ad4eacdcf054e04faa113669df03fce087cd74e95e6bdecd1","post_snapshot_id":"sha256:8533333333333333333333333333333333333333333333333333333333333333","record_updated":true,"schema":"morimil.cognitive_migration.cog_003.local_result.v2"}"""
         const val CP5_VECTOR_COG_003_FAILED =
-            """{"audit_chain_verified":false,"audit_notes":["canonical_chain_audit_failed"],"canonical_event_hash":"evsha256:8333333333333333333333333333333333333333333333333333333333333333","canonical_event_id":"xevt_5e5895a52af4313f50522313756daf03152ca2baa737309f3738975dbae0819f","canonical_provenance_digest":"sha256:8433333333333333333333333333333333333333333333333333333333333333","canonical_sequence":103,"migration_id":"cog_migration_07529f57cb85d4a36a7b57a7e8d383a5d997c798fec097e55a2c98d36643857a","migration_outcome":"failed","owner_status":"failed","planned_record_digest":"sha256:a0c73a3fd3020e5ad4eacdcf054e04faa113669df03fce087cd74e95e6bdecd1","post_snapshot_id":"sha256:8333333333333333333333333333333333333333333333333333333333333333","record_updated":true,"schema":"morimil.cognitive_migration.cog_003.local_result.v2"}"""
+            """{"audit_chain_verified":false,"audit_notes":["canonical_chain_audit_failed"],"canonical_event_hash":"evsha256:8333333333333333333333333333333333333333333333333333333333333333","canonical_event_id":"xevt_5e5895a52af4313f50522313756daf03152ca2baa737309f3738975dbae0819f","canonical_provenance_digest":"sha256:8433333333333333333333333333333333333333333333333333333333333333","canonical_sequence":103,"migration_id":"cog_migration_07529f57cb85d4a36a7b57a7e8d383a5d997c798fec097e55a2c98d36643857a","migration_outcome":"failed","owner_status":"failed","planned_record_digest":"sha256:a0c73a3fd3020e5ad4eacdcf054e04faa113669df03fce087cd74e95e6bdecd1","post_snapshot_id":null,"record_updated":true,"schema":"morimil.cognitive_migration.cog_003.local_result.v2"}"""
         const val CP5_VECTOR_COG_004 =
             """{"canonical_event_hash":"evsha256:8444444444444444444444444444444444444444444444444444444444444444","canonical_event_id":"xevt_40a4edfe50e4b99045bd3c063045fdcc5a4412438898fca1522fadffe6963b03","canonical_provenance_digest":"sha256:8544444444444444444444444444444444444444444444444444444444444444","canonical_sequence":104,"migration_id":"cog_migration_07529f57cb85d4a36a7b57a7e8d383a5d997c798fec097e55a2c98d36643857a","notes":["rollback_requested_by_user","append_only_compensation"],"owner_status":"rolled_back","planned_record_digest":"sha256:a0c73a3fd3020e5ad4eacdcf054e04faa113669df03fce087cd74e95e6bdecd1","predecessor_operation_id":"xop_504c4b50dffe5dee2af508dcf101877d377c766bef4f7e2336870548f9ee2069","record_updated":true,"rollback_operation_id":"xop_66c3ec395e9b96cf90830d3a8378225f78efe8059591473ef4b1a20aecb95bad","rollback_strategy_digest":"sha256:d5bab39c214551e3c28a380c4fa3a9bac9aa00fa4af069760a19252391ba46f7","schema":"morimil.cognitive_migration.cog_004.local_result.v2"}"""
+
         const val VECTOR_COG_001 =
             """{"canonical_event_hash":"evsha256:8111111111111111111111111111111111111111111111111111111111111111","canonical_event_id":"xevt_03ade88b6059215e97f192f91bcdb8f665b4805041e85c99fe4a6e487f048004","canonical_provenance_digest":"sha256:8211111111111111111111111111111111111111111111111111111111111111","canonical_sequence":101,"migration_id":"cog_migration_07529f57cb85d4a36a7b57a7e8d383a5d997c798fec097e55a2c98d36643857a","owner_status":"planned","planned_record_digest":"sha256:a0c73a3fd3020e5ad4eacdcf054e04faa113669df03fce087cd74e95e6bdecd1","proposal_id":"cog_proposal_d9a9da5c4c6dd042c4a6a1ae8ad0e64fde1f988f0574b4cce01a89a248afbf90","record_inserted":true,"reused_existing_event":false,"schema":"morimil.cognitive_migration.cog_001.local_result.v1"}"""
         const val VECTOR_COG_002 =
