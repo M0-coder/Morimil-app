@@ -41,18 +41,7 @@ class CrossDatabaseOperationCoordinatorTest {
             assertEquals(operation.canonicalEventHash, operationReceipt.eventHash)
             assertNotNull(operation.canonicalProvenanceDigest)
             assertFalse(operationReceipt.reusedExistingEvent)
-            val json = CrossDatabaseOperationIdentity.canonicalJson(
-                mapOf(
-                    "owner_status" to "planned",
-                    "schema" to "test.local_result.v1"
-                )
-            )
-            CrossDatabaseLocalResult(
-                schema = "test.local_result.v1",
-                json = json,
-                digest = CrossDatabaseOperationIdentity.digestCanonicalJson(json),
-                ownerStatus = "planned"
-            )
+            localResult()
         }
         val coordinator = CrossDatabaseOperationCoordinator.forTest(
             store = store,
@@ -159,6 +148,30 @@ class CrossDatabaseOperationCoordinatorTest {
         )
     }
 
+    @Test
+    fun exactlyFullRecoveryBatchDoesNotReportFalseRetryableRemainder() = runBlocking {
+        val identity = identity()
+        val command = command(identity)
+        val store = FakeStore()
+        val coordinator = CrossDatabaseOperationCoordinator.forTest(
+            store = store,
+            canonicalEnsurePort = object : CrossDatabaseCanonicalEnsurePort {
+                override suspend fun ensureCommitted(
+                    command: CrossDatabaseCanonicalCommand
+                ): CrossDatabaseCanonicalReceipt = receipt(command.eventId)
+            },
+            finalizers = listOf(RecordingFinalizer { _, _ -> localResult() }),
+            clockMillis = IncrementingClock()
+        )
+        coordinator.stageExact(command)
+
+        val report = coordinator.recoverAtStartup(identity, limit = 1)
+
+        assertEquals(1, report.recoveredCount)
+        assertEquals(0, report.retryableFailureCount)
+        assertEquals(0, store.countRecoverableForInstance(identity.instanceId))
+    }
+
     private fun command(
         identity: GenesisUltraRuntimeIdentity,
         writerEpoch: String = identity.activeBody.keyEpochId,
@@ -220,6 +233,21 @@ class CrossDatabaseOperationCoordinatorTest {
             sequence = 7,
             provenanceDigest = "sha256:" + "2".repeat(64),
             reusedExistingEvent = false
+        )
+    }
+
+    private fun localResult(): CrossDatabaseLocalResult {
+        val json = CrossDatabaseOperationIdentity.canonicalJson(
+            mapOf(
+                "owner_status" to "planned",
+                "schema" to "test.local_result.v1"
+            )
+        )
+        return CrossDatabaseLocalResult(
+            schema = "test.local_result.v1",
+            json = json,
+            digest = CrossDatabaseOperationIdentity.digestCanonicalJson(json),
+            ownerStatus = "planned"
         )
     }
 
@@ -350,7 +378,13 @@ class CrossDatabaseOperationCoordinatorTest {
             instanceId: String,
             limit: Int
         ): List<CrossDatabaseOperationRecord> {
-            return listOfNotNull(record).filter { it.instanceId == instanceId }.take(limit)
+            return listOfNotNull(record).filter {
+                it.instanceId == instanceId &&
+                    it.status !in setOf(
+                        CrossDatabaseOperationStatus.COMMITTED,
+                        CrossDatabaseOperationStatus.BLOCKED
+                    )
+            }.take(limit)
         }
 
         override suspend fun loadRecoverableForOwner(
@@ -358,9 +392,20 @@ class CrossDatabaseOperationCoordinatorTest {
             ownerType: String,
             limit: Int
         ): List<CrossDatabaseOperationRecord> {
-            return listOfNotNull(record).filter {
-                it.instanceId == instanceId && it.ownerType == ownerType
-            }.take(limit)
+            return loadRecoverableForInstance(instanceId, limit).filter {
+                it.ownerType == ownerType
+            }
+        }
+
+        override suspend fun countRecoverableForInstance(instanceId: String): Int {
+            return loadRecoverableForInstance(instanceId, Int.MAX_VALUE).size
+        }
+
+        override suspend fun countRecoverableForOwner(
+            instanceId: String,
+            ownerType: String
+        ): Int {
+            return loadRecoverableForOwner(instanceId, ownerType, Int.MAX_VALUE).size
         }
 
         override suspend fun countNonTerminalByInstanceOwnerAndPayloadSchema(
@@ -427,19 +472,15 @@ class CrossDatabaseOperationCoordinatorTest {
             operationId: String,
             identity: GenesisUltraRuntimeIdentity,
             finalizer: CrossDatabaseTypedFinalizer,
-            receiptObservedThisExecution: CrossDatabaseCanonicalReceipt?,
+            receipt: CrossDatabaseCanonicalReceipt,
+            preparation: CrossDatabaseFinalizationPreparation?,
             clockMillis: Long
         ): CrossDatabaseOperationRecord {
             val pending = requireNotNull(record)
-            val result = finalizer.finalizeInsideTransaction(
-                pending,
-                receiptObservedThisExecution ?: CrossDatabaseCanonicalReceipt(
-                    eventId = pending.eventId,
-                    eventHash = requireNotNull(pending.canonicalEventHash),
-                    sequence = requireNotNull(pending.canonicalSequence),
-                    provenanceDigest = requireNotNull(pending.canonicalProvenanceDigest),
-                    reusedExistingEvent = true
-                )
+            val result = finalizer.finalizePreparedInsideTransaction(
+                operation = pending,
+                receipt = receipt,
+                preparation = preparation
             )
             record = pending.copy(
                 status = CrossDatabaseOperationStatus.COMMITTED,
@@ -474,8 +515,8 @@ class CrossDatabaseOperationCoordinatorTest {
                 writerBodyId = writerBodyId,
                 writerEpoch = writerEpoch,
                 subjectId = subjectId,
-                parentOperationId = null,
-                childPhase = null,
+                parentOperationId = parentOperationId,
+                childPhase = childPhase,
                 payloadSchema = payloadSchema,
                 payloadJson = payloadJson,
                 payloadDigest = payloadDigest,
