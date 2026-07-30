@@ -44,9 +44,7 @@ class CanonicalCognitiveMigrationReadPortTest {
         )
         assertFalse(
             CanonicalCognitiveMigrationReadPort.isAllowedPlanningSource(
-                CanonicalConsumerEvent.activationMetadataOnly(
-                    event().ref
-                )
+                CanonicalConsumerEvent.activationMetadataOnly(event().ref)
             )
         )
     }
@@ -82,7 +80,7 @@ class CanonicalCognitiveMigrationReadPortTest {
     }
 
     @Test
-    fun planningLimitAndDigestDependOnlyOnSelectedHashes() {
+    fun planningLimitAndDigestDependOnlyOnSelectedCanonicalDescriptors() {
         val eligible = (1L..18L).map { sequence -> event(sequence = sequence) }
         val selected = CanonicalCognitiveMigrationReadPort.selectPlanningSources(eligible)
         assertEquals(16, selected.size)
@@ -127,6 +125,118 @@ class CanonicalCognitiveMigrationReadPortTest {
                 instanceId = "other-instance",
                 sources = selected
             )
+        )
+    }
+
+    @Test
+    fun recordSetDigestBindsFullCanonicalEventDescriptor() {
+        val original = event(sequence = 7)
+        val digest = CanonicalCognitiveMigrationReadPort.canonicalRecordSetDigest(
+            listOf(original)
+        )
+        assertNotEquals(
+            digest,
+            CanonicalCognitiveMigrationReadPort.canonicalRecordSetDigest(
+                listOf(event(sequence = 7, actor = "guardian"))
+            )
+        )
+        assertNotEquals(
+            digest,
+            CanonicalCognitiveMigrationReadPort.canonicalRecordSetDigest(
+                listOf(copyWithContentDigest(original, "sha256:" + "8".repeat(64)))
+            )
+        )
+        assertNotEquals(
+            digest,
+            CanonicalCognitiveMigrationReadPort.canonicalRecordSetDigest(
+                listOf(copyWithProvenanceDigest(original, "sha256:" + "9".repeat(64)))
+            )
+        )
+    }
+
+    @Test
+    fun preSnapshotHashBindsIdentityWriterLineageAndRecordSet() {
+        val original = snapshot()
+        val digest = CanonicalCognitiveMigrationReadPort.canonicalPreSnapshotHash(original)
+        assertNotEquals(
+            digest,
+            CanonicalCognitiveMigrationReadPort.canonicalPreSnapshotHash(
+                original.copy(
+                    writer = original.writer.copy(writerEpochId = "epoch-successor")
+                )
+            )
+        )
+        assertNotEquals(
+            digest,
+            CanonicalCognitiveMigrationReadPort.canonicalPreSnapshotHash(
+                original.copy(
+                    lineage = original.lineage.copy(
+                        lastEventHash = "evsha256:" + "7".repeat(64)
+                    )
+                )
+            )
+        )
+        assertNotEquals(
+            digest,
+            CanonicalCognitiveMigrationReadPort.canonicalPreSnapshotHash(
+                original.copy(events = listOf(event(sequence = 3)))
+            )
+        )
+    }
+
+    private fun snapshot(): CanonicalConsumerSnapshot {
+        return CanonicalConsumerSnapshot(
+            identity = CanonicalInstanceRef(
+                instanceId = "instance-test",
+                companionName = "Morimil",
+                identityDigest = "sha256:" + "1".repeat(64)
+            ),
+            writer = CanonicalWriterRef(
+                writerBodyId = "body-test",
+                writerEpochId = "epoch-test",
+                writerEpochDigest = "sha256:" + "2".repeat(64),
+                writerPublicKeyRef = "sha256:" + "3".repeat(64),
+                registryEpoch = 1,
+                registryDigest = "sha256:" + "4".repeat(64)
+            ),
+            lineage = CanonicalSnapshotRef(
+                instanceId = "instance-test",
+                birthRootEventHash = "evsha256:" + "0".repeat(64),
+                birthRootSequence = 0,
+                lastEventHash = "evsha256:" + "2".repeat(64),
+                lastSequence = 2,
+                postBirthEventCount = 2,
+                snapshotDigest = "sha256:" + "5".repeat(64)
+            ),
+            events = listOf(event(sequence = 2))
+        )
+    }
+
+    private fun copyWithContentDigest(
+        event: CanonicalConsumerEvent,
+        digest: String
+    ): CanonicalConsumerEvent {
+        return rebuild(event, event.ref.copy(contentDigest = digest))
+    }
+
+    private fun copyWithProvenanceDigest(
+        event: CanonicalConsumerEvent,
+        digest: String
+    ): CanonicalConsumerEvent {
+        return rebuild(event, event.ref.copy(provenanceDigest = digest))
+    }
+
+    private fun rebuild(
+        event: CanonicalConsumerEvent,
+        ref: CanonicalEventRef
+    ): CanonicalConsumerEvent {
+        return CanonicalConsumerEvent.verified(
+            ref = ref,
+            content = requireNotNull(event.content),
+            provenance = requireNotNull(event.provenance),
+            semantics = event.semantics,
+            contentBytes = requireNotNull(event.copyContentBytes()),
+            provenanceBytes = requireNotNull(event.copyProvenanceBytes())
         )
     }
 
