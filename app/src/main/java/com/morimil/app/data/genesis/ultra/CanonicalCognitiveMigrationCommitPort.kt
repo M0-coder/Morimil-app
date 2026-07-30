@@ -4,6 +4,7 @@ import com.morimil.app.data.repository.CognitiveMigrationProtocolTypes
 import com.morimil.app.data.repository.CrossDatabaseCanonicalCommand
 import com.morimil.app.data.repository.CrossDatabaseCanonicalEnsurePort
 import com.morimil.app.data.repository.CrossDatabaseCanonicalReceipt
+import com.morimil.app.data.repository.CrossDatabaseOperationIdentity
 import com.morimil.app.data.repository.CrossDatabaseProtocolErrors
 import java.nio.charset.StandardCharsets
 import java.time.Instant
@@ -94,35 +95,17 @@ internal class CanonicalCognitiveMigrationCommitPort private constructor(
             ?: throw CrossDatabaseProtocolErrors.permanent(
                 CrossDatabaseProtocolErrors.CANONICAL_PROVENANCE_MISMATCH
             )
-        val provenance = JSONObject(provenanceBytes.toString(StandardCharsets.UTF_8))
-        val expectedUserConfirmed =
-            command.operationType != CognitiveMigrationProtocolTypes.PROPOSE
-        val exactProvenance = provenance.getString("schema") == PROVENANCE_SCHEMA &&
-            provenance.getString("instance_id") == command.instanceId &&
-            provenance.getString("body_id") == command.writerBodyId &&
-            provenance.getString("source") == SOURCE &&
-            provenance.getString("classification") == CLASSIFICATION &&
-            provenance.getBoolean("user_confirmed") == expectedUserConfirmed &&
-            provenance.getString("source_id") == command.operationId
-        if (!exactProvenance) {
+        val actualProvenance = try {
+            CrossDatabaseOperationIdentity.canonicalJson(
+                JSONObject(provenanceBytes.toString(StandardCharsets.UTF_8))
+            )
+        } catch (failure: Throwable) {
             throw CrossDatabaseProtocolErrors.permanent(
-                CrossDatabaseProtocolErrors.CANONICAL_PROVENANCE_MISMATCH
+                CrossDatabaseProtocolErrors.CANONICAL_PROVENANCE_MISMATCH,
+                failure
             )
         }
-
-        val note = JSONObject(provenance.getString("note"))
-        val exactNote = note.getString("schema") == NOTE_SCHEMA &&
-            note.getString("operation_id") == command.operationId &&
-            note.getString("owner_type") == CognitiveMigrationProtocolTypes.OWNER_TYPE &&
-            note.getString("operation_type") == command.operationType &&
-            note.getInt("operation_version") == command.operationVersion &&
-            note.getString("instance_id") == command.instanceId &&
-            note.getString("writer_body_id") == command.writerBodyId &&
-            note.getString("writer_epoch") == command.writerEpoch &&
-            note.getString("subject_id") == command.subjectId &&
-            note.getString("payload_digest") == command.payloadDigest &&
-            note.getString("evidence_digest") == command.evidenceDigest
-        if (!exactNote) {
+        if (actualProvenance != expectedProvenance(command)) {
             throw CrossDatabaseProtocolErrors.permanent(
                 CrossDatabaseProtocolErrors.CANONICAL_PROVENANCE_MISMATCH
             )
@@ -139,19 +122,6 @@ internal class CanonicalCognitiveMigrationCommitPort private constructor(
 
     private fun CrossDatabaseCanonicalCommand.toAppendCommand():
         CanonicalMemoryAppendCommand {
-        val note = JSONObject()
-            .put("schema", NOTE_SCHEMA)
-            .put("operation_id", operationId)
-            .put("owner_type", CognitiveMigrationProtocolTypes.OWNER_TYPE)
-            .put("operation_type", operationType)
-            .put("operation_version", operationVersion)
-            .put("instance_id", instanceId)
-            .put("writer_body_id", writerBodyId)
-            .put("writer_epoch", writerEpoch)
-            .put("subject_id", subjectId)
-            .put("payload_digest", payloadDigest)
-            .put("evidence_digest", evidenceDigest)
-            .toString()
         return CanonicalMemoryAppendCommand(
             eventType = eventType,
             actor = ACTOR,
@@ -162,9 +132,43 @@ internal class CanonicalCognitiveMigrationCommitPort private constructor(
                 classification = CLASSIFICATION,
                 userConfirmed = operationType != CognitiveMigrationProtocolTypes.PROPOSE,
                 sourceId = operationId,
-                note = note
+                note = expectedNote(this)
             ),
             eventId = eventId
+        )
+    }
+
+    private fun expectedProvenance(command: CrossDatabaseCanonicalCommand): String {
+        return CrossDatabaseOperationIdentity.canonicalJson(
+            mapOf(
+                "body_id" to command.writerBodyId,
+                "classification" to CLASSIFICATION,
+                "instance_id" to command.instanceId,
+                "note" to expectedNote(command),
+                "schema" to PROVENANCE_SCHEMA,
+                "source" to SOURCE,
+                "source_id" to command.operationId,
+                "user_confirmed" to
+                    (command.operationType != CognitiveMigrationProtocolTypes.PROPOSE)
+            )
+        )
+    }
+
+    private fun expectedNote(command: CrossDatabaseCanonicalCommand): String {
+        return CrossDatabaseOperationIdentity.canonicalJson(
+            mapOf(
+                "evidence_digest" to command.evidenceDigest,
+                "instance_id" to command.instanceId,
+                "operation_id" to command.operationId,
+                "operation_type" to command.operationType,
+                "operation_version" to command.operationVersion,
+                "owner_type" to CognitiveMigrationProtocolTypes.OWNER_TYPE,
+                "payload_digest" to command.payloadDigest,
+                "schema" to NOTE_SCHEMA,
+                "subject_id" to command.subjectId,
+                "writer_body_id" to command.writerBodyId,
+                "writer_epoch" to command.writerEpoch
+            )
         )
     }
 
