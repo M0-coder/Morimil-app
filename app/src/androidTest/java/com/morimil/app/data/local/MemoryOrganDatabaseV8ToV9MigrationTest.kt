@@ -78,17 +78,209 @@ class MemoryOrganDatabaseV8ToV9MigrationTest {
         }
     }
 
+    @Test
+    fun migratedV9RejectsEveryPartialCanonicalReceiptCombination() {
+        withMigratedV9Database("receipt-matrix") { database ->
+            assertPartialGroupMatrix(database, canonicalReceipt = true)
+        }
+    }
+
+    @Test
+    fun migratedV9RejectsEveryPartialLocalResultCombination() {
+        withMigratedV9Database("local-result-matrix") { database ->
+            assertPartialGroupMatrix(database, canonicalReceipt = false)
+        }
+    }
+
+    @Test
+    fun migratedV9AcceptsOnlyAllNullOrAllCompleteGroups() {
+        withMigratedV9Database("complete-groups") { database ->
+            database.execSQL(INSERT_OPERATION, validOperationArgs(seed = 100))
+            database.execSQL(
+                INSERT_OPERATION,
+                validOperationArgs(
+                    seed = 101,
+                    canonicalEventHash = EVENT_HASH,
+                    canonicalSequence = 7,
+                    canonicalProvenanceDigest = PROVENANCE_DIGEST,
+                    localResultSchema = LOCAL_RESULT_SCHEMA,
+                    localResultJson = LOCAL_RESULT_JSON,
+                    localResultDigest = LOCAL_RESULT_DIGEST
+                )
+            )
+            database.execSQL(
+                UPDATE_RECEIPT,
+                arrayOf(EVENT_HASH, 8L, PROVENANCE_DIGEST, operationId(100))
+            )
+            database.execSQL(
+                UPDATE_LOCAL_RESULT,
+                arrayOf(LOCAL_RESULT_SCHEMA, LOCAL_RESULT_JSON, LOCAL_RESULT_DIGEST, operationId(100))
+            )
+            database.execSQL(
+                UPDATE_RECEIPT,
+                arrayOf(null, null, null, operationId(101))
+            )
+            database.execSQL(
+                UPDATE_LOCAL_RESULT,
+                arrayOf(null, null, null, operationId(101))
+            )
+            assertEquals(
+                2,
+                database.singleInt("SELECT COUNT(*) FROM cross_database_operations")
+            )
+        }
+    }
+
+    @Test
+    fun migratedCommittedRowsRequireCompleteReceiptAndCompleteLocalResult() {
+        withMigratedV9Database("committed-groups") { database ->
+            listOf(
+                validOperationArgs(
+                    seed = 110,
+                    status = "COMMITTED",
+                    canonicalEventHash = EVENT_HASH,
+                    canonicalSequence = 7,
+                    canonicalProvenanceDigest = PROVENANCE_DIGEST,
+                    committedAtMillis = 1001
+                ),
+                validOperationArgs(
+                    seed = 111,
+                    status = "COMMITTED",
+                    localResultSchema = LOCAL_RESULT_SCHEMA,
+                    localResultJson = LOCAL_RESULT_JSON,
+                    localResultDigest = LOCAL_RESULT_DIGEST,
+                    committedAtMillis = 1001
+                ),
+                validOperationArgs(
+                    seed = 112,
+                    status = "COMMITTED",
+                    canonicalEventHash = EVENT_HASH,
+                    canonicalSequence = 7,
+                    canonicalProvenanceDigest = PROVENANCE_DIGEST,
+                    localResultSchema = LOCAL_RESULT_SCHEMA,
+                    localResultJson = LOCAL_RESULT_JSON,
+                    localResultDigest = LOCAL_RESULT_DIGEST
+                )
+            ).forEach { args -> assertSqlRejected(database, args, rewriteOperationId = false) }
+
+            database.execSQL(
+                INSERT_OPERATION,
+                validOperationArgs(
+                    seed = 113,
+                    status = "COMMITTED",
+                    canonicalEventHash = EVENT_HASH,
+                    canonicalSequence = 7,
+                    canonicalProvenanceDigest = PROVENANCE_DIGEST,
+                    localResultSchema = LOCAL_RESULT_SCHEMA,
+                    localResultJson = LOCAL_RESULT_JSON,
+                    localResultDigest = LOCAL_RESULT_DIGEST,
+                    committedAtMillis = 1001
+                )
+            )
+        }
+    }
+
+    private fun assertPartialGroupMatrix(
+        database: SupportSQLiteDatabase,
+        canonicalReceipt: Boolean
+    ) {
+        (1..6).forEach { mask ->
+            val insertSeed = if (canonicalReceipt) 200 + mask else 300 + mask
+            val updateSeed = if (canonicalReceipt) 400 + mask else 500 + mask
+            val partial = groupValues(mask, canonicalReceipt)
+            val insertArgs = validOperationArgs(seed = insertSeed).apply {
+                applyGroup(this, partial, canonicalReceipt)
+            }
+            assertSqlRejected(database, insertArgs, rewriteOperationId = false)
+            assertEquals(
+                0,
+                database.singleInt(
+                    "SELECT COUNT(*) FROM cross_database_operations " +
+                        "WHERE operationId = '${operationId(insertSeed)}'"
+                )
+            )
+
+            val baseline = validOperationArgs(seed = updateSeed)
+            database.execSQL(INSERT_OPERATION, baseline)
+            val updateRejected = runCatching {
+                database.execSQL(
+                    if (canonicalReceipt) UPDATE_RECEIPT else UPDATE_LOCAL_RESULT,
+                    arrayOf(partial[0], partial[1], partial[2], operationId(updateSeed))
+                )
+            }.isFailure
+            assertTrue("Partial journal group UPDATE was accepted for mask=$mask", updateRejected)
+            assertEquals(
+                0,
+                database.singleInt(
+                    if (canonicalReceipt) {
+                        "SELECT COUNT(*) FROM cross_database_operations WHERE " +
+                            "operationId = '${operationId(updateSeed)}' AND " +
+                            "(canonicalEventHash IS NOT NULL OR canonicalSequence IS NOT NULL " +
+                            "OR canonicalProvenanceDigest IS NOT NULL)"
+                    } else {
+                        "SELECT COUNT(*) FROM cross_database_operations WHERE " +
+                            "operationId = '${operationId(updateSeed)}' AND " +
+                            "(localResultSchema IS NOT NULL OR localResultJson IS NOT NULL " +
+                            "OR localResultDigest IS NOT NULL)"
+                    }
+                )
+            )
+        }
+    }
+
+    private fun groupValues(mask: Int, canonicalReceipt: Boolean): Array<Any?> {
+        val complete = if (canonicalReceipt) {
+            arrayOf<Any?>(EVENT_HASH, 7L, PROVENANCE_DIGEST)
+        } else {
+            arrayOf<Any?>(LOCAL_RESULT_SCHEMA, LOCAL_RESULT_JSON, LOCAL_RESULT_DIGEST)
+        }
+        return Array(3) { index ->
+            if (mask and (1 shl index) != 0) complete[index] else null
+        }
+    }
+
+    private fun applyGroup(
+        args: Array<Any?>,
+        values: Array<Any?>,
+        canonicalReceipt: Boolean
+    ) {
+        val offset = if (canonicalReceipt) 22 else 25
+        values.forEachIndexed { index, value -> args[offset + index] = value }
+    }
+
+    private fun withMigratedV9Database(
+        suffix: String,
+        block: (SupportSQLiteDatabase) -> Unit
+    ) {
+        val name = "memory-organ-v8-to-v9-$suffix.db"
+        helper.createDatabase(name, 8).close()
+        val database = helper.runMigrationsAndValidate(
+            name,
+            9,
+            true,
+            MemoryOrganDatabaseMigrationV9.MIGRATION_8_9
+        )
+        try {
+            block(database)
+        } finally {
+            database.close()
+        }
+    }
+
     private fun assertSqlRejected(
         database: SupportSQLiteDatabase,
-        bindArgs: Array<Any?>
+        bindArgs: Array<Any?>,
+        rewriteOperationId: Boolean = true
     ) {
         val rejected = runCatching {
             database.execSQL(
                 INSERT_OPERATION,
                 bindArgs.also { args ->
-                    args[0] = "xop_" +
-                        args.joinToString("|").hashCode().toUInt().toString(16)
-                            .padStart(64, '0')
+                    if (rewriteOperationId) {
+                        args[0] = "xop_" +
+                            args.joinToString("|").hashCode().toUInt().toString(16)
+                                .padStart(64, '0')
+                    }
                 }
             )
         }.isFailure
@@ -96,16 +288,21 @@ class MemoryOrganDatabaseV8ToV9MigrationTest {
     }
 
     private fun validOperationArgs(
+        seed: Int = 10,
         payloadDigest: String = "sha256:" + "1".repeat(64),
         status: String = "STAGED",
         parentOperationId: String? = null,
         childPhase: String? = null,
         canonicalEventHash: String? = null,
         canonicalSequence: Long? = null,
-        canonicalProvenanceDigest: String? = null
+        canonicalProvenanceDigest: String? = null,
+        localResultSchema: String? = null,
+        localResultJson: String? = null,
+        localResultDigest: String? = null,
+        committedAtMillis: Long? = null
     ): Array<Any?> {
         return arrayOf(
-            "xop_" + "a".repeat(64),
+            operationId(seed),
             "cognitive_migration",
             "cognitive_migration.propose",
             1,
@@ -118,7 +315,7 @@ class MemoryOrganDatabaseV8ToV9MigrationTest {
             "test.payload.v1",
             "{}",
             payloadDigest,
-            "xevt_" + "c".repeat(64),
+            eventId(seed),
             "cognitive_migration.proposed",
             "deterministic body",
             "test.evidence.v1",
@@ -130,15 +327,21 @@ class MemoryOrganDatabaseV8ToV9MigrationTest {
             canonicalEventHash,
             canonicalSequence,
             canonicalProvenanceDigest,
-            null,
-            null,
-            null,
+            localResultSchema,
+            localResultJson,
+            localResultDigest,
             1000L,
             1000L,
             1000L,
-            null
+            committedAtMillis
         )
     }
+
+    private fun operationId(seed: Int): String =
+        "xop_" + seed.toString(16).padStart(64, '0')
+
+    private fun eventId(seed: Int): String =
+        "xevt_" + (seed + 1000).toString(16).padStart(64, '0')
 
     private fun insertMigrationRecord(database: SupportSQLiteDatabase) {
         database.execSQL(
@@ -221,6 +424,22 @@ class MemoryOrganDatabaseV8ToV9MigrationTest {
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                       ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """
+
+        val EVENT_HASH = "evsha256:" +
+            "3".repeat(64)
+        val PROVENANCE_DIGEST = "sha256:" +
+            "4".repeat(64)
+        const val LOCAL_RESULT_SCHEMA = "test.local_result.v1"
+        const val LOCAL_RESULT_JSON = "{\"owner_status\":\"planned\"}"
+        val LOCAL_RESULT_DIGEST = "sha256:" +
+            "5".repeat(64)
+        const val UPDATE_RECEIPT =
+            "UPDATE cross_database_operations SET canonicalEventHash = ?, " +
+                "canonicalSequence = ?, canonicalProvenanceDigest = ? " +
+                "WHERE operationId = ?"
+        const val UPDATE_LOCAL_RESULT =
+            "UPDATE cross_database_operations SET localResultSchema = ?, " +
+                "localResultJson = ?, localResultDigest = ? WHERE operationId = ?"
 
         val REQUIRED_COLUMNS = setOf(
             "operationId",

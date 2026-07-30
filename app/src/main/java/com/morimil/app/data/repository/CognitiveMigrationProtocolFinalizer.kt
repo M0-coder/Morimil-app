@@ -279,7 +279,6 @@ internal class CognitiveMigrationProtocolFinalizer(
         permanentCheck(
             organDao.rollbackMigrationRecordIfAllowed(
                 migrationId = record.migrationId,
-                rollbackEventHash = receipt.eventHash,
                 notesJson = JSONArray(notes).toString(),
                 updatedAtMillis = operation.updatedAtMillis
             ) == 1,

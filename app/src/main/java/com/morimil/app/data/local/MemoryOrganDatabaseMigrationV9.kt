@@ -104,6 +104,10 @@ internal object MemoryOrganDatabaseMigrationV9 {
                     CHECK(
                         (status = 'COMMITTED'
                             AND canonicalEventHash IS NOT NULL
+                            AND canonicalSequence IS NOT NULL
+                            AND canonicalProvenanceDigest IS NOT NULL
+                            AND localResultSchema IS NOT NULL
+                            AND localResultJson IS NOT NULL
                             AND localResultDigest IS NOT NULL
                             AND committedAtMillis IS NOT NULL
                             AND committedAtMillis >= createdAtMillis)
@@ -154,15 +158,20 @@ internal object MemoryOrganDatabaseMigrationV9 {
     }
 
     internal fun installGuards(db: SupportSQLiteDatabase) {
-        db.execSQL(validationTrigger("cross_database_operations_validate_insert", "INSERT"))
-        db.execSQL(validationTrigger("cross_database_operations_validate_update", "UPDATE"))
+        listOf(
+            "cross_database_operations_validate_insert" to "INSERT",
+            "cross_database_operations_validate_update" to "UPDATE"
+        ).forEach { (name, operation) ->
+            db.execSQL("DROP TRIGGER IF EXISTS $name")
+            db.execSQL(validationTrigger(name, operation))
+        }
     }
 
     private fun validationTrigger(name: String, operation: String): String {
         return """
-            CREATE TRIGGER IF NOT EXISTS $name
+            CREATE TRIGGER $name
             BEFORE $operation ON cross_database_operations
-            WHEN NOT ($VALID_ROW_EXPRESSION)
+            WHEN ($VALID_ROW_EXPRESSION) IS NOT TRUE
             BEGIN
                 SELECT RAISE(ABORT, 'xop_sql_guard_rejected');
             END
@@ -217,6 +226,7 @@ internal object MemoryOrganDatabaseMigrationV9 {
                 AND NEW.canonicalProvenanceDigest IS NULL)
             OR
             (NEW.canonicalEventHash IS NOT NULL
+                AND NEW.canonicalSequence IS NOT NULL
                 AND NEW.canonicalSequence >= 1
                 AND NEW.canonicalProvenanceDigest IS NOT NULL
                 AND length(NEW.canonicalEventHash) = 73
@@ -231,8 +241,11 @@ internal object MemoryOrganDatabaseMigrationV9 {
                 AND NEW.localResultJson IS NULL
                 AND NEW.localResultDigest IS NULL)
             OR
-            (length(NEW.localResultSchema) > 0
+            (NEW.localResultSchema IS NOT NULL
+                AND length(NEW.localResultSchema) > 0
                 AND NEW.localResultJson IS NOT NULL
+                AND length(NEW.localResultJson) > 0
+                AND NEW.localResultDigest IS NOT NULL
                 AND length(NEW.localResultDigest) = 71
                 AND substr(NEW.localResultDigest, 1, 7) = 'sha256:'
                 AND substr(NEW.localResultDigest, 8) NOT GLOB '*[^0-9a-f]*')
@@ -243,6 +256,10 @@ internal object MemoryOrganDatabaseMigrationV9 {
         AND (
             (NEW.status = 'COMMITTED'
                 AND NEW.canonicalEventHash IS NOT NULL
+                AND NEW.canonicalSequence IS NOT NULL
+                AND NEW.canonicalProvenanceDigest IS NOT NULL
+                AND NEW.localResultSchema IS NOT NULL
+                AND NEW.localResultJson IS NOT NULL
                 AND NEW.localResultDigest IS NOT NULL
                 AND NEW.committedAtMillis IS NOT NULL
                 AND NEW.committedAtMillis >= NEW.createdAtMillis)

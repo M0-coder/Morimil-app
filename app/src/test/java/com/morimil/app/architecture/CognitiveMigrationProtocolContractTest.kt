@@ -194,6 +194,41 @@ class CognitiveMigrationProtocolContractTest {
     }
 
     @Test
+    fun freshV9GuardsAreNullSafeExplicitAndReplaceVulnerableDefinitions() {
+        val migration = source("data/local/MemoryOrganDatabaseMigrationV9.kt").readText()
+
+        assertTrue(migration.contains("DROP TRIGGER IF EXISTS \$name"))
+        assertTrue(migration.contains("WHEN (\$VALID_ROW_EXPRESSION) IS NOT TRUE"))
+        assertFalse(migration.contains("CREATE TRIGGER IF NOT EXISTS"))
+        assertFalse(migration.contains("WHEN NOT (\$VALID_ROW_EXPRESSION)"))
+        listOf(
+            "NEW.canonicalEventHash IS NOT NULL",
+            "NEW.canonicalSequence IS NOT NULL",
+            "NEW.canonicalProvenanceDigest IS NOT NULL",
+            "NEW.localResultSchema IS NOT NULL",
+            "NEW.localResultJson IS NOT NULL",
+            "NEW.localResultDigest IS NOT NULL"
+        ).forEach { predicate -> assertTrue(migration.contains(predicate)) }
+    }
+
+    @Test
+    fun rollbackKeepsCanonicalEventAndSnapshotNamespacesSeparated() {
+        val dao = source("data/local/MemoryOrganDao.kt").readText()
+        val finalizer =
+            source("data/repository/CognitiveMigrationProtocolFinalizer.kt").readText()
+        val repository =
+            source("data/repository/MigrationRecordRepository.kt").readText()
+
+        assertTrue(dao.contains("suspend fun rollbackMigrationRecordIfAllowed"))
+        assertFalse(dao.contains("postSnapshotId = :rollbackEventHash"))
+        assertFalse(finalizer.contains("rollbackEventHash = receipt.eventHash"))
+        assertTrue(finalizer.contains("\"canonical_event_hash\" to receipt.eventHash"))
+        assertFalse(repository.contains("postSnapshotId = rollbackEventHash"))
+        assertTrue(repository.contains("rollbackMigrationRecordIfAllowed("))
+        assertTrue(repository.contains("^evsha256:[a-f0-9]{64}\$"))
+    }
+
+    @Test
     fun cp5ActivationFailsClosedForPendingCog001V1Operations() {
         val runtimeContract =
             File(repositoryRoot(), "docs/CURRENT_RUNTIME_CONTRACT.md").readText()

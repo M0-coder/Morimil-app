@@ -197,7 +197,6 @@ interface MemoryOrganDao {
         """
         UPDATE migration_records
         SET status = 'rolled_back',
-            postSnapshotId = :rollbackEventHash,
             errorsJson = :notesJson,
             updatedAtMillis = :updatedAtMillis
         WHERE migrationId = :migrationId
@@ -206,7 +205,6 @@ interface MemoryOrganDao {
     )
     suspend fun rollbackMigrationRecordIfAllowed(
         migrationId: String,
-        rollbackEventHash: String,
         notesJson: String,
         updatedAtMillis: Long
     ): Int

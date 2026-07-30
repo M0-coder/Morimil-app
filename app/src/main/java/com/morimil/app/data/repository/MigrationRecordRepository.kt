@@ -152,12 +152,16 @@ class MigrationRecordRepository(
         rollbackEventHash: String?,
         notes: List<String>
     ) {
-        updateMigrationResult(
+        require(
+            rollbackEventHash == null ||
+                rollbackEventHash.matches(Regex("^evsha256:[a-f0-9]{64}$"))
+        ) { "Rollback event hash must remain in the canonical event namespace." }
+        val rows = organDao.rollbackMigrationRecordIfAllowed(
             migrationId = migrationId,
-            status = STATUS_ROLLED_BACK,
-            postSnapshotId = rollbackEventHash,
-            errors = notes
+            notesJson = JSONArray(notes).toString(),
+            updatedAtMillis = System.currentTimeMillis()
         )
+        require(rows > 0) { "Migration rollback update failed." }
     }
 
     private suspend fun updateMigrationResult(
