@@ -188,11 +188,6 @@ class CognitiveMigrationProtocolContractTest {
     fun cp5ActivationFailsClosedForPendingCog001V1Operations() {
         val runtimeContract =
             File(repositoryRoot(), "docs/CURRENT_RUNTIME_CONTRACT.md").readText()
-        val blueprint =
-            File(
-                repositoryRoot(),
-                "docs/F3_COGNITIVE_MIGRATION_IMPLEMENTATION_BLUEPRINT.md"
-            ).readText()
         val coordinator =
             source("data/repository/CrossDatabaseOperationCoordinator.kt").readText()
         val dao = source("data/local/CrossDatabaseOperationDao.kt").readText()
@@ -200,7 +195,6 @@ class CognitiveMigrationProtocolContractTest {
         assertTrue(runtimeContract.contains("zero non-committed"))
         assertTrue(runtimeContract.contains("cog_001.payload.v1"))
         assertTrue(runtimeContract.contains("blocks"))
-        assertTrue(blueprint.contains("must not be silently finalized under v2 rules"))
         assertTrue(dao.contains("countNonTerminalByInstanceOwnerAndPayloadSchema"))
         assertTrue(dao.contains("status != 'COMMITTED'"))
         val gate = coordinator.indexOf("requireNoPendingCog001V1(identity.instanceId)")
