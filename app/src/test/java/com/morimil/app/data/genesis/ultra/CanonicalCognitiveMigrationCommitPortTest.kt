@@ -2,12 +2,12 @@ package com.morimil.app.data.genesis.ultra
 
 import com.morimil.app.data.repository.CognitiveMigrationProtocolTypes
 import com.morimil.app.data.repository.CrossDatabaseCanonicalCommand
+import com.morimil.app.data.repository.CrossDatabaseOperationIdentity
 import com.morimil.app.data.repository.CrossDatabaseProtocolErrors
 import com.morimil.app.data.repository.CrossDatabaseProtocolFailure
 import java.io.File
 import java.nio.charset.StandardCharsets
 import kotlinx.coroutines.runBlocking
-import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -96,7 +96,9 @@ class CanonicalCognitiveMigrationCommitPortTest {
             record(command, provenanceClassification = "conflicting_transition"),
             record(command, provenanceSchema = "conflicting.provenance.v1"),
             record(command, provenanceInstanceId = "foreign_instance"),
-            record(command, provenanceBodyId = "foreign_body")
+            record(command, provenanceBodyId = "foreign_body"),
+            record(command, extraProvenanceField = "unexpected"),
+            record(command, extraNoteField = "unexpected")
         )
         provenanceConflicts.forEach { conflict ->
             val failure = runCatching {
@@ -140,32 +142,41 @@ class CanonicalCognitiveMigrationCommitPortTest {
         provenanceClassification: String = "durable_cognitive_migration_transition",
         provenanceSchema: String = "morimil.canonical_memory.provenance.v1",
         provenanceInstanceId: String = command.instanceId,
-        provenanceBodyId: String = command.writerBodyId
+        provenanceBodyId: String = command.writerBodyId,
+        extraProvenanceField: String? = null,
+        extraNoteField: String? = null
     ): CanonicalMemoryRecord {
-        val note = JSONObject()
-            .put("schema", "morimil.cross_database_operation.canonical_commit.v1")
-            .put("operation_id", command.operationId)
-            .put("owner_type", CognitiveMigrationProtocolTypes.OWNER_TYPE)
-            .put("operation_type", command.operationType)
-            .put("operation_version", command.operationVersion)
-            .put("instance_id", command.instanceId)
-            .put("writer_body_id", command.writerBodyId)
-            .put("writer_epoch", command.writerEpoch)
-            .put("subject_id", command.subjectId)
-            .put("payload_digest", command.payloadDigest)
-            .put("evidence_digest", command.evidenceDigest)
-            .toString()
-        val provenance = JSONObject()
-            .put("schema", provenanceSchema)
-            .put("instance_id", provenanceInstanceId)
-            .put("body_id", provenanceBodyId)
-            .put("source", "cross_database_operations")
-            .put("classification", provenanceClassification)
-            .put("user_confirmed", false)
-            .put("source_id", command.operationId)
-            .put("note", note)
-            .toString()
-            .toByteArray(StandardCharsets.UTF_8)
+        val noteValues = linkedMapOf<String, Any?>(
+            "evidence_digest" to command.evidenceDigest,
+            "instance_id" to command.instanceId,
+            "operation_id" to command.operationId,
+            "operation_type" to command.operationType,
+            "operation_version" to command.operationVersion,
+            "owner_type" to CognitiveMigrationProtocolTypes.OWNER_TYPE,
+            "payload_digest" to command.payloadDigest,
+            "schema" to "morimil.cross_database_operation.canonical_commit.v1",
+            "subject_id" to command.subjectId,
+            "writer_body_id" to command.writerBodyId,
+            "writer_epoch" to command.writerEpoch
+        )
+        if (extraNoteField != null) noteValues["extra_note"] = extraNoteField
+        val note = CrossDatabaseOperationIdentity.canonicalJson(noteValues)
+        val provenanceValues = linkedMapOf<String, Any?>(
+            "body_id" to provenanceBodyId,
+            "classification" to provenanceClassification,
+            "instance_id" to provenanceInstanceId,
+            "note" to note,
+            "schema" to provenanceSchema,
+            "source" to "cross_database_operations",
+            "source_id" to command.operationId,
+            "user_confirmed" to
+                (command.operationType != CognitiveMigrationProtocolTypes.PROPOSE)
+        )
+        if (extraProvenanceField != null) {
+            provenanceValues["extra_provenance"] = extraProvenanceField
+        }
+        val provenanceText = CrossDatabaseOperationIdentity.canonicalJson(provenanceValues)
+        val provenance = provenanceText.toByteArray(StandardCharsets.UTF_8)
         return CanonicalMemoryRecord(
             event = GenesisUltraFirstMemoryEvent(
                 schemaVersion = "genesis.memory.event.v0.1",
