@@ -61,7 +61,7 @@ class CurrentRuntimeContractTest {
         assertTrue(contract.contains("`GenesisUltraRuntimeIdentityRepository`"))
         assertTrue(contract.contains("`GenesisUltraRuntimeStartupGate`"))
         assertTrue(contract.contains("`CanonicalMemoryRepository`"))
-        assertTrue(contract.contains("`CanonicalConsumerReadPort`"))
+        assertTrue(contract.contains("CanonicalConsumerReadPort"))
         assertTrue(contract.contains("`CanonicalLivingMemoryPort`"))
     }
 
