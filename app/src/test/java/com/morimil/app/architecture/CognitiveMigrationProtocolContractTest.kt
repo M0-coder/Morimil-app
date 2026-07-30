@@ -27,7 +27,29 @@ class CognitiveMigrationProtocolContractTest {
     }
 
     @Test
-    fun cognitivePlanningHasAClosedMemorySourcePolicy() {
+    fun specializedReadPortConsumesOnlyTheF1ACanonicalBoundary() {
+        val readPort = source(
+            "data/genesis/ultra/CanonicalCognitiveMigrationReadPort.kt"
+        ).readText()
+        val composition = sourceAtRoot(
+            "MorimilAppContainerCognitiveMigrationProtocol.kt"
+        ).readText()
+
+        assertTrue(readPort.contains("private val consumerReadPort: CanonicalConsumerReadPort"))
+        assertFalse(readPort.contains("GenesisUltraRuntimeIdentityRepository"))
+        assertFalse(readPort.contains("readCommittedIdentity"))
+        assertTrue(composition.contains("CanonicalCognitiveMigrationReadPort.production("))
+        assertTrue(composition.contains("consumerReadPort = GenesisUltraCanonicalConsumerReadAdapter.production("))
+        assertFalse(
+            composition.contains(
+                "CanonicalCognitiveMigrationReadPort.production(\n" +
+                    "        identityRepository"
+            )
+        )
+    }
+
+    @Test
+    fun cognitivePlanningHasAClosedMemorySourcePolicyAndFullDescriptors() {
         val source = source(
             "data/genesis/ultra/CanonicalCognitiveMigrationReadPort.kt"
         ).readText()
@@ -37,7 +59,11 @@ class CognitiveMigrationProtocolContractTest {
         assertTrue(source.contains("cognitive_migration."))
         assertTrue(source.contains("cognitive_migration_protocol"))
         assertTrue(source.contains("cross_database_operations"))
-        assertFalse(source.contains("event.semantics?.memoryKind != \"chat_noise\""))
+        assertTrue(source.contains("canonicalRecordSetDigest"))
+        assertTrue(source.contains("canonicalPreSnapshotHash"))
+        assertTrue(source.contains("content_digest"))
+        assertTrue(source.contains("provenance_digest"))
+        assertTrue(source.contains("signer_epoch_id"))
     }
 
     @Test
@@ -56,17 +82,38 @@ class CognitiveMigrationProtocolContractTest {
     }
 
     @Test
-    fun coordinatorPersistsReceiptBeforeTypedOwnerFinalization() {
-        val source = source("data/repository/CrossDatabaseOperationCoordinator.kt").readText()
-        val receipt = source.indexOf("persistCanonicalReceipt")
-        val pendingLocal = source.indexOf("transitionCanonicalCommitted")
-        val finalizer = source.indexOf("finalizeCommitted")
+    fun canonicalAuditPreparationRunsBeforeRoomFinalizationTransaction() {
+        val coordinator = source(
+            "data/repository/CrossDatabaseOperationCoordinator.kt"
+        ).readText()
+        val finalizer = source(
+            "data/repository/CognitiveMigrationProtocolFinalizer.kt"
+        ).readText()
 
-        assertTrue(receipt >= 0)
-        assertTrue(pendingLocal > receipt)
-        assertTrue(finalizer > pendingLocal)
-        assertTrue(source.contains("database.withTransaction"))
-        assertTrue(source.contains("markCommittedWithLocalResult"))
+        val preparation = coordinator.indexOf("finalizer.prepareOutsideTransaction")
+        val dispatch = coordinator.indexOf("store.finalizeCommitted", preparation)
+        val transaction = coordinator.indexOf("return database.withTransaction", dispatch)
+
+        assertTrue(preparation >= 0)
+        assertTrue(dispatch > preparation)
+        assertTrue(transaction > dispatch)
+        assertTrue(finalizer.contains("override suspend fun prepareOutsideTransaction"))
+        assertTrue(finalizer.contains("finalizePreparedInsideTransaction"))
+        assertTrue(finalizer.contains("audit_preparation.v1"))
+    }
+
+    @Test
+    fun coordinatorUsesTypedErrorsAndDurableRemainderCounts() {
+        val coordinator = source(
+            "data/repository/CrossDatabaseOperationCoordinator.kt"
+        ).readText()
+        val dao = source("data/local/CrossDatabaseOperationDao.kt").readText()
+
+        assertFalse(coordinator.contains("failure.message"))
+        assertFalse(coordinator.contains("Regex(\"mismatch|invalid|conflict"))
+        assertTrue(coordinator.contains("countRecoverableForInstance"))
+        assertTrue(coordinator.contains("countRecoverableForOwner"))
+        assertTrue(dao.contains("status NOT IN ('COMMITTED', 'BLOCKED')"))
     }
 
     @Test
@@ -76,12 +123,25 @@ class CognitiveMigrationProtocolContractTest {
         val finalizer =
             source("data/repository/CognitiveMigrationProtocolFinalizer.kt").readText()
 
-        assertTrue(coordinator.contains("receiptObservedThisExecution"))
+        assertTrue(coordinator.contains("resolveReceipt"))
         assertTrue(coordinator.contains("reusedExistingEvent = true"))
         assertFalse(finalizer.contains("\"reused_existing_event\""))
         assertFalse(finalizer.contains("receipt.reusedExistingEvent"))
         assertTrue(finalizer.contains("cog_001.local_result.v2"))
         assertTrue(finalizer.contains("cog_004.local_result.v2"))
+    }
+
+    @Test
+    fun predecessorReceiptsAreClosedByOwnerTypeVersionAndOperationType() {
+        val finalizer =
+            source("data/repository/CognitiveMigrationProtocolFinalizer.kt").readText()
+
+        assertTrue(finalizer.contains("expectedOperationType"))
+        assertTrue(finalizer.contains("predecessor.ownerType == CognitiveMigrationProtocolTypes.OWNER_TYPE"))
+        assertTrue(finalizer.contains("predecessor.operationType == expectedOperationType"))
+        assertTrue(finalizer.contains("predecessor.operationVersion == CognitiveMigrationProtocolTypes.VERSION"))
+        assertTrue(finalizer.contains("CognitiveMigrationProtocolTypes.APPROVE"))
+        assertTrue(finalizer.contains("CognitiveMigrationProtocolTypes.EXECUTE"))
     }
 
     @Test
@@ -112,6 +172,19 @@ class CognitiveMigrationProtocolContractTest {
     }
 
     @Test
+    fun freshAndMigratedV9StoresInstallTheSameJournalGuards() {
+        val migration = source("data/local/MemoryOrganDatabaseMigrationV9.kt").readText()
+        val encryption = source("data/local/MemoryOrganDatabaseEncryption.kt").readText()
+
+        assertTrue(migration.contains("override fun onCreate"))
+        assertTrue(migration.contains("override fun onOpen"))
+        assertTrue(migration.contains("installGuards(db)"))
+        assertTrue(migration.contains("cross_database_operations_validate_insert"))
+        assertTrue(migration.contains("cross_database_operations_validate_update"))
+        assertTrue(encryption.contains(".addCallback(MemoryOrganDatabaseMigrationV9.CALLBACK)"))
+    }
+
+    @Test
     fun cp5ActivationFailsClosedForPendingCog001V1Operations() {
         val runtimeContract =
             File(repositoryRoot(), "docs/CURRENT_RUNTIME_CONTRACT.md").readText()
@@ -122,8 +195,7 @@ class CognitiveMigrationProtocolContractTest {
             ).readText()
         val coordinator =
             source("data/repository/CrossDatabaseOperationCoordinator.kt").readText()
-        val dao =
-            source("data/local/CrossDatabaseOperationDao.kt").readText()
+        val dao = source("data/local/CrossDatabaseOperationDao.kt").readText()
 
         assertTrue(runtimeContract.contains("zero non-committed"))
         assertTrue(runtimeContract.contains("cog_001.payload.v1"))
