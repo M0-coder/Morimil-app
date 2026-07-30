@@ -9,13 +9,16 @@ class CognitiveMigrationImplementationBlueprintContractTest {
     @Test
     fun blueprintIsCurrentTrackedAndDraftMergeGated() {
         val blueprint = blueprintFile(repositoryRoot()).readText()
+        val currentHeader = blueprint.substringBefore("## 1. Authority and sovereignty")
+        val acceptance = blueprint.substringAfter("## 17. Acceptance boundary")
 
         assertTrue(blueprint.startsWith("# Document status: CURRENT"))
         assertTrue(blueprint.contains("ADR-0002"))
-        assertTrue(blueprint.contains("`#88` — open"))
-        assertTrue(blueprint.contains("`STOP_S5=CLOSED`"))
-        assertTrue(blueprint.contains("draft PR `#149`"))
-        assertTrue(blueprint.contains("`MERGE_AUTHORIZED=false`"))
+        assertTrue(currentHeader.contains("`#88` — open"))
+        assertTrue(currentHeader.contains("`STOP_S5=CLOSED`"))
+        assertTrue(currentHeader.contains("draft PR `#149`"))
+        assertTrue(currentHeader.contains("`MERGE_AUTHORIZED=false`"))
+        assertFalse(currentHeader.contains("MERGE_AUTHORIZED=true"))
         assertTrue(
             blueprint.contains(
                 "It does not claim that the\n" +
@@ -23,7 +26,8 @@ class CognitiveMigrationImplementationBlueprintContractTest {
             )
         )
         assertFalse(blueprint.contains("STOP S5 remains open"))
-        assertFalse(blueprint.contains("MERGE_AUTHORIZED=true"))
+        assertTrue(acceptance.contains("explicitly sets `MERGE_AUTHORIZED=true`"))
+        assertTrue(acceptance.contains("MERGE_AUTHORIZED=false"))
     }
 
     @Test
