@@ -193,22 +193,6 @@ attemptCount = attemptCount + 1,
 lastErrorCode = :lastErrorCode,
 updatedAtMillis = :updatedAtMillis
 WHERE operationId = :operationId
-AND status NOT IN ('COMMITTED', 'BLOCKED')
-"""
-)
-suspend fun markBlocked(
-operationId: String,
-lastErrorCode: String,
-updatedAtMillis: Long
-): Int
-@Query(
-"""
-UPDATE cross_database_operations
-SET status = 'BLOCKED',
-attemptCount = attemptCount + 1,
-lastErrorCode = :lastErrorCode,
-updatedAtMillis = :updatedAtMillis
-WHERE operationId = :operationId
 AND status = :expectedStatus
 """
 )
