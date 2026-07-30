@@ -66,6 +66,7 @@ internal object MemoryOrganDatabaseEncryption {
                 MemoryOrganDatabaseMigrationV8.MIGRATION_7_8,
                 MemoryOrganDatabaseMigrationV9.MIGRATION_8_9
             )
+            .addCallback(MemoryOrganDatabaseMigrationV9.CALLBACK)
             .build()
     }
 }
