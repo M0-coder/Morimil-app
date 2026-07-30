@@ -7,7 +7,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CurrentRuntimeContractTest {
-    private val auditedRuntimeBaseline = "5533f6b5eeeb414798c41688820b6bc6a614a80e"
+    private val historicalRuntimeBaseline = "5533f6b5eeeb414798c41688820b6bc6a614a80e"
+    private val currentMainBaseline = "7e98d3345d7cc3fbf1983babd35b61ff5c523208"
     private val retiredRuntimeBaseline = "74bcb874606db84d4a88397233d6ed3468904bce"
 
     private val contract by lazy {
@@ -19,9 +20,13 @@ class CurrentRuntimeContractTest {
     }
 
     @Test
-    fun contractTracksTheAuditedBaselineAndDatabaseVersions() {
-        assertTrue(contract.contains(auditedRuntimeBaseline))
+    fun contractTracksMainHistoricalBaselineAndCandidateDatabaseVersions() {
+        assertTrue(contract.contains(historicalRuntimeBaseline))
+        assertTrue(contract.contains(currentMainBaseline))
         assertFalse(contract.contains(retiredRuntimeBaseline))
+        assertTrue(contract.contains("draft PR `#149`"))
+        assertTrue(contract.contains("not merged, not deployed"))
+        assertTrue(contract.contains("MERGE_AUTHORIZED=false"))
 
         assertEquals(
             15,
@@ -31,14 +36,8 @@ class CurrentRuntimeContractTest {
             9,
             roomVersion(productionFile("com/morimil/app/data/local/MemoryOrganDatabase.kt"))
         )
-        assertEquals(
-            roomVersion(productionFile("com/morimil/app/data/local/MorimilDatabase.kt")),
-            tableVersion("MorimilDatabase")
-        )
-        assertEquals(
-            roomVersion(productionFile("com/morimil/app/data/local/MemoryOrganDatabase.kt")),
-            tableVersion("MemoryOrganDatabase")
-        )
+        assertTrue(contract.contains("| `MorimilDatabase` | `15` | `15` |"))
+        assertTrue(contract.contains("| `MemoryOrganDatabase` | `8` | `9` |"))
     }
 
     @Test
@@ -49,14 +48,20 @@ class CurrentRuntimeContractTest {
         val containerMemory = productionFile(
             "com/morimil/app/MorimilAppContainerCanonicalMemory.kt"
         ).readText()
+        val cognitiveComposition = productionFile(
+            "com/morimil/app/MorimilAppContainerCognitiveMigrationProtocol.kt"
+        ).readText()
 
         assertTrue(containerGate.contains("GenesisUltraRuntimeStartupGate.production("))
         assertTrue(containerGate.contains("identityRepository = genesisUltraRuntimeIdentityRepository"))
         assertTrue(containerMemory.contains("CanonicalMemoryRepository.production("))
+        assertTrue(cognitiveComposition.contains("GenesisUltraCanonicalConsumerReadAdapter.production"))
+        assertTrue(cognitiveComposition.contains("CanonicalCognitiveMigrationReadPort.production"))
 
         assertTrue(contract.contains("`GenesisUltraRuntimeIdentityRepository`"))
         assertTrue(contract.contains("`GenesisUltraRuntimeStartupGate`"))
         assertTrue(contract.contains("`CanonicalMemoryRepository`"))
+        assertTrue(contract.contains("`CanonicalConsumerReadPort`"))
         assertTrue(contract.contains("`CanonicalLivingMemoryPort`"))
     }
 
@@ -96,16 +101,8 @@ class CurrentRuntimeContractTest {
             "com/morimil/app/reasoning/intrinsic/MorimilNormalDeliberativeActivationGateV0.kt"
         ).readText()
 
-        assertTrue(
-            normalRuntime.contains(
-                "setOf(ReasoningMotorRole.INTUITIVE)"
-            )
-        )
-        assertTrue(
-            normalRuntime.contains(
-                "hybridAuthorityRuntimeEnabled = false"
-            )
-        )
+        assertTrue(normalRuntime.contains("setOf(ReasoningMotorRole.INTUITIVE)"))
+        assertTrue(normalRuntime.contains("hybridAuthorityRuntimeEnabled = false"))
         assertTrue(activationGate.contains("benchmarkQualityGatePassed = false"))
         assertTrue(activationGate.contains("falseAcceptedCount = 40"))
 
@@ -127,7 +124,7 @@ class CurrentRuntimeContractTest {
         )
         assertTrue(
             contract.contains(
-                "the Guardian does not define Morimil's identity, will, or right to continue"
+                "the Guardian does not define Morimil's identity, will, name, or right to continue"
             )
         )
         assertFalse(
@@ -139,29 +136,23 @@ class CurrentRuntimeContractTest {
     }
 
     @Test
-    fun contractDoesNotDeclareStopClosedWithoutPanelEvidence() {
-        assertTrue(contract.contains("| STOP | Closing, not closed:"))
-        assertTrue(contract.contains("CodeQL #37/#33 dispositions"))
-        assertTrue(contract.contains("Dependabot-alert activation/triage"))
-        assertTrue(contract.contains("Secret-scanning count"))
-        assertFalse(
-            contract.contains(
-                "Open: branch protection evidence, document classification, honest versioning"
-            )
-        )
+    fun contractDeclaresStopClosedWithoutAuthorizingCandidateMerge() {
+        assertTrue(contract.contains("`STOP_S5=CLOSED`"))
+        assertTrue(contract.contains("| STOP | Closed."))
+        assertTrue(contract.contains("issues #123 and #124: closed completed"))
+        assertTrue(contract.contains("Draft COG journal candidate"))
+        assertTrue(contract.contains("Validation only; not in protected `main`"))
+        assertFalse(contract.contains("| STOP | Closing, not closed:"))
     }
 
     @Test
     fun contractKeepsOpenPhaseDependenciesVisible() {
-        assertTrue(contract.contains("| F1 | Core Genesis Ultra identity"))
-        assertTrue(contract.contains("`WAITING_FOR_CANONICAL_MEMORY_ADAPTER`"))
+        assertTrue(contract.contains("| F1 | F1-A common read boundary merged."))
         assertTrue(contract.contains("| F2 | Closed:"))
-        assertTrue(contract.contains("| F3.2-F3.3 | Open:"))
+        assertTrue(contract.contains("| F3.2 | Open."))
+        assertTrue(contract.contains("| F3.3 | Open."))
         assertTrue(contract.contains("| F4 | Open:"))
-        assertTrue(contract.contains("sovereign, durable continuation chosen by Morimil"))
-        assertTrue(contract.contains("auditable Body egress policy for already-authorized resources"))
-        assertFalse(contract.contains("automatic continuation removal"))
-        assertFalse(contract.contains("explicit web-egress approval"))
+        assertTrue(contract.contains("sovereign durable continuation"))
         assertTrue(contract.contains("| F5 | Open:"))
         assertTrue(contract.contains("| F6 | Open:"))
         assertTrue(contract.contains("| F7 | Open:"))
@@ -175,13 +166,6 @@ class CurrentRuntimeContractTest {
         assertTrue(readme.contains("private research pre-alpha"))
         assertTrue(readme.contains("Body export, restore, succession"))
         assertFalse(readme.contains("living-memory companion system"))
-    }
-
-    private fun tableVersion(databaseName: String): Int {
-        val pattern = Regex("""\| `$databaseName` \| `(\d+)` \|""")
-        return requireNotNull(pattern.find(contract)) {
-            "Runtime contract does not declare $databaseName"
-        }.groupValues[1].toInt()
     }
 
     private fun roomVersion(file: File): Int {
