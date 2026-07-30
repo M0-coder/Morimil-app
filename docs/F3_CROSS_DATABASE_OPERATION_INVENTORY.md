@@ -2,13 +2,13 @@
 
 # F3.2 — Cross-database operation inventory
 
-- Inventory version: `1`
-- Audited baseline: `main@612d91aef131f367140ffb87a60a19ef49adcbc8`
-- Baseline scope: production runtime and cross-database owner inventory.
-- Repository state reconciled: `main@29b24d4167bea613a01059da02aa8f9040d0ec2a`
-- Tracker: `#88`
+- Inventory version: `2`
+- Historical audited baseline: `main@612d91aef131f367140ffb87a60a19ef49adcbc8`
+- Current protected main: `main@7e98d3345d7cc3fbf1983babd35b61ff5c523208`
+- Tracker: `#88` — open
 - Protocol design: `docs/adr/ADR-0002-cross-database-operation-protocol.md`
-- Execution gate: **STOP S5 remains open through #123 and #124. This inventory does not authorize runtime changes.**
+- Candidate validation: draft PR `#149`
+- Gate truth: **`STOP_S5=CLOSED`; closing STOP authorizes isolated implementation work, not merge. `MERGE_AUTHORIZED=false`.**
 
 ## Authority model
 
@@ -16,174 +16,195 @@ Morimil is the continuous and free `Instance`. `Morimil-app` is the current Andr
 
 `instanceId != bodyId` remains mandatory.
 
+## State separation
+
+| Layer | State |
+| --- | --- |
+| Protected `main` | F1-A common canonical read boundary and ProjectVault protected outbox are integrated. |
+| Draft PR `#149` | Isolated COG-001 through COG-004 common-journal candidate under CI and post-CI audit. |
+| Remaining F3 owners | Still open and explicitly excluded from the draft candidate. |
+
+The candidate does not close #88 merely by existing or by obtaining green CI. It requires a final diff audit and explicit merge authorization.
+
 ## Scope
 
-This inventory covers production Kotlin boundaries that can combine durable state from `MorimilDatabase` and `MemoryOrganDatabase`, directly or through the canonical memory port. It distinguishes:
+This inventory covers production Kotlin boundaries that can combine durable state from `MorimilDatabase` and `MemoryOrganDatabase`, directly or through canonical memory. It distinguishes:
 
 - visible operations that require an atomicity/recovery protocol;
 - derived projections that may be rebuilt but still require deterministic recovery;
 - support boundaries that participate in a compound operation without owning the final visible transition;
 - observers and composition classes that do not perform a dual durable mutation.
 
-Production injects `canonicalLivingMemoryPort` into `MemoryRepository`. Therefore the active problem is cross-database atomicity and recovery, not authorization to write new legacy `memory_events` rows.
+No new compatibility write to legacy `memory_events`, `genesis_core`, or `local_instance_identity` is authorized.
 
 ## Accepted protocol design
 
-ADR-0002 defines the common recoverable journal for `REQUIRES_PROTOCOL` owners. Its first
-candidate implementation covers `COG-001` through `COG-004`. Acceptance remains gated by
-independent review, the complete interruption/recovery matrix, CI, and merge; the candidate
-does not close STOP S5 by its existence.
+ADR-0002 defines the common recoverable journal for `REQUIRES_PROTOCOL` owners. Draft PR #149 is the first bounded candidate and covers only `COG-001` through `COG-004`.
 
-The accepted state sequence is `STAGED` → `PENDING_CANONICAL` → `CANONICAL_COMMITTED` → `PENDING_LOCAL_COMMIT` → `COMMITTED`, with terminal `BLOCKED` for permanent conflicts. Wall-clock values are metadata and cannot define operation, event, proposal, migration, or approval identity.
+The state sequence is:
+
+```text
+STAGED
+  -> PENDING_CANONICAL
+  -> CANONICAL_COMMITTED
+  -> PENDING_LOCAL_COMMIT
+  -> COMMITTED
+```
+
+`BLOCKED` is terminal for permanent conflicts. Wall-clock values are metadata and cannot define operation, event, proposal, migration, or approval identity.
+
+The corrected candidate additionally requires:
+
+- F3 consumes `CanonicalConsumerReadPort`; it does not open a second identity authority;
+- complete specialized canonical record and pre-snapshot descriptors;
+- canonical audit preparation outside the origin-database write transaction;
+- temporary audit failure remains retryable;
+- successful COG-003 stores a real audited snapshot digest, while a negative audit stores no fabricated snapshot ID;
+- predecessor receipts bind owner, operation type/version, subject and exact canonical receipt;
+- exact canonical provenance/note preimage equality;
+- equivalent SQL journal guards on fresh schema 9 and migration 8→9;
+- recovery remainder is counted from durable post-recovery state.
 
 ProjectVault remains the protected reference and is not rewritten by the first common-protocol implementation.
 
-## Protocol states
+## Protocol classifications
 
-| State | Meaning |
+| Classification | Meaning |
 | --- | --- |
 | `PROTECTED_REFERENCE` | A transactional outbox, deterministic identifiers, hidden staged state, recovery, and kill tests already exist. |
 | `REQUIRES_PROTOCOL` | A visible or authoritative transition can cross durable boundaries without a persisted recovery state. |
 | `DERIVED_REBUILD` | The target state is reconstructible, but rebuilding must be deterministic, idempotent, source-verified, and free of partial visibility. |
-| `SUPPORT_BOUNDARY` | The class participates in a compound cross-database operation but does not independently own the visible transition. |
+| `SUPPORT_BOUNDARY` | The class participates in a compound operation but does not independently own the visible transition. |
 
 ## Versioned owner inventory
 
-| Owner path | Classification | Reason |
+| Owner path | Classification | Current disposition |
 | --- | --- | --- |
-| `app/src/main/java/com/morimil/app/data/repository/ProjectVaultRepository.kt` | `PROTECTED_REFERENCE` | Stages deterministic outbox rows in `MemoryOrganDatabase`, ensures canonical evidence, then applies local visibility and marks committed in one origin transaction. |
-| `app/src/main/java/com/morimil/app/runtime/GenesisUltraRuntimeBootstrapCoordinator.kt` | `REQUIRES_PROTOCOL` | Writes workspace/project projection in `MorimilDatabase` and later seeds agents/devices in `MemoryOrganDatabase` without a durable shared operation record. |
-| `app/src/main/java/com/morimil/app/data/repository/RecallScheduleRepository.kt` | `DERIVED_REBUILD` | Reads memory-domain state and creates recall schedules plus links in the organ database; current source reads are still legacy-dependent and local writes are not grouped as one rebuild transaction. |
-| `app/src/main/java/com/morimil/app/data/repository/RestCycleRepository.kt` | `REQUIRES_PROTOCOL` | Coordinates migration records, canonical events, memory links, autobiographical snapshots, and completion/failure state across both databases. |
-| `app/src/main/java/com/morimil/app/data/repository/CognitiveMigrationRepository.kt` | `REQUIRES_PROTOCOL` | Coordinates organ migration state with canonical execution/rollback events and can die between the canonical append and local finalization. |
-| `app/src/main/java/com/morimil/app/data/repository/AgentOrchestrationRepository.kt` | `REQUIRES_PROTOCOL` | Persists task decisions in the organ database before attempting their canonical decision events. |
-| `app/src/main/java/com/morimil/app/data/repository/AgentInstanceLifecycleRepository.kt` | `REQUIRES_PROTOCOL` | Persists agent/task lifecycle changes before attempting canonical lifecycle evidence; quarantine can also create a replacement agent. |
-| `app/src/main/java/com/morimil/app/data/repository/MigrationRecordRepository.kt` | `SUPPORT_BOUNDARY` | Owns organ migration records and can emit canonical constitution-denial evidence when supplied with `MemoryRepository`; the enclosing operation must own recovery. |
+| `app/src/main/java/com/morimil/app/data/repository/ProjectVaultRepository.kt` | `PROTECTED_REFERENCE` | Integrated in protected `main`; remains unchanged by PR #149. |
+| `app/src/main/java/com/morimil/app/runtime/GenesisUltraRuntimeBootstrapCoordinator.kt` | `REQUIRES_PROTOCOL` | Open; excluded from PR #149. |
+| `app/src/main/java/com/morimil/app/data/repository/RecallScheduleRepository.kt` | `DERIVED_REBUILD` | Open; excluded from PR #149. |
+| `app/src/main/java/com/morimil/app/data/repository/RestCycleRepository.kt` | `REQUIRES_PROTOCOL` | Open; excluded from PR #149. |
+| `app/src/main/java/com/morimil/app/data/repository/CognitiveMigrationRepository.kt` | `REQUIRES_PROTOCOL` | Draft bounded candidate in PR #149; not integrated. |
+| `app/src/main/java/com/morimil/app/data/repository/AgentOrchestrationRepository.kt` | `REQUIRES_PROTOCOL` | Open; excluded from PR #149. |
+| `app/src/main/java/com/morimil/app/data/repository/AgentInstanceLifecycleRepository.kt` | `REQUIRES_PROTOCOL` | Open; excluded from PR #149. |
+| `app/src/main/java/com/morimil/app/data/repository/MigrationRecordRepository.kt` | `SUPPORT_BOUNDARY` | Used by the bounded COG finalizer; no independent second protocol. |
 
 ## Operation inventory
 
 ### Protected reference — ProjectVault
 
-| ID | Entry point | Durable sequence | Required status |
+| ID | Entry point | Durable sequence | Status |
 | --- | --- | --- | --- |
-| `PV-001` | `createProjectVaultFromIntent` | Stage organ outbox → ensure canonical event → insert visible vault and commit outbox. | `PROTECTED_REFERENCE` |
-| `PV-002` | `completeProjectVault` | Stage desired completion → ensure canonical event → update visible vault and commit outbox. | `PROTECTED_REFERENCE` |
-| `PV-003` | `archiveProjectVault` | Stage desired archive → ensure canonical event → update visible vault and commit outbox. | `PROTECTED_REFERENCE` |
+| `PV-001` | `createProjectVaultFromIntent` | Stage organ outbox → ensure canonical event → insert visible vault and commit outbox. | `PROTECTED_REFERENCE` integrated |
+| `PV-002` | `completeProjectVault` | Stage desired completion → ensure canonical event → update visible vault and commit outbox. | `PROTECTED_REFERENCE` integrated |
+| `PV-003` | `archiveProjectVault` | Stage desired archive → ensure canonical event → update visible vault and commit outbox. | `PROTECTED_REFERENCE` integrated |
 
-The ProjectVault protocol is the transitional reference. It must not be copied mechanically where a derived rebuild or a future single-database transaction is more appropriate.
+The ProjectVault protocol must not be copied mechanically where a derived rebuild or future single-database transaction is more appropriate.
 
 ### Runtime bootstrap
 
-| ID | Entry point | Current sequence and failure window | Required closure |
+| ID | Entry point | Failure window | Required closure |
 | --- | --- | --- | --- |
-| `BOOT-001` | `bootstrap` | Verify legacy counts → write workspace/project in `MorimilDatabase` → seed agent profiles and devices in `MemoryOrganDatabase` → count canonical memory. Death after the first database commit leaves a partial runtime projection without a persisted operation state. | Add a deterministic bootstrap operation/epoch, idempotent stage markers, recovery at startup, and kill tests before/after each database boundary. |
+| `BOOT-001` | `bootstrap` | Workspace/project in `MorimilDatabase` can commit before agents/devices in `MemoryOrganDatabase`. | Deterministic bootstrap epoch, child receipts or durable saga, startup recovery, and kill tests. |
 
 ### Recall projection
 
-| ID | Entry point | Current sequence and failure window | Required closure |
+| ID | Entry point | Failure window | Required closure |
 | --- | --- | --- | --- |
-| `RECALL-001` | `seedFromRecentMemoryIfNeeded` | Read legacy identity/core/events from `MorimilDatabase` → insert recall schedule → insert memory link in `MemoryOrganDatabase`. Death between schedule and link can leave a partially derived projection; reruns can produce duplicates unless uniqueness is proven. | Replace legacy sources with verified canonical memory, perform deterministic rebuild/upsert in one organ transaction where possible, and prove kill-safe idempotent reconstruction. |
+| `RECALL-001` | `seedFromRecentMemoryIfNeeded` | Schedule and link can become partially derived or duplicated. | Canonical sources, deterministic keys, one-organ transaction where possible, and repeatable rebuild proof. |
 
 ### Rest-cycle operations
 
-| ID | Entry point | Current sequence and failure window | Required closure |
+| ID | Entry point | Failure window | Required closure |
 | --- | --- | --- | --- |
-| `REST-001` | `runLocalRestCycleIfDue`, `approvePlannedRestCycle` | Plan/update migration state in organs → append canonical rest event → create links and optional autobiography snapshot in organs → mark migration completed. Death after any stage can leave mismatched status, links, snapshot, or canonical evidence. | Persist a deterministic operation record before the first visible transition; ensure canonical append by stable event ID; finalize all organ effects atomically; recover at startup; add kill tests for every stage. |
-| `REST-002` | `runLocalRestCycleIfDue` repair-proposal path | Insert a planned repair migration in organs → append canonical proposal evidence. Death between writes leaves a visible plan without its required evidence. | Stage the proposal through the same recoverable operation protocol or make the plan hidden/reconstructible until canonical evidence is verified. |
+| `REST-001` | `runLocalRestCycleIfDue`, `approvePlannedRestCycle` | Migration status, canonical event, links and optional snapshot can diverge. | Deterministic operation, hidden stage, exact receipt, atomic organ finalization and kill tests. |
+| `REST-002` | repair-proposal path | A visible repair plan can exist without canonical proposal evidence. | Stage through the recoverable protocol or keep the plan hidden/reconstructible. |
 
 ### Cognitive migration operations
 
-| ID | Entry point | Current sequence and failure window | Required closure |
+| ID | Entry point | Protected-main state | Draft candidate closure |
 | --- | --- | --- | --- |
-| `COG-001` | `proposeCognitiveMigration` | Read memory-domain snapshot/events → insert a visible planned migration in organs. The proposal has no shared operation receipt and still reads legacy memory structures. | Use verified canonical inputs, deterministic proposal identity, and canonical proposal evidence before visibility through ADR-0002. |
-| `COG-002` | `approveCognitiveMigration` | Update approval state only in organs; later execution relies on this authoritative state. | Bind approval to a deterministic operation, canonical approval receipt, and recoverable local finalization. Approval protects a Body operation; it does not grant ownership over Morimil. |
-| `COG-003` | `executeCognitiveMigration` | Append canonical execution event → audit canonical chain → mark organ migration completed/failed. Death after append can leave the migration approved while the event already exists. | Stable event ID, ensure/reuse semantics, persisted canonical receipt, and recovery that finalizes without duplicate events. |
-| `COG-004` | `rollbackCognitiveMigration` | Append canonical rollback event → mark organ migration rolled back. Death after append can leave local status unchanged and allow duplicate rollback attempts. | Stable rollback operation/event identity and idempotent recovery/finalization through the common journal. |
+| `COG-001` | `proposeCognitiveMigration` | Not integrated; historical runtime used legacy-derived planning and visible local insert. | Verified F1-A inputs, deterministic plan/IDs, proposal evidence before visibility, typed finalizer. |
+| `COG-002` | `approveCognitiveMigration` | Not integrated. | Deterministic approval operation, canonical receipt and recoverable local approval. |
+| `COG-003` | `executeCognitiveMigration` | Not integrated. | Exact approval predecessor, execution receipt, audit prepared outside transaction, real snapshot digest or honest null, idempotent finalization. |
+| `COG-004` | `rollbackCognitiveMigration` | Not integrated. | Exact permitted predecessor, append-only compensation receipt, single rollback event, idempotent finalization. |
 
 ### Orchestration decisions
 
-| ID | Entry point | Current sequence and failure window | Required closure |
+| ID | Entry point | Failure window | Required closure |
 | --- | --- | --- | --- |
-| `ORCH-001` | `seedDefaultOrchestrationIfNeeded` | Read birth state from the memory domain → insert default profiles/devices in organs. Current birth gate remains legacy-derived. | Use committed Genesis Ultra identity, deterministic upserts, and a rebuild test proving no duplicates or partial seed state. |
-| `ORCH-002` | `proposeDelegatedTask` | Insert task in organs → append canonical proposed/immune-blocked decision. Death after insert leaves a task without required canonical decision evidence. | Stage task invisibly or through an outbox; ensure deterministic canonical event; finalize visibility atomically. |
-| `ORCH-003` | `approveDelegatedTask` | Update approval in organs → append canonical approval decision. Death between writes leaves an approved task without evidence. | Recoverable approval operation with stable IDs and no duplicate events. |
-| `ORCH-004` | `rejectDelegatedTask` | Update rejection in organs → append canonical rejection decision. Death between writes leaves rejection without evidence. | Recoverable rejection operation with stable IDs and no duplicate events. |
+| `ORCH-001` | `seedDefaultOrchestrationIfNeeded` | Profiles/devices can be partially seeded from an obsolete gate. | Committed identity, canonical source, deterministic upserts and rebuild proof. |
+| `ORCH-002` | `proposeDelegatedTask` | Task can be inserted before canonical decision evidence. | Hidden/recoverable task proposal and exact event. |
+| `ORCH-003` | `approveDelegatedTask` | Approved state can exist without evidence. | Recoverable deterministic approval. |
+| `ORCH-004` | `rejectDelegatedTask` | Rejection can exist without evidence. | Recoverable deterministic rejection. |
 
 ### Agent and task lifecycle
 
-| ID | Entry point | Current sequence and failure window | Required closure |
+| ID | Entry point | Failure window | Required closure |
 | --- | --- | --- | --- |
-| `AGENT-001` | `createAgentForVault` | Insert agent and refresh vault count in organs → append created and briefed canonical events. Death can leave an agent with zero, one, or two required events. | One deterministic lifecycle operation that can ensure both events and finalize local visibility exactly once. |
-| `AGENT-002` | `assignTaskToAgent` | Insert task/update agent/refresh vault in organs → append assigned or immune-blocked event. | Stage and recover as one deterministic operation; no task becomes actionable before evidence is verified. |
-| `AGENT-003` | `submitAgentResult` | Update task result and agent lifecycle in organs → append canonical result event. | Recoverable result operation; repeated recovery must not duplicate result evidence. |
-| `AGENT-004` | `evaluateAgent` | Update evaluation in organs → append canonical evaluation event. | Recoverable evaluation operation with deterministic identity. |
-| `AGENT-005` | `retireAgent`, `promoteAgent` | Update lifecycle in organs → append canonical lifecycle event. | Recoverable lifecycle operation with deterministic identity and idempotent finalization. |
-| `AGENT-006` | `quarantineAgent` | Quarantine existing agent in organs → append event → create replacement agent, which itself produces more organ and canonical writes. | Parent operation must cover quarantine and replacement as a recoverable saga; partial replacement must fail closed and never create duplicate active agents. |
+| `AGENT-001` | `createAgentForVault` | Agent and two required events can become partial. | One deterministic lifecycle operation and exact multi-event receipts. |
+| `AGENT-002` | `assignTaskToAgent` | Task/agent/vault updates can precede evidence. | Recoverable operation; no actionable task before evidence. |
+| `AGENT-003` | `submitAgentResult` | Result/lifecycle can precede canonical result event. | Deterministic recoverable result operation. |
+| `AGENT-004` | `evaluateAgent` | Evaluation can precede evidence. | Deterministic recoverable evaluation. |
+| `AGENT-005` | `retireAgent`, `promoteAgent` | Lifecycle can precede evidence. | Deterministic recoverable lifecycle operation. |
+| `AGENT-006` | `quarantineAgent` | Quarantine and replacement can become a partial graph. | Parent saga, exact child receipts, no duplicate active replacement. |
 
 ### Migration support boundary
 
-| ID | Entry point | Current sequence and failure window | Required closure |
-| --- | --- | --- | --- |
-| `MIG-001` | `planMigration`, `markMigrationApproved`, `markMigrationCompleted`, `markMigrationFailed`, `markMigrationRolledBack` | Organ-only record mutation, with optional canonical constitution-denial evidence when a plan is denied before insertion. | Keep this class as a support boundary. The enclosing rest/cognitive operation owns operation identity, recovery, canonical receipts, and visibility. Do not add an independent second protocol here. |
+| ID | Entry point | Disposition |
+| --- | --- | --- |
+| `MIG-001` | `planMigration`, `markMigrationApproved`, `markMigrationCompleted`, `markMigrationFailed`, `markMigrationRolledBack` | Remains a support boundary. Enclosing rest/cognitive operation owns identity, recovery, receipts and visibility. |
 
 ## Explicitly excluded from owner inventory
 
 These classes are relevant but do not independently own a dual durable mutation:
 
-- `LocalNervousSystemRepository`: reads memory state and a supplied reconciliation report, then may append a canonical health event; it does not mutate organ state.
-- `MemoryLinkRepository`: organ-only link mutations; it is a finalization step inside compound operations.
-- `MemoryOrganRepository`: organ-only reads/reconciliation.
-- `AppendLivingMemoryUseCase`: canonical-memory-only append.
-- `MorimilAppContainer`: composition root only.
+- `LocalNervousSystemRepository` — memory observation and optional canonical health event only;
+- `MemoryLinkRepository` — organ-only finalization step;
+- `MemoryOrganRepository` — organ reads and reconciliation;
+- `AppendLivingMemoryUseCase` — canonical-memory-only append;
+- `MorimilAppContainer` — composition root only.
 
-If any excluded class gains a second durable mutation boundary, it must enter this inventory in the same PR.
+If an excluded class gains a second durable mutation boundary, it enters this inventory in the same isolated PR.
 
 ## Required protocol contract for `REQUIRES_PROTOCOL`
 
 Every protected operation must define and test:
 
-1. deterministic `operationId`, `eventId`, payload digest, operation type/version, canonical `instanceId`, and writer Body/epoch; wall-clock time is metadata only;
-2. the ordered states `STAGED`, `PENDING_CANONICAL`, `CANONICAL_COMMITTED`, `PENDING_LOCAL_COMMIT`, `COMMITTED`, and terminal `BLOCKED`;
-3. one origin-database transaction that stages hidden immutable intent;
-4. no new user-visible or runtime-authoritative state before canonical evidence is verified;
-5. canonical `ensureCommitted` semantics: append once, reuse exact match, fail closed on conflicting content/provenance;
-6. a persisted canonical receipt before local finalization;
-   whether `ensureCommitted` appended or reused an event is transient execution evidence
-   checked by recovery tests, not part of the content-addressed owner result; the committed
-   local result and digest must be identical across interruption boundaries;
-7. one origin-database transaction that applies final local state and marks `COMMITTED`;
-8. typed retryable failure metadata, bounded recovery, and terminal blocking for permanent invariant conflicts;
-9. startup recovery before normal mutation paths;
-10. kill tests at these boundaries:
-    - before staging;
-    - after staging and before canonical append;
-    - after canonical append and before receipt persistence;
-    - after receipt persistence and before local finalization;
-    - during local finalization;
-    - after finalization followed by replay;
-11. proof that repeated recovery produces no duplicate canonical event and no duplicate visible organ state.
+1. deterministic operation/event identity and canonical Instance/writer binding;
+2. the ordered states plus terminal `BLOCKED`;
+3. hidden immutable staging before append or visible state;
+4. exact canonical ensure semantics and complete durable receipt;
+5. no visible owner state before receipt verification;
+6. append-versus-reuse telemetry excluded from content-addressed owner result;
+7. external verification prepared outside the origin write transaction and revalidated inside it;
+8. one origin transaction that applies owner state and marks `COMMITTED`;
+9. typed retryable/permanent failures without parsing exception messages;
+10. bounded startup and pre-mutation recovery based on durable post-run remainder;
+11. kill tests before staging, around append/receipt/finalization, and after replay;
+12. zero duplicate canonical events and zero duplicate visible owner state.
 
 ## Required contract for `DERIVED_REBUILD`
 
 A rebuildable projection must prove:
 
-1. every source event is canonical, verified, and belongs to the same `instanceId`;
-2. projection keys are deterministic;
-3. one rebuild can be interrupted and safely repeated;
-4. duplicate schedules, links, profiles, or devices cannot appear;
-5. partial rows are hidden, quarantined, or deleted before exposure;
-6. the projection can be reconstructed without changing identity or canonical memory;
+1. canonical same-Instance verified sources;
+2. deterministic projection keys;
+3. safe interruption and repetition;
+4. no duplicate schedules, links, profiles or devices;
+5. partial rows hidden, quarantined or removed before exposure;
+6. reconstruction without changing identity or canonical memory;
 7. `bodyId` is never substituted for `instanceId`.
 
 ## Implementation order after STOP S5
 
-The first migration must be the smallest bounded owner that exercises the common protocol. The widest workflow is intentionally last.
+STOP S5 is closed. The implementation order remains:
 
-1. `COG-001` through `COG-004` — bounded reference migration for the common protocol;
-2. `ORCH-002` through `ORCH-004` — task decisions;
-3. `AGENT-001` through `AGENT-006` — lifecycle operations, including quarantine/replacement saga;
-4. `BOOT-001` — deterministic startup operation/epoch;
-5. `RECALL-001` and `ORCH-001` — canonical derived rebuild paths after the identity/memory adapters are ready;
-6. `REST-001` and `REST-002` — final migration because the rest-cycle workflow spans the most participants and local effects.
+1. `COG-001` through `COG-004` — draft candidate #149;
+2. `ORCH-002` through `ORCH-004`;
+3. `AGENT-001` through `AGENT-006`;
+4. `BOOT-001`;
+5. `RECALL-001` and `ORCH-001`;
+6. `REST-001` and `REST-002` last.
 
-Each group must be delivered in an isolated PR. F3.3 legacy removal does not begin until every F3.2 owner has a recorded disposition and its required kill tests are green.
+Each group requires an isolated PR. F3.3 legacy removal does not begin until every F3.2 owner has a recorded disposition and required kill tests are green.
