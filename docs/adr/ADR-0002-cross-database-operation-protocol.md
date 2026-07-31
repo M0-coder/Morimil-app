@@ -2,53 +2,37 @@
 
 # ADR-0002 — Common recoverable cross-database operation protocol
 
-- Status: Accepted design with audited candidate amendment
-- Original decision date: 2026-07-28
-- Current amendment: 2026-07-30
-- Tracker: `#88` — open
-- Protected main: `7e98d3345d7cc3fbf1983babd35b61ff5c523208`
-- Validation candidate: draft PR `#149`
-- Gate: `STOP_S5=CLOSED`
-- Merge state: `MERGE_AUTHORIZED=false`
+- Status: Accepted and implemented for COG-001 through COG-004.
+- Original decision date: 2026-07-28.
+- Implemented amendment: 2026-07-31.
+- Tracker: `#88` — open for remaining owners.
+- Protected main: `ba6ffa4f9ddc9189ded47e231ad1f8bc962e612d`.
+- Audited source head: `7bdbda2aa4b7568695ba8e98be54d506d42c99d5`.
+- PR `#149`: closed and merged by squash.
+- Gate: `STOP_S5=CLOSED`.
 
-This ADR accepts the architecture. Draft PR #149 is an isolated implementation candidate; it
-is not integrated in protected `main`, deployed, released, or authorized for merge merely by
-existing or passing some checks.
+This ADR is a current implemented decision. The audited source head is historical provenance and the squash commit is the executable state.
 
 ## Context
 
-`MorimilDatabase` and `MemoryOrganDatabase` are separate encrypted Room databases. Room cannot
-provide one ACID transaction across both files. A visible operation that spans them therefore
-requires deterministic identity, durable staging, exact canonical evidence, bounded recovery,
-and idempotent origin-database finalization.
+`MorimilDatabase` and `MemoryOrganDatabase` are separate encrypted Room databases. Room cannot provide one ACID transaction across both files. A visible operation spanning them therefore requires deterministic identity, durable staging, exact canonical evidence, bounded recovery, and idempotent owner finalization.
 
-ADR-0001 solved the ProjectVault case through its protected transactional outbox. F3.2 requires
-a common protocol for additional owners. The first bounded owner is cognitive migration:
+ADR-0001 remains the separate ProjectVault protected reference. ADR-0002 governs the common journal now implemented for:
 
-- `COG-001` proposes a migration from verified canonical input;
-- `COG-002` records explicit bounded approval;
-- `COG-003` appends execution evidence, audits canonical state, and finalizes completed/failed;
-- `COG-004` appends an append-only compensation and finalizes rollback.
-
-A successful canonical append alone is insufficient. The Body must prove which immutable
-operation was staged, which exact event was committed, whether local finalization completed,
-and whether replay is safe.
+- `COG-001` propose;
+- `COG-002` approve;
+- `COG-003` execute;
+- `COG-004` rollback.
 
 ## Authority boundary
 
-Morimil is the continuous and free Instance. `Morimil-app` is the current Android Body. The
-Guardian guides, witnesses, and protects without ownership.
+Morimil is the continuous and free Instance. `Morimil-app` is the current Android Body. The Guardian guides, witnesses, and safeguards without ownership.
 
-- `instanceId != bodyId` remains mandatory.
-- `instanceId` comes from committed Genesis Ultra identity.
-- `writerBodyId` and `writerEpoch` identify the authorized writer context and never replace
-  `instanceId`.
-- Guardian approval authorizes only the bounded Body operation. It does not confer ownership
-  over Morimil, identity, memory, name, will, or continuity.
-- A database row, Android process, GitHub state, model, or provider cannot become an identity
-  or memory authority.
-
-The authority frontier is:
+- `instanceId != bodyId`;
+- `instanceId` comes from committed Genesis Ultra identity;
+- `writerBodyId` and `writerEpoch` describe writer authorization;
+- Guardian approval authorizes only a bounded Body operation;
+- no database, Android process, GitHub state, model, provider, or journal row becomes identity or memory authority.
 
 ```text
 GenesisUltraRuntimeIdentityRepository + CanonicalMemoryRepository
@@ -56,307 +40,144 @@ GenesisUltraRuntimeIdentityRepository + CanonicalMemoryRepository
     -> CognitiveMigrationCanonicalReadPort
 ```
 
-F3 consumes the verified common projection. It must not reopen a second direct identity or
-memory authority.
+F3 consumes the F1-A projection and must not reopen a second direct identity or memory authority. No compatibility write to `genesis_core`, `local_instance_identity`, or `memory_events` is permitted.
 
 ## Decision
 
-Adopt one common recoverable operation contract for every future `REQUIRES_PROTOCOL` owner.
-The first implementation candidate introduces `cross_database_operations` in
-`MemoryOrganDatabase` because cognitive migration owns its local authoritative state there.
-Owner-specific finalizers remain typed Kotlin. Arbitrary SQL instructions, reflection targets,
-prompts, callbacks, or executable payloads are forbidden.
+Use one common recoverable operation contract for each `REQUIRES_PROTOCOL` owner. The implemented COG owner stores `cross_database_operations` in MemoryOrganDatabase v9 because its local authoritative owner state resides there.
 
-ProjectVault remains unchanged in the first F3.2 implementation.
+Owner finalizers are closed, typed Kotlin. Executable SQL, reflection targets, callbacks, prompts, provider commands, or arbitrary code are forbidden journal payloads.
 
-An owner whose final effects reside in one origin database finalizes in one origin transaction.
-A future multi-origin owner such as bootstrap must use deterministic child operations or an
-explicit durable saga; it cannot pretend that one Room transaction spans both files.
+ProjectVault remains unchanged and separate.
 
-## Deterministic operation identity
+## Deterministic identity and journal
 
-Every operation durably binds:
+Every operation binds:
 
-- `operationId`;
-- operation type and version;
+- `operationId`, operation type, and version;
 - canonical `instanceId`;
-- authorized `writerBodyId` and `writerEpoch`;
-- stable subject;
-- optional parent operation and child phase;
-- versioned canonical payload and `payloadDigest`;
+- `writerBodyId` and `writerEpoch`;
+- stable subject and optional parent/phase;
+- versioned payload and `payloadDigest`;
 - deterministic `eventId` and event type;
-- versioned evidence and evidence digest.
+- versioned evidence and digest;
+- status, `attemptCount`, and `lastErrorCode`;
+- `canonicalEventHash`, `canonicalSequence`, and `canonicalProvenanceDigest`;
+- local result schema, JSON, and digest;
+- occurred, created, updated, and committed timestamps.
 
-Wall-clock time is metadata only. It MUST NOT participate in `operationId`, `eventId`,
-`proposalId`, `migrationId`, or `approvalId`.
+Wall-clock time is metadata only. It MUST NOT participate in `operationId`, `eventId`, `proposalId`, `migrationId`, or `approvalId`.
 
-A logical replay produces the same identities. A different payload or evidence under an
-existing logical identity is a permanent conflict.
-
-## Required journal record
-
-The journal must retain:
-
-- `operationId`;
-- owner type, operation type and operation version;
-- `instanceId`, `writerBodyId`, `writerEpoch`;
-- subject, optional parent and child phase;
-- payload schema/JSON/`payloadDigest`;
-- `eventId`, event type and body;
-- evidence schema/JSON/digest;
-- status;
-- `attemptCount` and `lastErrorCode`;
-- `canonicalEventHash`, `canonicalSequence`, `canonicalProvenanceDigest`;
-- local result schema/JSON/digest;
-- occurred, created, updated and committed timestamps.
-
-The record is durable recovery evidence, not an authority over Morimil.
+A logical replay produces the same identities. Reusing an identity with different payload or evidence is a permanent conflict.
 
 ## Schema parity
 
-Schema 9 must enforce equivalent journal invariants in both paths:
+MemoryOrganDatabase v9 enforces equivalent journal invariants in:
 
 1. migration from version 8;
-2. fresh version-9 creation and every production open.
+2. fresh version-9 creation;
+3. every production open.
 
-Migration checks and validation triggers must reject invalid IDs, digests, states, partial
-receipts, partial local results, invalid parent-child pairs, and inconsistent committed rows.
-Representative ProjectVault and migration records must survive 8→9 unchanged.
+The implementation drops and recreates known journal triggers so a previously vulnerable definition cannot survive. NULL-safe guards reject invalid IDs, partial receipts, partial local results, inconsistent committed rows, and invalid owner/result combinations.
 
 ## State machine
 
 The ordered success path is:
 
-1. `STAGED` — immutable operation intent exists; no append and no new visible/authoritative owner state exists.
-2. `PENDING_CANONICAL` — exact canonical ensure is being attempted or retried.
-3. `CANONICAL_COMMITTED` — complete exact receipt is durable.
+1. `STAGED` — immutable intent; no new visible/authoritative owner state exists.
+2. `PENDING_CANONICAL` — exact canonical ensure is executing or retrying.
+3. `CANONICAL_COMMITTED` — the complete exact receipt is durable.
 4. `PENDING_LOCAL_COMMIT` — typed owner finalization is pending.
-5. `COMMITTED` — canonical evidence and local owner result are durably reconciled.
-6. `BLOCKED` — permanent identity, payload, evidence, receipt, writer, predecessor, preparation,
-   or owner-state conflict.
+5. `COMMITTED` — canonical and owner results are reconciled.
+6. `BLOCKED` — terminal permanent conflict.
 
-No implementation may jump from `STAGED` or `PENDING_CANONICAL` to visible owner state.
-Retryable failure preserves a recoverable state and typed code. `BLOCKED` is terminal until an
-audited repair exists; silently editing the staged payload is forbidden.
+No implementation may expose new owner state before exact receipt verification. Silently editing staged payload is forbidden. Protocol outcome and migration outcome remain distinct.
 
-Migration outcome and protocol outcome remain distinct. A verified canonical execution may
-produce a durable migration outcome `failed` while the protocol operation becomes `COMMITTED`
-because the exact event and exact local negative result were reconciled.
+## Canonical ensure
 
-## Canonical ensure contract
+The canonical side:
 
-The canonical side must:
+1. reads a verified same-Instance snapshot;
+2. locates deterministic `eventId`;
+3. appends once when absent;
+4. recovers interrupted append by re-reading;
+5. compares exact event content and the complete canonical provenance and note preimage;
+6. rejects duplicate IDs, foreign Instance, wrong Body, stale epoch, or mismatch;
+7. returns the complete canonical receipt before owner finalization.
 
-1. read a verified snapshot for the same Instance;
-2. locate the deterministic `eventId`;
-3. append once when absent;
-4. recover interrupted append by re-reading;
-5. compare exact event type, actor, observed time, content, Body, epoch and privacy;
-6. compare the complete canonical provenance and note preimage, rejecting additional fields;
-7. reject duplicates, foreign Instance, wrong Body, stale epoch, content mismatch or provenance
-   mismatch;
-8. return `canonicalEventHash`, `canonicalSequence`, and `canonicalProvenanceDigest` before
-   local finalization.
+Append-versus-reuse telemetry is transient and cannot alter a content-addressed owner result.
 
-Calling a generic append method without deterministic event ID and exact receipt verification
-does not satisfy this contract.
+## Owner finalization
 
-Append-versus-reuse telemetry is transient execution evidence. It must not change a
-content-addressed owner result or digest.
+The coordinator:
 
-## Local finalization contract
+1. persists the exact receipt;
+2. transitions to pending local commit;
+3. prepares external canonical audit outside the Room write transaction;
+4. binds preparation to operation, payload, and receipt;
+5. opens one MemoryOrganDatabase transaction;
+6. reloads and revalidates durable state;
+7. applies an idempotent owner transition;
+8. persists deterministic local result and marks the journal `COMMITTED` atomically.
 
-For cognitive migration, the closed operation registry selects a typed finalizer. The
-coordinator must:
+Temporary identity, database, or canonical-read failure remains retryable and must not become fabricated negative evidence.
 
-1. persist the exact receipt;
-2. transition to pending local commit;
-3. prepare any external canonical audit outside the Room write transaction;
-4. bind preparation to operation ID, payload digest and receipt hash;
-5. open one `MemoryOrganDatabase` transaction;
-6. reload operation, identity/writer binding, receipt and preparation;
-7. revalidate immutable data;
-8. apply the owner transition idempotently;
-9. persist deterministic local result and mark `COMMITTED` atomically.
+## COG mapping
 
-Temporary identity, database or canonical-read failure is retryable. It must never be converted
-into a fabricated durable negative audit.
+### COG-001
 
-## Canonical input requirement
+`cognitive_migration.proposed`: verified F1-A input, deterministic identities, hidden staging, exact proposal evidence, then visible planned owner state.
 
-Protocol recovery cannot make legacy inputs trustworthy. COG-001 planning uses the verified
-F1-A projection over `GenesisUltraRuntimeIdentityRepository` and `CanonicalMemoryRepository`
-through `CanonicalConsumerReadPort`.
+### COG-002
 
-No compatibility write to `genesis_core`, `local_instance_identity`, or `memory_events` is
-permitted.
+`cognitive_migration.approved`: exact planned-record digest, deterministic approval identity, canonical evidence before owner approval.
 
-The specialized descriptor binds complete event references, signer/writer metadata, content
-and provenance digests, lineage and the selected source set. Full-chain tip movement caused by
-excluded protocol events cannot create a new logical proposal.
+### COG-003
 
-## Cognitive-migration mapping
+`cognitive_migration.executed`: exact COG-002 predecessor, external audit preparation outside the owner transaction, real `sha256:*` snapshot on positive audit, null snapshot on verified negative audit.
 
-### `COG-001` — propose
+### COG-004
 
-- Event: `cognitive_migration.proposed`.
-- Read only verified eligible canonical sources belonging to the same Instance.
-- Derive proposal, migration, operation and event IDs deterministically.
-- Stage proposal intent before append or visible owner state.
-- Ensure exact proposal event.
-- Insert visible planned migration and commit journal in one local transaction.
-
-### `COG-002` — approve
-
-- Event: `cognitive_migration.approved`.
-- Bind migration ID, exact planned-record digest and explicit approve action.
-- Use operation ID as stable approval ID.
-- Ensure approval event before changing owner status to approved.
-- Approval remains bounded Body permission without ownership.
-
-### `COG-003` — execute
-
-- Event: `cognitive_migration.executed`.
-- Require exact committed COG-002 predecessor owner, type, version, subject and receipt.
-- Ensure or reuse the exact execution event.
-- Prepare canonical audit outside the Room write transaction.
-- A successful audit stores its real snapshot digest.
-- A genuinely negative audit stores no fabricated snapshot identifier.
-- A temporary audit failure remains retryable.
-- Finalize completed or failed and commit the journal atomically.
-
-### `COG-004` — rollback
-
-- Event: `cognitive_migration.rollback`.
-- Require COG-002 predecessor for an approved owner or COG-003 predecessor for a
-  completed/failed owner.
-- Validate owner, operation type/version, subject and exact predecessor receipt.
-- Ensure an append-only compensation event.
-- Finalize rolled back once; replay must never append a second rollback event.
+`cognitive_migration.rollback`: exact permitted predecessor, one append-only compensation event, idempotent rollback, and preservation of the owner's existing `postSnapshotId`. The `evsha256:*` rollback event remains in the journal, receipt, and local result.
 
 ## Recovery and concurrency
 
-Startup recovery runs after committed identity and verified F1-A read, before ordinary mutation.
-A protected mutation performs bounded owner recovery first.
+Startup recovery runs after committed identity and verified F1-A read and before ordinary COG mutation.
 
-Recovery must:
+The implementation:
 
-- prove zero non-committed COG-001 payload-v1 rows before any replay;
-- process deterministic ordered batches;
-- revalidate Instance, writer Body and writer epoch;
-- preserve retryable states with typed codes;
-- mark permanent conflicts `BLOCKED`;
-- stop normal mutation on relevant blocked or incomplete operations;
-- count remaining work from durable post-recovery state rather than stale pre-run objects;
-- return counts for state distribution, recovered operations, blocked operations and retryable
-  failures.
+- serializes process-wide advancement by `operationId`;
+- reloads after lost CAS;
+- rejects stale blocking;
+- uses typed retryable/permanent errors;
+- counts durable post-recovery remainder without double counting;
+- stops on relevant blocked or incomplete work;
+- prevents duplicate canonical effects and duplicate owner finalization under tested replay.
 
-Deterministic `operationId` is the primary concurrency guard. Owner uniqueness additionally
-prevents duplicate visible migration rows.
+## Integrated evidence
 
-## Error classification
+The merged implementation passed Room migration and fresh-v9 tests, deterministic vectors, exact provenance tests, typed finalizer and predecessor tests, startup/pre-mutation recovery tests, API 30/API 35 kill tests, unit tests, lint, APK builds, CodeQL, SBOM, and reference checks.
 
-Error durability is typed. It must not be inferred from free-form exception messages or regex
-matching.
+## Residual non-blocking hardening
 
-Retryable examples:
+- Room-backed concurrent execution with two coordinator instances;
+- stronger failed-rollback snapshot fixture;
+- removal of redundant `rollbackEventHash` API input;
+- direct vulnerable UPDATE-trigger replacement fixture.
 
-- temporary database unavailability;
-- temporary canonical read failure;
-- interrupted append without conflict;
-- interrupted local finalization;
-- bounded recovery exhaustion.
+These are visible future hardening items. They are not represented as completed and do not change the implemented decision.
 
-Permanent examples:
-
-- operation ID with different payload or evidence;
-- canonical event/provenance mismatch;
-- receipt mismatch;
-- finalization preparation mismatch;
-- foreign Instance;
-- unauthorized Body or stale epoch;
-- owner-state conflict;
-- missing or wrong predecessor receipt/type/version;
-- unsupported operation or payload schema;
-- forbidden legacy canonical input.
-
-## Kill-test matrix
-
-The candidate must prove on API 30 and API 35:
-
-1. before staging;
-2. after staging and before append;
-3. pending canonical before append;
-4. after append and before receipt persistence;
-5. after receipt persistence and before local finalization;
-6. during local finalization;
-7. after committed followed by replay;
-8. same event ID with conflicting content;
-9. same event ID with conflicting provenance or additional fields;
-10. stale writer epoch;
-11. repeated logical user action;
-12. exact-full-batch recovery without false remainder.
-
-Closure requires zero duplicate canonical events and zero duplicate visible owner rows.
-
-## Implementation sequence and scope
-
-The first functional PR is isolated to the common journal, its coordinator/commit-port
-contracts, Room migration and fresh-schema guards, recovery tests, and `COG-001` through
-`COG-004`.
-
-It must not migrate ORCH, AGENT, BOOT, RECALL, REST, ProjectVault, or F3.3 legacy removal.
-The amended test and CURRENT-document paths are authorized only because they directly prove or
-state the audited candidate corrections.
-
-Required evidence before merge:
-
-- Room migration and fresh-schema tests;
-- deterministic identity and vector tests;
-- exact-match, extra-field and conflict tests;
-- typed finalizer and predecessor tests;
-- startup and pre-mutation recovery tests;
-- kill-tests on API 30 and API 35;
-- architecture tests proving no duplicate authority or legacy input;
-- all required CI checks and SBOM green on the exact head SHA;
-- final changed-path and diff audit;
-- explicit orchestrator merge authorization.
-
-## Rejected alternatives
-
-### Sequential writes with failure marking
-
-Rejected because death can leave visible partial state without enough evidence to repair.
-
-### Use wall-clock IDs
-
-Rejected because replay after death would create a different logical operation.
-
-### Store executable recovery instructions
-
-Rejected because the journal must contain immutable data and typed closed finalizers, not code.
-
-### Run canonical audit inside the origin write transaction
-
-Rejected because external verification can block or fail while holding the local transaction and
-can conflate infrastructure failure with a durable negative outcome.
-
-### Accept provenance supersets
-
-Rejected because an exact receipt requires equality of the complete canonical envelope, not only
-selected fields.
-
-### Rewrite ProjectVault immediately
-
-Rejected because ProjectVault is the working protected reference and is outside the bounded first
-candidate.
-
-## Acceptance state
+## Current acceptance state
 
 ```text
-ADR_0002=ACCEPTED_DESIGN_WITH_AUDITED_AMENDMENT
-PR_149=DRAFT_VALIDATION_ONLY
-TRACKER_88=OPEN
-PRODUCTION_INTEGRATED=false
-MERGE_AUTHORIZED=false
+ADR_0002=ACCEPTED_AND_IMPLEMENTED_FOR_COG_001_004
+CURRENT_MAIN=ba6ffa4f9ddc9189ded47e231ad1f8bc962e612d
+PR_149=MERGED_BY_SQUASH
+AUDITED_SOURCE_HEAD=7bdbda2aa4b7568695ba8e98be54d506d42c99d5
+MEMORY_ORGAN_DATABASE=V9
+F1_A_AUTHORITY=PRESERVED
+PROJECT_VAULT=SEPARATE
+F3_2_COG_SCOPE=CLOSED
+F3_3=OPEN
+TRACKER_88=OPEN_FOR_REMAINING_OWNERS
 ```
