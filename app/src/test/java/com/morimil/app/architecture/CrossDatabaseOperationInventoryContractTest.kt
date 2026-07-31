@@ -2,29 +2,39 @@ package com.morimil.app.architecture
 
 import java.io.File
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CrossDatabaseOperationInventoryContractTest {
     @Test
-    fun inventoryIsCurrentVersionedAndStopGated() {
+    fun inventoryIsCurrentVersionedAndMergeGated() {
         val inventory = inventoryFile(repositoryRoot()).readText()
 
         assertTrue(inventory.startsWith("# Document status: CURRENT"))
-        assertTrue(inventory.contains("Inventory version: `1`"))
+        assertTrue(inventory.contains("Inventory version: `2`"))
         assertTrue(
             inventory.contains(
-                "Audited baseline: `main@612d91aef131f367140ffb87a60a19ef49adcbc8`"
+                "Current protected main: `main@7e98d3345d7cc3fbf1983babd35b61ff5c523208`"
             )
         )
-        assertTrue(inventory.contains("STOP S5 remains open"))
-        assertTrue(inventory.contains("#123 and #124"))
-        assertTrue(inventory.contains("This inventory does not authorize runtime changes."))
+        assertTrue(inventory.contains("`STOP_S5=CLOSED`"))
+        assertTrue(inventory.contains("draft PR `#149`"))
+        assertTrue(inventory.contains("`MERGE_AUTHORIZED=false`"))
+        assertTrue(inventory.contains("The candidate does not close #88"))
+        assertFalse(inventory.contains("STOP S5 remains open"))
         REQUIRED_CLASSIFICATIONS.forEach { classification ->
-            assertTrue("Missing inventory classification $classification", inventory.contains("`$classification`"))
+            assertTrue(
+                "Missing inventory classification $classification",
+                inventory.contains("`$classification`")
+            )
         }
         assertTrue(inventory.contains("Morimil is the continuous and free `Instance`"))
-        assertTrue(inventory.contains("The Guardian guides, witnesses, and protects without ownership"))
+        assertTrue(
+            inventory.contains(
+                "The Guardian guides, witnesses, and protects without ownership"
+            )
+        )
         assertTrue(inventory.contains("`instanceId != bodyId` remains mandatory"))
     }
 
@@ -59,8 +69,14 @@ class CrossDatabaseOperationInventoryContractTest {
             val source = File(root, path).readText()
             entryPoints.forEach { entryPoint ->
                 val functionPattern = Regex("\\bfun\\s+${Regex.escape(entryPoint)}\\s*\\(")
-                assertTrue("Missing audited entry point $entryPoint in $path", functionPattern.containsMatchIn(source))
-                assertTrue("Inventory is missing entry point $entryPoint", inventory.contains("`$entryPoint`"))
+                assertTrue(
+                    "Missing audited entry point $entryPoint in $path",
+                    functionPattern.containsMatchIn(source)
+                )
+                assertTrue(
+                    "Inventory is missing entry point $entryPoint",
+                    inventory.contains("`$entryPoint`")
+                )
             }
         }
     }
@@ -73,12 +89,21 @@ class CrossDatabaseOperationInventoryContractTest {
 
         EXPLICITLY_EXCLUDED_PATHS.forEach { path ->
             assertTrue("Missing excluded source $path", File(root, path).isFile)
-            assertTrue("Inventory must explain exclusion of $path", inventory.contains("`${File(path).nameWithoutExtension}`"))
-            assertTrue("Excluded path unexpectedly classified as an owner: $path", path !in EXPECTED_OWNER_PATHS)
+            assertTrue(
+                "Inventory must explain exclusion of $path",
+                inventory.contains("`${File(path).nameWithoutExtension}`")
+            )
+            assertTrue(
+                "Excluded path unexpectedly classified as an owner: $path",
+                path !in EXPECTED_OWNER_PATHS
+            )
         }
         SCANNER_EXCLUDED_PATHS.forEach { path ->
             assertTrue("Scanner exclusion no longer matches a candidate: $path", path in candidates)
-            assertTrue("Scanner exclusion must be explained in the inventory: $path", path in EXPLICITLY_EXCLUDED_PATHS)
+            assertTrue(
+                "Scanner exclusion must be explained in the inventory: $path",
+                path in EXPLICITLY_EXCLUDED_PATHS
+            )
         }
     }
 
@@ -92,7 +117,9 @@ class CrossDatabaseOperationInventoryContractTest {
                     (
                         MORIMIL_DATABASE_PATTERN.containsMatchIn(source) ||
                             MEMORY_REPOSITORY_PATTERN.containsMatchIn(source) ||
-                            PROJECT_VAULT_COMMIT_PORT_PATTERN.containsMatchIn(source)
+                            PROJECT_VAULT_COMMIT_PORT_PATTERN.containsMatchIn(source) ||
+                            CROSS_DATABASE_COORDINATOR_DEPENDENCY_PATTERN
+                                .containsMatchIn(source)
                         )
             }
             .map { file -> file.relativeTo(root).invariantSeparatorsPath }
@@ -124,6 +151,9 @@ class CrossDatabaseOperationInventoryContractTest {
         val MORIMIL_DATABASE_PATTERN = Regex("\\bMorimilDatabase\\b")
         val MEMORY_REPOSITORY_PATTERN = Regex("\\bMemoryRepository\\b")
         val PROJECT_VAULT_COMMIT_PORT_PATTERN = Regex("\\bProjectVaultCommitPort\\b")
+        val CROSS_DATABASE_COORDINATOR_DEPENDENCY_PATTERN = Regex(
+            "\\bprivate\\s+val\\s+protocol\\s*:\\s*CrossDatabaseOperationCoordinator\\b"
+        )
 
         val REQUIRED_CLASSIFICATIONS = setOf(
             "PROTECTED_REFERENCE",

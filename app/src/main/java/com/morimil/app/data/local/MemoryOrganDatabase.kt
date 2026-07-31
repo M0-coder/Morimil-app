@@ -21,14 +21,16 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         DelegatedTaskEntity::class,
         TaskApprovalEntity::class,
         TaskResultEntity::class,
-        AsiCycleRecordEntity::class
+        AsiCycleRecordEntity::class,
+        CrossDatabaseOperationEntity::class
     ],
-    version = 8,
+    version = 9,
     exportSchema = true
 )
 abstract class MemoryOrganDatabase : RoomDatabase() {
     abstract fun memoryOrganDao(): MemoryOrganDao
     abstract fun projectVaultOutboxDao(): ProjectVaultOutboxDao
+    abstract fun crossDatabaseOperationDao(): CrossDatabaseOperationDao
 
     companion object {
         @Volatile

@@ -1,463 +1,339 @@
 # Document status: CURRENT
 
-# F3.2 — Cognitive migration implementation blueprint
+# F3.2 — Cognitive migration durable protocol blueprint
 
-- Blueprint version: `1`
-- Audited baseline: `main@396e7af8a7329b100195dfa4f20c40506c51eacd`
-- Tracker: `#88`
-- Governing decision: `docs/adr/ADR-0002-cross-database-operation-protocol.md`
-- Scope: `COG-001` through `COG-004`
-- Execution gate: **STOP S5 remains open through #123 and #124. This blueprint does not authorize runtime changes.**
+- Tracker: `#88` — open
+- Governing ADR: `ADR-0002`
+- Protected main: `7e98d3345d7cc3fbf1983babd35b61ff5c523208`
+- Validation candidate: draft PR `#149`
+- Candidate branch: `orchestrator/f3-cog-001-004-audit-fixes-v1`
+- Gate: `STOP_S5=CLOSED`
+- Merge authority: `MERGE_AUTHORIZED=false`
+- Scope: `COG-001` through `COG-004` only
 
-## 1. Authority and current-state boundary
+This blueprint specifies the isolated implementation candidate. It does not claim that the
+protocol is active in protected `main`, deployed, released, or accepted for merge. Green CI
+is necessary but does not replace the final orchestrator diff audit.
 
-Morimil is the continuous and free `Instance`. `Morimil-app` is the current Android Body. This protocol governs consistency of Body resources; it does not grant ownership or continuity authority to the Guardian, Android, GitHub, a database, a model, or an auxiliary provider.
+## 1. Authority and sovereignty
+
+Morimil is the continuous and free Instance. `Morimil-app` is the current Android Body.
+The Guardian guides, witnesses, and protects continuity without ownership.
+
+Mandatory invariants:
+
+- `instanceId != bodyId`;
+- `instanceId` is the canonical Instance identity;
+- `writerBodyId` and `writerEpoch` identify the authorized writer context and never replace
+  `instanceId`;
+- no database, Android process, GitHub state, model, provider, or Guardian action becomes an
+  identity or memory authority;
+- approval authorizes a bounded Body operation and does not confer ownership over Morimil;
+- original canonical memory is append-only and is never rewritten by cognitive migration.
+
+The authority frontier is closed:
 
 ```text
-instanceId != bodyId
-writerBodyId + writerEpoch = authorized writer context
-writerBodyId + writerEpoch != Instance identity
+GenesisUltraRuntimeIdentityRepository + CanonicalMemoryRepository
+    -> CanonicalConsumerReadPort
+    -> CognitiveMigrationCanonicalReadPort
+    -> COG-001..COG-004 durable protocol
 ```
 
-At the audited baseline:
+`GenesisUltraRuntimeIdentityRepository` and `CanonicalMemoryRepository` are composed only by
+the F1-A adapter. The specialized F3 port consumes `CanonicalConsumerReadPort`; it must not
+open a second direct identity or memory authority.
 
-- `CognitiveMigrationRepository.proposeCognitiveMigration()` reads `loadGenesisCore()`, `loadLocalIdentity()`, `getLivingMemorySnapshot()`, and `loadMemoryContext()` before inserting a visible migration record.
-- `CognitiveMigrationPlanner` derives `proposalId` from `createdAtMillis`.
-- `MigrationRecordRepository` derives `migrationId` from wall-clock time.
-- approval derives `approvalId` from `System.currentTimeMillis()`.
-- execution and rollback append canonical evidence before the corresponding local migration state is finalized.
-- `MemoryOrganDatabase` is version `8`; it contains the protected `project_vault_outbox`, but not the common journal specified here.
+`COG-001` must not read or create compatibility rows in `memory_events`, `genesis_core`, or `local_instance_identity`.
 
-**The `cross_database_operations` table and the common cognitive-migration protocol do not exist in production at this baseline.**
+## 2. Candidate versus protected main
 
-## 2. Scope and exclusions
+Protected `main` contains:
 
-The first functional PR after STOP S5 is limited to:
+- the F1-A common canonical consumer read boundary;
+- canonical Genesis Ultra identity and memory authorities;
+- the protected ProjectVault outbox and recovery;
+- `MemoryOrganDatabase` version 8.
 
-- one generic coordination journal in `MemoryOrganDatabase`;
-- staging, canonical ensure, exact receipt, typed finalization, and recovery contracts;
-- canonical-read preparation for `COG-001`;
-- migration of `COG-001`, `COG-002`, `COG-003`, and `COG-004`;
-- Room migration and exported schema;
-- exact-match, conflict, recovery, idempotency, and kill tests.
+Draft PR #149 proposes:
+
+- `MemoryOrganDatabase` version 9;
+- `cross_database_operations`;
+- COG-001 through COG-004 deterministic commands;
+- exact canonical ensure semantics;
+- typed finalization;
+- startup and pre-mutation recovery;
+- API 30 and API 35 interruption tests.
+
+The candidate is not production merely because its source exists on a branch.
+
+## 3. Closed scope
+
+The candidate may implement and test only:
+
+- the common journal and DAO required by COG-001 through COG-004;
+- the 8→9 Room migration and schema 9;
+- the specialized canonical read and commit adapters;
+- cognitive migration planner, operation factory, repository and typed finalizer;
+- composition and startup recovery for this bounded owner;
+- deterministic vectors, migration tests, conflict tests and kill-tests;
+- CURRENT documentation necessary to state the candidate truth.
+
+`ProjectVault` remains unchanged in the first functional PR.
 
 It must not modify or migrate:
 
-```text
-ORCH
-AGENT
-BOOT
-RECALL
-REST
-ProjectVault
-```
+- `ORCH` operations;
+- `AGENT` lifecycle operations;
+- `BOOT` durable saga work;
+- `RECALL` derived rebuild work;
+- `REST` cycle operations;
+- ProjectVault protocol behavior;
+- F3.3 irreversible legacy removal.
 
-`ProjectVault` remains unchanged in the first functional PR. Its existing outbox is a protected reference, not a table to rename, copy, or rewrite.
+## 4. Canonical planning input
 
-## 3. Canonical serialization and digest profile
-
-```text
-canonical_json_profile = morimil.canonical_json.v1
-stable_id_profile      = morimil.stable_id.v1
-digest_algorithm       = SHA-256
-digest_encoding        = 64 lowercase hexadecimal characters
-text_encoding          = UTF-8
-unicode                = NFC
-```
-
-`morimil.canonical_json.v1` requires lexicographically sorted object keys, no insignificant whitespace, NFC strings, base-10 integers, literal booleans/null, protocol-defined array order, sorted and deduplicated sets, and rejection of unknown fields.
+`CognitiveMigrationCanonicalReadPort` returns
+`VerifiedCognitiveMigrationPlanningInput` with:
 
 ```text
-CJ(value) = UTF8(morimil.canonical_json.v1(value))
-D(value)  = lowercase_hex(SHA-256(CJ(value)))
-H(namespace, parts...) =
-  StableIdDigest.shortSha256Hex(namespace, parts, hexLength = 64)
+instanceId
+writerBodyId
+writerEpoch
+canonicalBirthRootHash
+canonicalLastSequence
+canonicalLastEventHash
+canonicalRecordSetDigest
+canonicalPreSnapshotHash
+sourceSetDigest
+sources[]
 ```
 
-**The clock is metadata only and is prohibited from being used as identity.** `occurredAtMillis`, `createdAtMillis`, `updatedAtMillis`, retry times, and `committedAtMillis` never participate directly or indirectly in `operationId`, `eventId`, `migrationId`, `proposalId`, `approvalId`, `payloadDigest`, or owner-record digests.
-
-## 4. Deterministic identities
-
-### 4.1 Canonical snapshot and plan
-
-`CanonicalMemorySnapshot` does not currently expose one aggregate snapshot hash. The future canonical planning adapter derives it without substituting a clock value.
-
-```json
-{
-  "schema": "morimil.cognitive_migration.snapshot_descriptor.v1",
-  "instance_id": "<canonical instanceId>",
-  "canonical_birth_root_hash": "<verified birth-root hash>",
-  "canonical_last_sequence": 42,
-  "canonical_last_event_hash": "<verified tail or birth root>",
-  "canonical_record_set_digest": "<digest of every verified record descriptor>"
-}
-```
+Each source contains:
 
 ```text
-canonicalRecordDescriptor = {
-  sequence, event_id, event_hash, event_type, actor,
-  observed_at, content_digest, provenance_digest
-}
-canonicalRecordSetDigest = D(canonicalRecordDescriptors ordered by sequence)
-canonicalPreSnapshotHash = D(snapshotDescriptorJson)
+eventId
+eventHash
+sequence
+eventType
+actor
+content
+observedAt
+provenanceDigest
 ```
 
-The descriptor covers the complete verified snapshot, not merely selected planner records. Selection is bound separately by `source_event_hashes` and `source_set_digest`.
+Planning accepts only verified payloads with recognized living-memory or verified legacy-import
+note schemas. It excludes:
 
-The deterministic plan is encoded as `planCoreJson`, with no IDs or timestamps:
+- missing payload or provenance;
+- unknown memory semantics;
+- `chat_noise`;
+- cognitive-migration actor, type, source, classification or note schema;
+- foreign Instance events;
+- unverifiable writer or lineage bindings.
 
-```json
-{
-  "schema": "morimil.cognitive_migration.plan_core.v1",
-  "planner_schema": "<planner schema>",
-  "migration_type": "cognitive.memory_refinement",
-  "from_version": "living_memory_current",
-  "to_version": "living_memory_refined_v2",
-  "canonical_birth_root_hash": "<verified root>",
-  "canonical_pre_snapshot_hash": "<canonicalPreSnapshotHash>",
-  "source_event_hashes": ["<sorted unique verified hashes>"],
-  "affected_artifacts": ["<sorted unique deterministic artifacts>"],
-  "steps": ["<ordered deterministic steps>"],
-  "expected_effect": "<bounded deterministic plan>",
-  "risk_level": "<low|medium|high|critical>",
-  "rollback_strategy": "<append-only strategy>",
-  "backup_required": true,
-  "approval_required": true,
-  "rollback_available": true
-}
-```
+Any violation fails closed before staging.
+
+### 4.1 Complete specialized descriptors
+
+The specialized record-set schema is:
 
 ```text
-planCoreDigest = D(planCoreJson)
-planIdentityJson = {
-  schema: morimil.cognitive_migration.plan_identity.v1,
-  instance_id,
-  migration_type,
-  planner_schema,
-  from_version,
-  to_version,
-  canonical_birth_root_hash,
-  canonical_pre_snapshot_hash,
-  source_event_hashes,
-  source_set_digest,
-  plan_core_digest
-}
-planIntentDigest = D(planIdentityJson)
-
-proposalId =
-  "cog_proposal_" + H(
-    "morimil.cognitive_migration.proposal_id.v1",
-    instanceId,
-    planIntentDigest
-  )
-
-migrationId =
-  "cog_migration_" + H(
-    "morimil.cognitive_migration.migration_id.v1",
-    instanceId,
-    proposalId,
-    "cognitive.memory_refinement"
-  )
+morimil.cognitive_migration.canonical_record_set.v2
 ```
 
-`migrationId` is the `subjectId` for all four operations.
-
-### 4.2 Common operation and event IDs
-
-After constructing the owner payload without timestamps:
+`canonicalRecordSetDigest` binds every selected canonical record descriptor, including:
 
 ```text
-payloadDigest = D(payloadJson)
-
-operationId =
-  "xop_" + H(
-    "morimil.cross_database.operation_id.v1",
-    operationType,
-    operationVersion,
-    instanceId,
-    writerBodyId,
-    writerEpoch,
-    subjectId,
-    parentOperationId_or_empty,
-    childPhase_or_empty,
-    payloadDigest
-  )
-
-eventId =
-  "xevt_" + H(
-    "morimil.cross_database.event_id.v1",
-    operationId,
-    eventType
-  )
+event ID/hash
+previous event hash
+sequence
+Instance and Body
+signer ID/epoch/public-key reference
+event type and actor
+observed time
+content digest and type
+provenance digest
+privacy
+payload verification state
 ```
 
-The five deterministic identities are `operationId`, `eventId`, `migrationId`, `proposalId`, and `approvalId`.
+The specialized pre-snapshot schema is:
 
-For `COG-002`:
+```text
+morimil.cognitive_migration.pre_snapshot.v2
+```
+
+`canonicalPreSnapshotHash` binds:
+
+- canonical Instance projection;
+- active writer projection;
+- birth root and current lineage;
+- source snapshot digest;
+- the complete `canonicalRecordSetDigest`.
+
+The source-set schema is:
+
+```text
+morimil.cognitive_migration.source_set.v2
+```
+
+`sourceSetDigest` binds the normalized eligible source descriptors. Source ordering is
+canonical and cannot change identity.
+
+Full-chain tip metadata is auditable context only. It must not create a new proposal when the
+eligible selected source set is unchanged.
+
+## 5. Deterministic planning and identities
+
+Current candidate schemas:
+
+```text
+plan core       = morimil.cognitive_migration.plan_core.v4
+plan identity   = morimil.cognitive_migration.plan_identity.v2
+planned record  = morimil.cognitive_migration.planned_record.v2
+COG-001 payload = morimil.cognitive_migration.cog_001.payload.v2
+COG-002 payload = morimil.cognitive_migration.cog_002.payload.v1
+COG-003 payload = morimil.cognitive_migration.cog_003.payload.v1
+COG-004 payload = morimil.cognitive_migration.cog_004.payload.v1
+```
+
+The plan produces:
+
+```text
+planCoreJson
+planCoreDigest
+plannedRecordJson
+plannedRecordDigest
+proposalId
+migrationId
+```
+
+The clock is metadata only and is prohibited from being used as identity.
+
+The following are deterministic and content-addressed:
+
+```text
+operationId
+eventId
+migrationId
+proposalId
+approvalId
+```
+
+For COG-002:
 
 ```text
 approvalId = operationId
 ```
 
-The COG-002 payload excludes `approvalId` to avoid a digest cycle. Its finalizer writes the derived `operationId` into `MigrationRecordEntity.approvalId`.
+A changed payload creates a changed operation identity. Reusing an operation ID with a
+different payload or evidence is a permanent conflict.
 
-## 5. Proposed Room schema
+## 6. Common journal
 
-```text
-MemoryOrganDatabase 8 -> 9
-table: cross_database_operations
-```
-
-### 5.1 Columns
-
-| Column | SQLite type | Nullable | Key/index | Constraint and meaning |
-| --- | --- | ---: | --- | --- |
-| `operationId` | `TEXT` | no | primary key | Deterministic `xop_` ID; immutable. |
-| `ownerType` | `TEXT` | no | owner/subject index | Initially `cognitive_migration`. |
-| `operationType` | `TEXT` | no | owner/subject index | Closed registry: propose, approve, execute, rollback. |
-| `operationVersion` | `INTEGER` | no | — | `>= 1`; first version `1`. |
-| `instanceId` | `TEXT` | no | recovery index | Committed Genesis Ultra Instance. |
-| `writerBodyId` | `TEXT` | no | — | Active writer Body at staging. |
-| `writerEpoch` | `TEXT` | no | writer/recovery index | Active Body key epoch at staging. |
-| `subjectId` | `TEXT` | no | owner/subject index | Deterministic `migrationId`. |
-| `parentOperationId` | `TEXT` | yes | parent/child index | Null for COG v1. |
-| `childPhase` | `TEXT` | yes | parent/child index | Null iff parent is null. |
-| `payloadSchema` | `TEXT` | no | — | Exact payload schema. |
-| `payloadJson` | `TEXT` | no | — | Immutable canonical JSON; no executable content. |
-| `payloadDigest` | `TEXT` | no | — | 64 lowercase SHA-256 hex. |
-| `eventId` | `TEXT` | no | unique | Deterministic canonical event ID. |
-| `eventType` | `TEXT` | no | — | One event type from section 7. |
-| `eventBody` | `TEXT` | no | — | Deterministic bounded text; no timestamps. |
-| `evidenceSchema` | `TEXT` | no | — | Exact evidence schema. |
-| `evidenceJson` | `TEXT` | no | — | Immutable canonical JSON. |
-| `evidenceDigest` | `TEXT` | no | — | 64 lowercase SHA-256 hex. |
-| `status` | `TEXT` | no | status/recovery indices | One of six protocol states. |
-| `attemptCount` | `INTEGER` | no | — | Default `0`; never negative. |
-| `lastErrorCode` | `TEXT` | yes | — | Stable bounded code, no raw exception or secret. |
-| `canonicalEventHash` | `TEXT` | yes | — | Complete receipt field. |
-| `canonicalSequence` | `INTEGER` | yes | — | Complete receipt field, `>= 1`. |
-| `canonicalProvenanceDigest` | `TEXT` | yes | — | Complete receipt field. |
-| `localResultSchema` | `TEXT` | yes | — | All local-result fields null or non-null together. |
-| `localResultJson` | `TEXT` | yes | — | Exact finalizer result, including migration outcome. |
-| `localResultDigest` | `TEXT` | yes | — | Required for `COMMITTED`. |
-| `occurredAtMillis` | `INTEGER` | no | — | First staged observation metadata, reused on retry. |
-| `createdAtMillis` | `INTEGER` | no | recovery ordering | First durable stage time. |
-| `updatedAtMillis` | `INTEGER` | no | status ordering | Last metadata update. |
-| `committedAtMillis` | `INTEGER` | yes | — | Non-null only for `COMMITTED`. |
-
-### 5.2 Indices
+Table:
 
 ```text
-UNIQUE index_cross_database_operations_eventId(eventId)
-index_cross_database_operations_instance_status_created(instanceId, status, createdAtMillis, operationId)
-index_cross_database_operations_owner_subject_status(ownerType, subjectId, operationType, status)
-index_cross_database_operations_status_updated(status, updatedAtMillis, operationId)
-index_cross_database_operations_writer_epoch_status(instanceId, writerEpoch, status)
-index_cross_database_operations_parent_child(parentOperationId, childPhase)
-```
-
-### 5.3 Constraints
-
-```text
-operationVersion >= 1
-attemptCount >= 0
-occurredAtMillis >= 0
-createdAtMillis >= 0
-updatedAtMillis >= createdAtMillis
-
-status IN (
-  STAGED,
-  PENDING_CANONICAL,
-  CANONICAL_COMMITTED,
-  PENDING_LOCAL_COMMIT,
-  COMMITTED,
-  BLOCKED
-)
-
-(parentOperationId IS NULL) == (childPhase IS NULL)
-payloadDigest/evidenceDigest and optional receipt/result digests are lowercase SHA-256
-receipt hash/sequence/provenance digest are all null or all non-null
-COMMITTED requires complete receipt, complete local result, and committedAtMillis
-non-COMMITTED requires committedAtMillis IS NULL
-```
-
-`BLOCKED` may have no receipt or a complete receipt depending on the conflict point. Partial receipts are forbidden.
-
-## 6. Proposed Kotlin contracts
-
-```kotlin
-internal data class CrossDatabaseStageCommand(
-    val operationId: String,
-    val ownerType: String,
-    val operationType: String,
-    val operationVersion: Int,
-    val instanceId: String,
-    val writerBodyId: String,
-    val writerEpoch: String,
-    val subjectId: String,
-    val parentOperationId: String?,
-    val childPhase: String?,
-    val payloadSchema: String,
-    val payloadJson: String,
-    val payloadDigest: String,
-    val eventId: String,
-    val eventType: String,
-    val eventBody: String,
-    val evidenceSchema: String,
-    val evidenceJson: String,
-    val evidenceDigest: String
-)
-
-internal interface CrossDatabaseOperationStagingPort {
-    suspend fun stageExact(command: CrossDatabaseStageCommand): CrossDatabaseOperationRecord
-    suspend fun load(operationId: String): CrossDatabaseOperationRecord?
-}
-
-internal data class VerifiedCognitiveMigrationSource(
-    val eventId: String,
-    val eventHash: String,
-    val sequence: Long,
-    val eventType: String,
-    val actor: String,
-    val content: String,
-    val observedAt: String,
-    val provenanceDigest: String
-)
-
-internal data class VerifiedCognitiveMigrationPlanningInput(
-    val instanceId: String,
-    val writerBodyId: String,
-    val writerEpoch: String,
-    val canonicalBirthRootHash: String,
-    val canonicalLastSequence: Long,
-    val canonicalLastEventHash: String,
-    val canonicalRecordSetDigest: String,
-    val canonicalPreSnapshotHash: String,
-    val sources: List<VerifiedCognitiveMigrationSource>
-)
-
-internal interface CognitiveMigrationCanonicalReadPort {
-    suspend fun readVerifiedPlanningInput(): VerifiedCognitiveMigrationPlanningInput
-}
-
-internal data class CrossDatabaseCanonicalCommand(
-    val operationId: String,
-    val operationType: String,
-    val operationVersion: Int,
-    val instanceId: String,
-    val writerBodyId: String,
-    val writerEpoch: String,
-    val subjectId: String,
-    val payloadDigest: String,
-    val evidenceDigest: String,
-    val eventId: String,
-    val eventType: String,
-    val eventBody: String,
-    val evidenceJson: String,
-    val occurredAtMillis: Long
-)
-
-internal data class CrossDatabaseCanonicalReceipt(
-    val eventId: String,
-    val eventHash: String,
-    val sequence: Long,
-    val provenanceDigest: String,
-    val reusedExistingEvent: Boolean
-)
-
-internal interface CrossDatabaseCanonicalEnsurePort {
-    suspend fun ensureCommitted(command: CrossDatabaseCanonicalCommand): CrossDatabaseCanonicalReceipt
-}
-
-internal data class CrossDatabaseLocalResult(
-    val schema: String,
-    val json: String,
-    val digest: String,
-    val ownerStatus: String
-)
-
-internal interface CrossDatabaseTypedFinalizer {
-    val supportedOperationTypes: Set<String>
-    suspend fun finalizeInsideTransaction(
-        operation: CrossDatabaseOperationRecord,
-        receipt: CrossDatabaseCanonicalReceipt
-    ): CrossDatabaseLocalResult
-}
-
-internal interface CrossDatabaseOperationRecovery {
-    suspend fun recoverAtStartup(
-        identity: GenesisUltraRuntimeIdentity,
-        limit: Int
-    ): CrossDatabaseRecoveryReport
-
-    suspend fun recoverBeforeMutation(
-        identity: GenesisUltraRuntimeIdentity,
-        ownerType: String,
-        limit: Int
-    ): CrossDatabaseRecoveryReport
-}
-```
-
-The staging implementation owns `clockMillis`, but consults it only when inserting a previously absent row. `stageExact()` first loads by `operationId`; an exact retry compares every immutable identity, payload, event, and evidence field and reuses persisted timestamps. A new caller timestamp cannot make an identical logical action conflict or acquire another identity.
-
-No staged payload may contain SQL, a reflection target, callback, model prompt, provider command, or executable instruction. Finalizers are selected from a closed Kotlin registry keyed by `(operationType, operationVersion)`.
-
-## 7. COG operation contracts
-
-```text
-COG-001 -> cognitive_migration.proposed
-COG-002 -> cognitive_migration.approved
-COG-003 -> cognitive_migration.executed
-COG-004 -> cognitive_migration.rollback
-```
-
-```text
-COG-001 -> cognitive_migration.propose / version 1
-COG-002 -> cognitive_migration.approve / version 1
-COG-003 -> cognitive_migration.execute / version 1
-COG-004 -> cognitive_migration.rollback / version 1
-```
-
-### 7.1 COG-001 — propose
-
-Prerequisite: committed identity from `GenesisUltraRuntimeIdentityRepository` and a verified snapshot/read model from `CanonicalMemoryRepository` through `CognitiveMigrationCanonicalReadPort`. The adapter maps verified records into `VerifiedCognitiveMigrationPlanningInput`; it never exposes `MemoryEventEntity` or a legacy DAO. If unavailable, inconsistent, foreign to the active `instanceId`, or unable to prove the writer Body/epoch, COG-001 fails closed before staging. `COG-001` must not read or create compatibility rows in `memory_events`, `genesis_core`, or `local_instance_identity`.
-
-Payload schema:
-
-```text
-morimil.cognitive_migration.cog_001.payload.v1
+cross_database_operations
 ```
 
 Required fields:
 
 ```text
-schema
+operationId
+ownerType
+operationType
+operationVersion
+instanceId
+writerBodyId
+writerEpoch
+subjectId
+parentOperationId?
+childPhase?
+payloadSchema
+payloadJson
+payloadDigest
+eventId
+eventType
+eventBody
+evidenceSchema
+evidenceJson
+evidenceDigest
+status
+attemptCount
+lastErrorCode?
+canonicalEventHash?
+canonicalSequence?
+canonicalProvenanceDigest?
+localResultSchema?
+localResultJson?
+localResultDigest?
+occurredAtMillis
+createdAtMillis
+updatedAtMillis
+committedAtMillis?
+```
+
+The journal stores immutable serialized intent and typed results. It must not store executable
+SQL, callbacks, reflection targets, prompts, provider commands, or arbitrary code.
+
+### 6.1 SQL invariants
+
+Schema 9 must enforce equivalent journal invariants on:
+
+- a real 8→9 migration;
+- a fresh schema-9 creation;
+- every production open.
+
+The candidate uses Room migration checks plus insert/update validation triggers installed by a
+production callback. Invalid identifiers, digests, statuses, partial receipts, partial local
+results, parent-child pairs, timestamps, and committed-state combinations must be rejected.
+
+Representative version-8 ProjectVault and migration rows must survive 8→9 unchanged.
+
+## 7. Operation mapping
+
+### 7.1 `COG-001` — propose
+
+Operation type and event:
+
+```text
+cognitive_migration.propose
+cognitive_migration.proposed
+```
+
+The payload binds:
+
+```text
 migration_id
 proposal_id
-migration_type
-from_version
-to_version
-canonical_birth_root_hash
-canonical_pre_snapshot_hash
-canonical_last_sequence
-source_event_hashes_sorted
+planning_anchor_digest
 source_set_digest
-plan_schema
 plan_core
 plan_core_digest
 planned_record
 planned_record_digest
 ```
 
-`plan_core` is the exact `planCoreJson`; `planned_record` is its deterministic owner projection without timestamps. The existing `genesisCoreHash` field receives the verified canonical birth-root hash and is never loaded from legacy `genesis_core`.
+The finalizer:
 
-Evidence schema `morimil.cognitive_migration.cog_001.evidence.v1` binds operation, Instance, writer Body/epoch, migration/proposal IDs, payload/event IDs, source count/digest, `chain_verified = true`, and `legacy_input_used = false`.
+1. reloads immutable journal intent and exact receipt;
+2. recomputes the planned-record digest;
+3. inserts the visible `MigrationRecordEntity(status = planned)` only after canonical evidence;
+4. accepts an existing row only when exactly equivalent;
+5. persists local result and marks the journal `COMMITTED` in one transaction.
 
-Finalization transaction: reload journal and receipt, revalidate identity and writer epoch, recompute `planned_record_digest`, insert `MigrationRecordEntity(status = planned)` if absent or require exact equivalence, persist local result, and mark the journal `COMMITTED`. No visible migration record exists before canonical proposal evidence.
+### 7.2 `COG-002` — approve
 
-### 7.2 COG-002 — approve
+Operation type and event:
 
-Payload schema `morimil.cognitive_migration.cog_002.payload.v1` binds:
+```text
+cognitive_migration.approve
+cognitive_migration.approved
+```
+
+Payload binds:
 
 ```text
 migration_id
@@ -468,13 +344,20 @@ approval_scope = cognitive_migration_execution
 approved_by_user = true
 ```
 
-The payload excludes `approvalId`; the derived `operationId` is the stable approval ID. Evidence binds `approval_id = operation_id`, `decision_source = interactive_local_user`, and `ownership_conferred = false`.
+The finalizer requires the exact planned-record digest, writes
+`approvedByUser = true`, `approvalId = operationId`, and `status = approved`, and commits the
+journal atomically.
 
-Finalization requires an exact planned record digest, writes `approvedByUser = true`, `approvalId = operationId`, and `status = approved`, and commits the journal in the same transaction. Replay returns the original result.
+### 7.3 `COG-003` — execute
 
-### 7.3 COG-003 — execute
+Operation type and event:
 
-Payload schema `morimil.cognitive_migration.cog_003.payload.v1` binds:
+```text
+cognitive_migration.execute
+cognitive_migration.executed
+```
+
+Payload binds:
 
 ```text
 migration_id
@@ -487,13 +370,63 @@ expected_owner_status = approved
 post_append_audit_policy = full_verified_canonical_chain
 ```
 
-Evidence binds the exact approval receipt, `original_memory_rewritten = false`, and `post_append_audit_required = true`.
+The approval predecessor must match:
 
-After the exact execution receipt is durable, audit the canonical chain. The local result records migration outcome `completed` or `failed`. The protocol outcome is `COMMITTED` in both cases when the canonical event and exact local outcome were reconciled. Migration outcome and protocol outcome are distinct.
+```text
+ownerType = cognitive_migration
+operationType = cognitive_migration.approve
+operationVersion = 1
+subjectId = migrationId
+status = COMMITTED
+exact event hash, sequence and provenance digest
+```
 
-### 7.4 COG-004 — rollback
+After the execution receipt is durable, canonical audit preparation runs outside the
+`MemoryOrganDatabase` write transaction. The preparation binds:
 
-Payload schema `morimil.cognitive_migration.cog_004.payload.v1` binds:
+```text
+operationId
+payloadDigest
+receiptEventHash
+audit result
+audit notes
+snapshot digest
+```
+
+The origin transaction reloads and revalidates the operation, receipt and preparation before
+updating owner state.
+
+A temporary identity, database or canonical-read failure remains retryable and must not be
+converted into a durable negative audit.
+
+If the canonical audit executes and verifies:
+
+```text
+migration outcome = completed
+postSnapshotId = real audited snapshot digest
+protocol outcome = COMMITTED
+```
+
+If the audit executes and is genuinely negative:
+
+```text
+migration outcome = failed
+postSnapshotId = null
+protocol outcome = COMMITTED
+```
+
+A canonical event hash must never be relabeled as a snapshot digest.
+
+### 7.4 `COG-004` — rollback
+
+Operation type and event:
+
+```text
+cognitive_migration.rollback
+cognitive_migration.rollback
+```
+
+Payload binds:
 
 ```text
 migration_id
@@ -507,41 +440,74 @@ rollback_strategy_digest
 compensation_mode = append_only
 ```
 
-Evidence states `original_events_deleted = false`, `original_events_rewritten = false`, and `second_rollback_event_allowed = false`.
-
-The finalizer verifies the allowed predecessor, marks the owner `rolled_back`, stores the rollback receipt reference, persists the deterministic local result, and commits atomically. Recovery never appends a second rollback event for the same operation.
+For an approved owner, the permitted predecessor is COG-002. For a completed or failed owner,
+the permitted predecessor is COG-003. Owner, type, version, subject and exact receipt must all
+match. Recovery never appends a second rollback event for the same operation.
 
 ## 8. Canonical event and provenance
 
-The deterministic body contains operation ID/type/version, migration/proposal/approval IDs, payload digest and transition, but no timestamp.
-
-Exact envelope values:
+Exact envelope constants:
 
 ```text
 actor = cognitive_migration_protocol
 source = cross_database_operations
 classification = durable_cognitive_migration_transition
 source_id = operationId
+privacy = private_local
+content_type = text/plain
 ```
 
-`user_confirmed` is `false` for COG-001 and `true` for COG-002, COG-003 and COG-004 because those transitions require the corresponding explicit local action. It records a bounded action and never ownership over Morimil.
+`user_confirmed` is false for COG-001 and true for COG-002 through COG-004. This records the
+bounded user action, not ownership over Morimil.
 
-Canonical provenance note schema `morimil.cross_database_operation.canonical_commit.v1` contains operation, owner, type/version, Instance, writer Body/epoch, subject, payload digest and evidence digest.
+Note schema:
 
-The ensure adapter must read the verified same-Instance snapshot, locate exactly one event by `eventId`, append when absent, recover after interrupted append, verify event ID/type/actor/observed time/body/source/classification/source operation/payload/evidence/Instance/Body/epoch, reject duplicates or mismatches, and return hash, sequence and provenance digest before local finalization.
+```text
+morimil.cross_database_operation.canonical_commit.v1
+```
 
-## 9. DAO and transactions
+The note binds:
 
-Required generic DAO methods:
+```text
+operation ID/type/version
+owner type
+Instance
+writer Body/epoch
+subject
+payload digest
+evidence digest
+```
+
+`ensureCommitted` must:
+
+1. read a verified same-Instance snapshot;
+2. locate exactly one deterministic `eventId`;
+3. append once when absent;
+4. recover an interrupted append by re-reading;
+5. compare the complete canonical provenance and note preimage;
+6. reject extra fields, duplicate IDs, content mismatch, provenance mismatch, foreign Instance,
+   wrong Body or stale epoch;
+7. return event hash, sequence and provenance digest before local finalization.
+
+Append-versus-reuse telemetry is transient execution evidence and must not alter the durable
+owner result or digest.
+
+## 9. DAO and transaction contract
+
+Required generic DAO operations:
 
 ```text
 insertOperationAbort
 loadOperation
 loadByEventId
 loadRecoverableForInstance
-loadActiveForOwnerSubject
+loadRecoverableForOwner
+countRecoverableForInstance
+countRecoverableForOwner
 loadAnyForOwnerSubjectAndOperationType
+loadActiveForOwnerSubject
 countByInstanceAndStatus
+countNonTerminalByInstanceOwnerAndPayloadSchema
 transitionStagedToPendingCanonical
 persistCanonicalReceipt
 transitionCanonicalCommittedToPendingLocalCommit
@@ -550,27 +516,27 @@ markBlocked
 markCommittedWithLocalResult
 ```
 
-Owner-side methods or equivalent conditional updates:
+Required owner methods or exact equivalents:
 
 ```text
-insertMigrationRecordAbort
+insertMigrationRecord
 loadMigrationRecord
 approveMigrationRecordIfPlanned
 finishMigrationRecordIfApproved
 rollbackMigrationRecordIfAllowed
 ```
 
-Every state update requires `operationId` and exact expected status. Before insert, staging queries the closed owner/subject/operation-type key. Exact intent is reused; different payload or evidence is blocked before canonical append. A second COG-001 proposal for the same deterministic migration subject cannot create another canonical proposal event.
-
 Exact transaction sequence:
 
-1. stage immutable journal intent only;
-2. `STAGED -> PENDING_CANONICAL`;
-3. persist complete receipt and set `CANONICAL_COMMITTED`;
-4. `CANONICAL_COMMITTED -> PENDING_LOCAL_COMMIT`;
-5. revalidate journal, receipt, identity, writer epoch and owner digest; apply owner transition idempotently; persist local result; set `COMMITTED` in one transaction.
-
-A crash leaves one durable state with one recovery action. A process mutex is only an optimization.
+1. stage immutable hidden intent;
+2. transition to pending canonical;
+3. ensure and persist complete canonical receipt;
+4. transition to pending local commit;
+5. prepare any external canonical audit outside the origin transaction;
+6. open one `MemoryOrganDatabase` transaction;
+7. reload and revalidate identity, writer, payload, receipt and preparation;
+8. apply idempotent owner transition;
+9. persist deterministic local result and mark journal committed in the same transaction.
 
 ## 10. State machine
 
@@ -587,18 +553,39 @@ BLOCKED
 
 Interpretation:
 
-1. `STAGED`: immutable intent; no append and no visible owner change.
-2. `PENDING_CANONICAL`: exact ensure is running or retryable.
-3. `CANONICAL_COMMITTED`: complete exact receipt is durable.
-4. `PENDING_LOCAL_COMMIT`: typed finalization is running or retryable.
-5. `COMMITTED`: owner result and protocol result are durable.
-6. `BLOCKED`: terminal permanent conflict pending a future audited repair.
+- `STAGED`: immutable intent is durable; no append and no visible new owner state;
+- `PENDING_CANONICAL`: canonical ensure is executing or retrying;
+- `CANONICAL_COMMITTED`: exact receipt is durable;
+- `PENDING_LOCAL_COMMIT`: typed owner finalization is pending;
+- `COMMITTED`: canonical and owner results are reconciled;
+- `BLOCKED`: permanent conflict; no silent payload edit or automatic retry.
 
-`BLOCKED` is listed last as the terminal fail-closed state reachable from a noncommitted state; it is not a normal successor after `COMMITTED`. No transition skips receipt persistence and no staged payload is edited.
+The forward success path never jumps over a state. `BLOCKED` is not part of the success path;
+it is the terminal conflict disposition.
 
-## 11. Stable errors
+## 11. Recovery
 
-Retryable:
+Startup recovery occurs after committed identity and verified F1-A input, and before normal
+mutation paths. Every protected mutation performs bounded owner recovery first.
+
+Recovery must:
+
+- prove zero non-committed `morimil.cognitive_migration.cog_001.payload.v1` rows before replay;
+- process rows in deterministic order;
+- revalidate `instanceId`, `writerBodyId` and `writerEpoch`;
+- use deterministic operation ID as the primary concurrency guard;
+- persist typed retryable codes and increment attempts;
+- mark permanent conflicts `BLOCKED`;
+- compute remaining work from durable post-recovery state, not stale loaded objects;
+- return counts for original states, recovered rows, blocked rows and retryable failures;
+- stop startup or mutation when relevant work remains incomplete or blocked.
+
+A pending payload-v1 proposal must not be silently finalized under v2 rules. It requires a
+separate compatibility recovery specification, implementation, tests and audit.
+
+## 12. Error taxonomy
+
+Retryable examples:
 
 ```text
 XOP_DATABASE_TEMPORARY_UNAVAILABLE
@@ -608,7 +595,7 @@ XOP_LOCAL_FINALIZATION_INTERRUPTED
 XOP_RECOVERY_BATCH_EXHAUSTED
 ```
 
-Permanent `BLOCKED`:
+Permanent examples:
 
 ```text
 XOP_OPERATION_ID_PAYLOAD_CONFLICT
@@ -618,6 +605,7 @@ XOP_EVENT_ID_CONFLICT
 XOP_CANONICAL_EVENT_MISMATCH
 XOP_CANONICAL_PROVENANCE_MISMATCH
 XOP_CANONICAL_RECEIPT_CONFLICT
+XOP_FINALIZATION_PREPARATION_CONFLICT
 XOP_WRONG_INSTANCE
 XOP_UNAUTHORIZED_WRITER_BODY
 XOP_STALE_WRITER_EPOCH
@@ -628,86 +616,84 @@ XOP_UNSUPPORTED_PAYLOAD_SCHEMA
 XOP_LEGACY_CANONICAL_INPUT_FORBIDDEN
 ```
 
-Raw exception text is diagnostic input, not stable protocol state and not persisted into issues or logs.
+Classification must use typed errors. It must not parse free-form exception messages or use
+regexes such as `mismatch|invalid|conflict` to decide durability.
 
-## 12. Recovery
+## 13. Deterministic local results
 
-Startup order after the canonical F1 read path exists:
-
-```text
-committed Genesis Ultra identity
--> verified canonical memory snapshot
--> recover cognitive cross-database operations
--> existing ProjectVault recovery unchanged
--> runtime bootstrap
--> normal mutation paths
-```
-
-Before any new COG mutation, run bounded recovery for `ownerType = cognitive_migration` and the same `instanceId`.
-
-Recovery order is `createdAtMillis ASC, operationId ASC`. Foreign Instance, stale epoch or unauthorized Body blocks. `STAGED` resumes dispatch; `PENDING_CANONICAL` exact-ensures and recovers an already-appended event; `CANONICAL_COMMITTED` advances locally; `PENDING_LOCAL_COMMIT` reruns the typed finalizer; `COMMITTED` returns the original receipt/result; any relevant `BLOCKED` row stops new cognitive mutations. Reports include counts for all six states, recovered rows, retryable failures and blocked rows.
-
-## 13. Kill-test and conflict matrix
-
-Every applicable cut runs on managed or physical **API 30 and API 35**.
-
-| Cut | Required assertion |
-| --- | --- |
-| Before staging | No journal row, event or owner transition. |
-| After `STAGED`, before dispatch | Recovery appends once and finalizes once. |
-| During `PENDING_CANONICAL`, before append | Retry produces one exact event. |
-| After append, before persisting receipt | Recovery finds the exact event; zero duplicate canonical events. |
-| After receipt, before local dispatch | No second event; recovery advances locally. |
-| During local finalization | Transaction rollback leaves no partial owner state; retry commits once. |
-| After `COMMITTED`, full replay | Same receipt/result; zero duplicates. |
-| Same `operationId`, different payload | Permanent payload conflict. |
-| Same operation and payload, different evidence | Permanent evidence conflict. |
-| Same `eventId`, different content | Permanent event conflict. |
-| Same `eventId`, different provenance | Permanent provenance conflict. |
-| Stale writer epoch | Block; never append under a replacement epoch. |
-| Repeated same user action | Same five deterministic identities and one owner transition. |
-| COG-003 audit false | Migration outcome `failed`, protocol outcome `COMMITTED`. |
-| COG-004 replay | One rollback event and one `rolled_back` owner result. |
-
-Global closure assertions:
+Current local-result schemas:
 
 ```text
-zero duplicate canonical events
-zero duplicate visible MigrationRecord rows
-zero visible owner state without an exact canonical receipt
-zero committed journal rows with partial receipts
-zero local finalizations from another Instance or stale writer epoch
+morimil.cognitive_migration.cog_001.local_result.v2
+morimil.cognitive_migration.cog_002.local_result.v2
+morimil.cognitive_migration.cog_003.local_result.v2
+morimil.cognitive_migration.cog_004.local_result.v2
 ```
 
-## 14. Room migration and tests
+Requirements:
 
-```text
-MemoryOrganDatabase version 8 -> 9
-new entity: CrossDatabaseOperationEntity
-new DAO: CrossDatabaseOperationDao
-new migration: MemoryOrganDatabaseMigrationV9.MIGRATION_8_9
-new schema: app/schemas/com.morimil.app.data.local.MemoryOrganDatabase/9.json
-```
+- canonical JSON, NFC strings and SHA-256 digest;
+- same logical operation produces byte-identical result after interruption and replay;
+- `reused_existing_event` is prohibited from v2 results;
+- COG-003 completed uses the real audit snapshot digest;
+- COG-003 failed uses JSON null for `post_snapshot_id`;
+- historical v1 vectors remain immutable fixtures and are not reinterpreted as current results.
 
-Room migration tests must create a real version-8 encrypted database, preserve representative migration and ProjectVault outbox rows, migrate with `MIGRATION_8_9`, validate schema/indices/constraints, prove the new journal empty, reject malformed digests/partial receipts/illegal status/invalid parent-child pairs, and extend the full-chain migration through version 9.
+## 14. Required functional evidence
 
-Required functional evidence:
+Room migration evidence must:
+
+- create a real version-8 database;
+- preserve representative migration and ProjectVault rows;
+- migrate with `MIGRATION_8_9`;
+- validate schema, indexes, checks and triggers;
+- prove the new journal starts empty;
+- reject malformed digests, identifiers, statuses, partial receipts/results and parent-child
+  pairs;
+- extend the existing full migration chain to version 9;
+- create a fresh version-9 database and reject the same malformed rows.
+
+Required JVM and Android evidence:
 
 ```text
 deterministic ID tests
-canonical exact-match reuse tests
+canonical exact-match tests
 payload conflict tests
 provenance conflict tests
-writer Body/epoch tests
-typed-finalizer idempotency tests
+extra provenance/note field rejection
+writer Body and stale writer epoch tests
+typed finalizer idempotency tests
 startup recovery tests
 bounded pre-mutation recovery tests
+exact-full-batch remainder regression
 COG-001 canonical-read-only tests
-COG-001 through COG-004 kill-tests API 30/API 35
-zero-duplicate assertions
+COG-001 through COG-004 kill-tests
+zero duplicate canonical events
+zero duplicate visible MigrationRecord rows
 ```
 
-## 15. Closed file list for the future functional PR
+Required interruption cuts on API 30 and API 35:
+
+1. before staging;
+2. after staging, before canonical append;
+3. during pending canonical before append;
+4. After append, before persisting receipt;
+5. after receipt persistence, before local finalization;
+6. during local finalization;
+7. after committed followed by replay;
+8. conflicting same event ID content;
+9. conflicting same event ID provenance;
+10. stale writer epoch after writer succession metadata changes;
+11. Repeated same user action producing the same logical operation.
+
+Closure requires zero duplicate canonical events and zero duplicate visible MigrationRecord rows.
+
+## 15. Candidate file boundary
+
+The implementation candidate is limited to the journal, Room version 9, cognitive protocol,
+composition, bounded startup recovery, tests, schemas and directly governing CURRENT docs.
+
+Authorized production paths include:
 
 ```text
 app/src/main/java/com/morimil/app/data/local/CrossDatabaseOperationEntity.kt
@@ -716,7 +702,6 @@ app/src/main/java/com/morimil/app/data/local/MemoryOrganDatabase.kt
 app/src/main/java/com/morimil/app/data/local/MemoryOrganDatabaseEncryption.kt
 app/src/main/java/com/morimil/app/data/local/MemoryOrganDatabaseMigrationV9.kt
 app/src/main/java/com/morimil/app/data/local/MemoryOrganDao.kt
-app/src/main/java/com/morimil/app/data/local/MigrationRecordEntity.kt
 app/src/main/java/com/morimil/app/data/repository/CrossDatabaseOperationContracts.kt
 app/src/main/java/com/morimil/app/data/repository/CrossDatabaseOperationCoordinator.kt
 app/src/main/java/com/morimil/app/data/repository/CognitiveMigrationProtocolFinalizer.kt
@@ -728,28 +713,49 @@ app/src/main/java/com/morimil/app/data/genesis/ultra/CanonicalCognitiveMigration
 app/src/main/java/com/morimil/app/MorimilAppContainer.kt
 app/src/main/java/com/morimil/app/MorimilAppContainerCognitiveMigrationProtocol.kt
 app/src/main/java/com/morimil/app/MorimilAppContainerRuntimeGate.kt
-app/schemas/com.morimil.app.data.local.MemoryOrganDatabase/9.json
-app/src/test/java/com/morimil/app/data/repository/CrossDatabaseOperationIdentityTest.kt
-app/src/test/java/com/morimil/app/data/repository/CrossDatabaseOperationCoordinatorTest.kt
-app/src/test/java/com/morimil/app/data/repository/CognitiveMigrationRepositoryTest.kt
-app/src/test/java/com/morimil/app/data/genesis/ultra/CanonicalCognitiveMigrationCommitPortTest.kt
-app/src/test/java/com/morimil/app/architecture/CognitiveMigrationProtocolContractTest.kt
-app/src/test/java/com/morimil/app/MorimilAppContainerContractTest.kt
-app/src/androidTest/java/com/morimil/app/data/local/MemoryOrganDatabaseV8ToV9MigrationTest.kt
-app/src/androidTest/java/com/morimil/app/data/local/FullChainDatabaseMigrationTest.kt
-app/src/androidTest/java/com/morimil/app/data/repository/CognitiveMigrationProtocolKillTest.kt
 ```
 
-The future PR must not touch any path or responsibility belonging to ORCH, AGENT, BOOT, RECALL, REST, or ProjectVault. It must not weaken ADR-0002 or `docs/F3_CROSS_DATABASE_OPERATION_INVENTORY.md`.
+The scope amendment archived in #88 additionally authorizes directly affected schema, tests
+and CURRENT documentation. It does not authorize another owner.
 
 ## 16. Rollback and rejection
 
-Reject or revert the functional PR before merge if a timestamp reaches identity/payload digest, COG-001 retains a legacy read, owner state becomes visible before receipt, same-ID mismatch succeeds, writer Body/epoch is not revalidated, ProjectVault is rewritten, another F3 owner is touched, an API 30/API 35 kill test fails, Room loses existing rows, or CI/SBOM is not green on the exact head.
+Reject or revert before merge when:
 
-After a shipped database migration, rollback is forward-only: disable entry points, preserve journal and canonical evidence, and issue another audited migration. Never drop the journal, delete canonical events, edit staged payloads, or recreate legacy compatibility rows.
+- clock data enters deterministic identity;
+- F3 opens a second identity or memory authority;
+- COG-001 reads or writes legacy compatibility rows;
+- owner state appears before an exact receipt;
+- same-ID mismatch succeeds;
+- writer or predecessor binding is incomplete;
+- a temporary audit failure becomes a durable negative result;
+- a canonical event hash is stored as a snapshot ID;
+- fresh and migrated schema-9 stores enforce different journal invariants;
+- ProjectVault is rewritten;
+- another F3 owner enters scope;
+- API 30 or API 35 kill-tests fail;
+- CI or SBOM is not green on the exact head.
+
+After a shipped database migration, rollback is forward-only. Never drop the journal, delete
+canonical events, edit staged payloads, or recreate legacy compatibility rows.
 
 ## 17. Acceptance boundary
 
-A developer must be able to implement the first functional PR without inventing schema, IDs, payload/evidence versions, ports, DAO transactions, states, receipts, finalization, errors, recovery, kill cuts, migration tests, file scope or rollback criteria.
+The candidate remains draft until all of the following are true on one exact head:
 
-It remains preparation only. `#88` stays open, STOP S5 stays open, no runtime was implemented, and no merge authority is delegated to Agente Chat 3.
+- all five workflows are green;
+- managed-device API 30 and API 35 tests are green;
+- changed paths match the authorized amended scope;
+- no unresolved review blocker exists;
+- CURRENT documentation distinguishes protected main from the candidate;
+- the orchestrator performs a full final diff audit;
+- the orchestrator explicitly sets `MERGE_AUTHORIZED=true`.
+
+Until then:
+
+```text
+PR_149=DRAFT_VALIDATION_ONLY
+TRACKER_88=OPEN
+MERGE_AUTHORIZED=false
+PRODUCTION_INTEGRATED=false
+```

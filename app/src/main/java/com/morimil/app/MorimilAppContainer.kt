@@ -210,8 +210,9 @@ class MorimilAppContainer(context: Context) {
     val cognitiveMigrationRepository: CognitiveMigrationRepository by lazy {
         CognitiveMigrationRepository(
             organDatabase = organDatabase,
-            memoryDatabase = memoryDatabase,
-            memoryRepository = memoryRepository
+            identityRepository = genesisUltraRuntimeIdentityRepository,
+            canonicalReadPort = canonicalCognitiveMigrationReadPort,
+            protocol = cognitiveMigrationProtocolCoordinator
         )
     }
 

@@ -7,23 +7,27 @@ import org.junit.Test
 
 class CognitiveMigrationImplementationBlueprintContractTest {
     @Test
-    fun blueprintIsCurrentTrackedAndStopGated() {
+    fun blueprintIsCurrentTrackedAndDraftMergeGated() {
         val blueprint = blueprintFile(repositoryRoot()).readText()
+        val currentHeader = blueprint.substringBefore("## 1. Authority and sovereignty")
+        val acceptance = blueprint.substringAfter("## 17. Acceptance boundary")
 
         assertTrue(blueprint.startsWith("# Document status: CURRENT"))
         assertTrue(blueprint.contains("ADR-0002"))
-        assertTrue(blueprint.contains("`#88`"))
-        assertTrue(blueprint.contains("STOP S5 remains open"))
-        assertTrue(blueprint.contains("This blueprint does not authorize runtime changes."))
+        assertTrue(currentHeader.contains("`#88` — open"))
+        assertTrue(currentHeader.contains("`STOP_S5=CLOSED`"))
+        assertTrue(currentHeader.contains("draft PR `#149`"))
+        assertTrue(currentHeader.contains("`MERGE_AUTHORIZED=false`"))
+        assertFalse(currentHeader.contains("MERGE_AUTHORIZED=true"))
         assertTrue(
             blueprint.contains(
-                "The `cross_database_operations` table and the common cognitive-migration " +
-                    "protocol do not exist in production at this baseline."
+                "It does not claim that the\n" +
+                    "protocol is active in protected `main`, deployed, released, or accepted for merge."
             )
         )
-        assertFalse(blueprint.contains("STOP S5 is closed"))
-        assertFalse(blueprint.contains("Status: implemented"))
-        assertFalse(blueprint.contains("protocol is active in production"))
+        assertFalse(blueprint.contains("STOP S5 remains open"))
+        assertTrue(acceptance.contains("explicitly sets `MERGE_AUTHORIZED=true`"))
+        assertTrue(acceptance.contains("MERGE_AUTHORIZED=false"))
     }
 
     @Test
@@ -91,23 +95,48 @@ class CognitiveMigrationImplementationBlueprintContractTest {
     }
 
     @Test
-    fun cog001UsesACompleteVerifiedCanonicalPlanningContract() {
+    fun cog001UsesCompleteVerifiedCanonicalPlanningDescriptors() {
         val blueprint = blueprintFile(repositoryRoot()).readText()
 
         listOf(
             "CognitiveMigrationCanonicalReadPort",
             "VerifiedCognitiveMigrationPlanningInput",
-            "morimil.cognitive_migration.snapshot_descriptor.v1",
+            "morimil.cognitive_migration.canonical_record_set.v2",
+            "morimil.cognitive_migration.pre_snapshot.v2",
+            "morimil.cognitive_migration.source_set.v2",
             "canonicalRecordSetDigest",
             "canonicalPreSnapshotHash",
             "planCoreJson",
             "planCoreDigest",
-            "plan_core_digest"
+            "plannedRecordDigest"
         ).forEach { requirement ->
             assertTrue("Missing COG-001 planning requirement $requirement", blueprint.contains(requirement))
         }
-        assertTrue(blueprint.contains("The descriptor covers the complete verified snapshot"))
+        assertTrue(blueprint.contains("content digest and type"))
         assertTrue(blueprint.contains("fails closed before staging"))
+    }
+
+    @Test
+    fun f3ConsumesOnlyTheF1ACommonAuthority() {
+        val blueprint = blueprintFile(repositoryRoot()).readText()
+        val identityAuthority = blueprint.indexOf(
+            "GenesisUltraRuntimeIdentityRepository + CanonicalMemoryRepository"
+        )
+        val commonBoundary = blueprint.indexOf("-> CanonicalConsumerReadPort", identityAuthority)
+        val specializedBoundary = blueprint.indexOf(
+            "-> CognitiveMigrationCanonicalReadPort",
+            commonBoundary
+        )
+
+        assertTrue(identityAuthority >= 0)
+        assertTrue(commonBoundary > identityAuthority)
+        assertTrue(specializedBoundary > commonBoundary)
+        assertTrue(
+            blueprint.contains(
+                "The specialized F3 port consumes `CanonicalConsumerReadPort`"
+            )
+        )
+        assertTrue(blueprint.contains("must not\nopen a second direct identity or memory authority"))
     }
 
     @Test
@@ -129,6 +158,25 @@ class CognitiveMigrationImplementationBlueprintContractTest {
         assertTrue(blueprint.contains("After append, before persisting receipt"))
         assertTrue(blueprint.contains("Repeated same user action"))
         assertTrue(blueprint.contains("stale writer epoch", ignoreCase = true))
+        assertTrue(blueprint.contains("fresh version-9 database"))
+    }
+
+    @Test
+    fun auditAndPredecessorSemanticsAreExplicit() {
+        val blueprint = blueprintFile(repositoryRoot()).readText()
+
+        assertTrue(blueprint.contains("canonical audit preparation runs outside", ignoreCase = true))
+        assertTrue(
+            blueprint.contains(
+                "temporary identity, database or canonical-read failure remains retryable",
+                ignoreCase = true
+            )
+        )
+        assertTrue(blueprint.contains("postSnapshotId = real audited snapshot digest"))
+        assertTrue(blueprint.contains("postSnapshotId = null"))
+        assertTrue(blueprint.contains("ownerType = cognitive_migration"))
+        assertTrue(blueprint.contains("operationVersion = 1"))
+        assertTrue(blueprint.contains("complete canonical provenance and note preimage"))
     }
 
     @Test
@@ -164,6 +212,24 @@ class CognitiveMigrationImplementationBlueprintContractTest {
             )
         )
         assertTrue(blueprint.contains("instanceId != bodyId"))
+    }
+
+    @Test
+    fun cp5SchemasAndHistoricalVectorsRemainSeparated() {
+        val blueprint = blueprintFile(repositoryRoot()).readText()
+
+        listOf(
+            "plan_core.v4",
+            "plan_identity.v2",
+            "planned_record.v2",
+            "cog_001.payload.v2",
+            "cog_001.local_result.v2",
+            "cog_004.local_result.v2"
+        ).forEach { schema ->
+            assertTrue("Missing current schema $schema", blueprint.contains(schema))
+        }
+        assertTrue(blueprint.contains("historical v1 vectors remain immutable fixtures"))
+        assertTrue(blueprint.contains("pending payload-v1 proposal must not be silently finalized"))
     }
 
     private fun blueprintFile(root: File): File {

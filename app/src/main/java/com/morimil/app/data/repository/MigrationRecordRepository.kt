@@ -4,6 +4,7 @@ import com.morimil.app.core.constitution.CoreConstitutionDecision
 import com.morimil.app.core.constitution.CoreConstitutionGuard
 import com.morimil.app.core.constitution.CoreConstitutionResult
 import com.morimil.app.core.identity.StableIdDigest
+import com.morimil.app.core.memory.CognitiveMigrationPlanner
 import com.morimil.app.data.local.MemoryOrganDatabase
 import com.morimil.app.data.local.MigrationRecordEntity
 import kotlinx.coroutines.flow.Flow
@@ -106,6 +107,10 @@ class MigrationRecordRepository(
         return organDao.loadMigrationRecord(migrationId)
     }
 
+    internal fun plannedRecordDigest(record: MigrationRecordEntity): String {
+        return plannedRecordDigestOf(record)
+    }
+
     suspend fun markMigrationCompleted(
         migrationId: String,
         postSnapshotId: String?,
@@ -147,12 +152,16 @@ class MigrationRecordRepository(
         rollbackEventHash: String?,
         notes: List<String>
     ) {
-        updateMigrationResult(
+        require(
+            rollbackEventHash == null ||
+                rollbackEventHash.matches(Regex("^evsha256:[a-f0-9]{64}$"))
+        ) { "Rollback event hash must remain in the canonical event namespace." }
+        val rows = organDao.rollbackMigrationRecordIfAllowed(
             migrationId = migrationId,
-            status = STATUS_ROLLED_BACK,
-            postSnapshotId = rollbackEventHash,
-            errors = notes
+            notesJson = JSONArray(notes).toString(),
+            updatedAtMillis = System.currentTimeMillis()
         )
+        require(rows > 0) { "Migration rollback update failed." }
     }
 
     private suspend fun updateMigrationResult(
@@ -238,6 +247,48 @@ class MigrationRecordRepository(
                 )
             )
             return "mig_${createdAtMillis}_$suffix"
+        }
+
+        internal fun plannedRecordJsonOf(record: MigrationRecordEntity): String {
+            return CrossDatabaseOperationIdentity.canonicalJson(
+                mapOf(
+                    "affected_artifacts" to jsonArrayValues(record.affectedArtifactsJson),
+                    "approval_id" to null,
+                    "approval_required" to record.approvalRequired,
+                    "approved_by_user" to false,
+                    "backup_required" to record.backupRequired,
+                    "chain_verified" to record.chainVerified,
+                    "created_by" to record.createdBy,
+                    "errors" to emptyList<String>(),
+                    "expected_effect" to record.expectedEffect,
+                    "from_version" to record.fromVersion,
+                    "genesis_core_hash" to record.genesisCoreHash,
+                    "instance_id" to record.instanceId,
+                    "migration_id" to record.migrationId,
+                    "migration_type" to record.migrationType,
+                    "post_snapshot_id" to null,
+                    "pre_snapshot_id" to record.preSnapshotId,
+                    "proposal_id" to record.proposalId,
+                    "risk_level" to record.riskLevel,
+                    "rollback_available" to record.rollbackAvailable,
+                    "rollback_strategy" to record.rollbackStrategy,
+                    "schema" to CognitiveMigrationPlanner.PLANNED_RECORD_SCHEMA,
+                    "status" to "planned",
+                    "steps" to jsonArrayValues(record.stepsJson),
+                    "to_version" to record.toVersion
+                )
+            )
+        }
+
+        internal fun plannedRecordDigestOf(record: MigrationRecordEntity): String {
+            return CrossDatabaseOperationIdentity.digestCanonicalJson(
+                plannedRecordJsonOf(record)
+            )
+        }
+
+        private fun jsonArrayValues(json: String): List<String> {
+            val array = JSONArray(json)
+            return (0 until array.length()).map { index -> array.getString(index) }
         }
     }
 }

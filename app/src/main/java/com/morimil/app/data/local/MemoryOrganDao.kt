@@ -154,6 +154,64 @@ interface MemoryOrganDao {
     @Query(
         """
         UPDATE migration_records
+        SET approvedByUser = 1,
+            approvalId = :approvalId,
+            status = 'approved',
+            updatedAtMillis = :updatedAtMillis
+        WHERE migrationId = :migrationId
+          AND status = 'planned'
+          AND approvedByUser = 0
+          AND approvalId IS NULL
+        """
+    )
+    suspend fun approveMigrationRecordIfPlanned(
+        migrationId: String,
+        approvalId: String,
+        updatedAtMillis: Long
+    ): Int
+
+    @Query(
+        """
+        UPDATE migration_records
+        SET status = :outcome,
+            postSnapshotId = :postSnapshotId,
+            errorsJson = :errorsJson,
+            updatedAtMillis = :updatedAtMillis
+        WHERE migrationId = :migrationId
+          AND status = 'approved'
+          AND approvedByUser = 1
+          AND approvalId = :approvalId
+          AND :outcome IN ('completed', 'failed')
+        """
+    )
+    suspend fun finishMigrationRecordIfApproved(
+        migrationId: String,
+        approvalId: String,
+        outcome: String,
+        postSnapshotId: String?,
+        errorsJson: String,
+        updatedAtMillis: Long
+    ): Int
+
+    @Query(
+        """
+        UPDATE migration_records
+        SET status = 'rolled_back',
+            errorsJson = :notesJson,
+            updatedAtMillis = :updatedAtMillis
+        WHERE migrationId = :migrationId
+          AND status IN ('approved', 'completed', 'failed')
+        """
+    )
+    suspend fun rollbackMigrationRecordIfAllowed(
+        migrationId: String,
+        notesJson: String,
+        updatedAtMillis: Long
+    ): Int
+
+    @Query(
+        """
+        UPDATE migration_records
         SET status = :status,
             postSnapshotId = :postSnapshotId,
             errorsJson = :errorsJson,

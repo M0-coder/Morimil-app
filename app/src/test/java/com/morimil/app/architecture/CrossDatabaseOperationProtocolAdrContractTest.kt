@@ -1,20 +1,23 @@
 package com.morimil.app.architecture
 
 import java.io.File
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CrossDatabaseOperationProtocolAdrContractTest {
     @Test
-    fun adrIsCurrentAcceptedAndStopGated() {
+    fun adrIsCurrentAcceptedAndDraftMergeGated() {
         val adr = adrFile(repositoryRoot()).readText()
 
         assertTrue(adr.startsWith("# Document status: CURRENT"))
         assertTrue(adr.contains("# ADR-0002 — Common recoverable cross-database operation protocol"))
-        assertTrue(adr.contains("- Status: Accepted design"))
-        assertTrue(adr.contains("STOP S5 remains open through #123 and #124"))
-        assertTrue(adr.contains("This ADR does not authorize runtime changes."))
+        assertTrue(adr.contains("Status: Accepted design with audited candidate amendment"))
+        assertTrue(adr.contains("`STOP_S5=CLOSED`"))
+        assertTrue(adr.contains("draft PR `#149`"))
+        assertTrue(adr.contains("`MERGE_AUTHORIZED=false`"))
         assertTrue(adr.contains("ProjectVault remains unchanged in the first F3.2 implementation."))
+        assertFalse(adr.contains("STOP S5 remains open"))
     }
 
     @Test
@@ -38,12 +41,28 @@ class CrossDatabaseOperationProtocolAdrContractTest {
         }
 
         assertTrue(adr.contains("Wall-clock time is metadata only."))
-        assertTrue(
-            adr.contains(
-                "MUST NOT participate in `operationId`, `eventId`, `proposalId`, " +
-                    "`migrationId`, or `approvalId`."
-            )
+        assertTrue(adr.contains("MUST NOT participate in `operationId`, `eventId`"))
+        assertTrue(adr.contains("`proposalId`, `migrationId`, or `approvalId`."))
+    }
+
+    @Test
+    fun authorityFrontierUsesTheF1AProjectionOnly() {
+        val adr = adrFile(repositoryRoot()).readText()
+        val identityAuthority = adr.indexOf(
+            "GenesisUltraRuntimeIdentityRepository + CanonicalMemoryRepository"
         )
+        val commonBoundary = adr.indexOf("-> CanonicalConsumerReadPort", identityAuthority)
+        val specializedBoundary = adr.indexOf(
+            "-> CognitiveMigrationCanonicalReadPort",
+            commonBoundary
+        )
+
+        assertTrue(identityAuthority >= 0)
+        assertTrue(commonBoundary > identityAuthority)
+        assertTrue(specializedBoundary > commonBoundary)
+        assertTrue(adr.contains("must not reopen a second direct identity or\nmemory authority"))
+        assertTrue(adr.contains("No compatibility write to `genesis_core`"))
+        assertTrue(adr.contains("Guardian approval authorizes only the bounded Body operation"))
     }
 
     @Test
@@ -83,30 +102,44 @@ class CrossDatabaseOperationProtocolAdrContractTest {
             "cognitive_migration.executed",
             "cognitive_migration.rollback"
         ).forEach { eventType ->
-            assertTrue("ADR is missing canonical event $eventType", adr.contains("`$eventType`"))
+            assertTrue("ADR is missing canonical event $eventType", adr.contains(eventType))
         }
 
-        assertTrue(adr.contains("verified canonical read port over `CanonicalMemoryRepository`"))
-        assertTrue(adr.contains("`GenesisUltraRuntimeIdentityRepository`"))
-        assertTrue(adr.contains("No compatibility write to `genesis_core`"))
-        assertTrue(adr.contains("Guardian approval authorizes only the bounded Body operation"))
+        assertTrue(adr.contains("prepare canonical audit outside the Room write transaction", ignoreCase = true))
+        assertTrue(adr.contains("real snapshot digest", ignoreCase = true))
+        assertTrue(adr.contains("no fabricated snapshot identifier", ignoreCase = true))
+        assertTrue(adr.contains("temporary audit failure remains retryable", ignoreCase = true))
+        assertTrue(adr.contains("complete canonical provenance and note preimage", ignoreCase = true))
+    }
+
+    @Test
+    fun recoveryUsesTypedErrorsAndDurableRemainder() {
+        val adr = adrFile(repositoryRoot()).readText()
+
+        assertTrue(adr.contains("Error durability is typed"))
+        assertTrue(adr.contains("must not be inferred from free-form exception messages"))
+        assertTrue(adr.contains("durable post-recovery state"))
+        assertTrue(adr.contains("zero non-committed COG-001 payload-v1 rows"))
+        assertTrue(adr.contains("exact-full-batch recovery without false remainder"))
     }
 
     @Test
     fun firstFunctionalPrRemainsNarrowAndKillTested() {
         val adr = adrFile(repositoryRoot()).readText()
+        val scope = adr.substringAfter("## Implementation sequence and scope")
 
-        assertTrue(
-            adr.contains(
-                "The first functional PR is isolated to the common journal, its " +
-                    "coordinator/commit-port contracts, Room migration, recovery tests, and " +
-                    "`COG-001` through `COG-004`."
-            )
-        )
+        assertTrue(scope.contains("The first functional PR is isolated to the common journal"))
+        assertTrue(scope.contains("coordinator/commit-port"))
+        assertTrue(scope.contains("Room migration and fresh-schema guards"))
+        assertTrue(scope.contains("`COG-001` through"))
+        assertTrue(scope.contains("`COG-004`"))
         assertTrue(adr.contains("API 30 and API 35"))
         assertTrue(adr.contains("zero duplicate canonical events"))
         assertTrue(adr.contains("zero duplicate visible owner rows"))
         assertTrue(adr.contains("all required CI checks and SBOM green on the exact head SHA"))
+        listOf("ORCH", "AGENT", "BOOT", "RECALL", "REST", "ProjectVault").forEach { excluded ->
+            assertTrue("ADR is missing excluded scope $excluded", adr.contains(excluded))
+        }
     }
 
     private fun adrFile(root: File): File {

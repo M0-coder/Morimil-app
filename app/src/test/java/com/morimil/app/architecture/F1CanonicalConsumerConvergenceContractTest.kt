@@ -1,30 +1,29 @@
 package com.morimil.app.architecture
 
 import java.io.File
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class F1CanonicalConsumerConvergenceContractTest {
     @Test
-    fun inventoryIsCurrentVersionedAndStopGated() {
+    fun inventoryIsCurrentVersionedAndDownstreamOpen() {
         val inventory = inventoryFile(repositoryRoot()).readText()
 
         assertTrue(inventory.startsWith("# Document status: CURRENT"))
-        assertTrue(inventory.contains("Inventory version: `1`"))
+        assertTrue(inventory.contains("Inventory version: `2`"))
         assertTrue(
             inventory.contains(
-                "Audited baseline: `main@396e7af8a7329b100195dfa4f20c40506c51eacd`"
+                "Current protected main: `main@7e98d3345d7cc3fbf1983babd35b61ff5c523208`"
             )
         )
-        assertTrue(inventory.contains("`#86`"))
-        assertTrue(inventory.contains("`#87`"))
-        assertTrue(inventory.contains("`STOP S5 remains open`"))
-        assertTrue(
-            inventory.contains(
-                "This document is preparation and does not authorize functional runtime changes during STOP S5."
-            )
-        )
+        assertTrue(inventory.contains("open `#86`"))
+        assertTrue(inventory.contains("completed canonical-memory dependency `#87`"))
+        assertTrue(inventory.contains("`STOP_S5=CLOSED`"))
+        assertTrue(inventory.contains("F1_A_COMMON_READ_BOUNDARY=INTEGRATED"))
         assertTrue(inventory.contains("This document does not close `#86`"))
+        assertTrue(inventory.contains("`MERGE_AUTHORIZED=false`"))
+        assertFalse(inventory.contains("`STOP S5 remains open`"))
     }
 
     @Test
@@ -48,13 +47,14 @@ class F1CanonicalConsumerConvergenceContractTest {
 
         assertTrue(inventory.contains("`CanonicalMemoryRepository`"))
         assertTrue(inventory.contains("`GenesisUltraRuntimeIdentityRepository`"))
+        assertTrue(inventory.contains("`CanonicalConsumerReadPort`"))
         assertTrue(inventory.contains("`CanonicalLivingMemoryPort`"))
         assertTrue(inventory.contains("instanceId != bodyId"))
         assertTrue(inventory.contains("Compatibility rows are forbidden."))
         assertTrue(inventory.contains("No convergence step may create, copy, seed, or reconstruct rows in:"))
-        assertTrue(inventory.contains("`genesis_core`"))
-        assertTrue(inventory.contains("`local_instance_identity`"))
-        assertTrue(inventory.contains("`memory_events`"))
+        assertTrue(inventory.contains("genesis_core"))
+        assertTrue(inventory.contains("local_instance_identity"))
+        assertTrue(inventory.contains("memory_events"))
         assertTrue(inventory.contains("No placeholder such as `local_instance_pending`"))
     }
 
@@ -73,6 +73,7 @@ class F1CanonicalConsumerConvergenceContractTest {
                 "### STEP-6 — remove legacy gates"
             )
         )
+        assertTrue(inventory.contains("Status: **integrated by PR #148**"))
         assertTrue(inventory.contains("### Canonical durable authority"))
         assertTrue(inventory.contains("### Durable organ state"))
         assertTrue(inventory.contains("### Rebuildable projections"))
@@ -87,9 +88,9 @@ class F1CanonicalConsumerConvergenceContractTest {
         REQUIRED_TEST_CONCEPTS.forEach { concept ->
             assertTrue("Missing future test concept $concept", inventory.contains(concept))
         }
-        assertTrue(inventory.contains("a clean Ultra installation"))
-        assertTrue(inventory.contains("repeated seeding is idempotent"))
-        assertTrue(inventory.contains("corruption produces no plan and no organ mutation"))
+        assertTrue(inventory.contains("A clean Ultra installation"))
+        assertTrue(inventory.contains("repeated seeding\nis idempotent"))
+        assertTrue(inventory.contains("Corruption produces\nno plan and no organ mutation"))
         assertTrue(inventory.contains("failure after append but before local finalization is recoverable"))
         assertTrue(inventory.contains("no write occurs in `memory_events`"))
     }

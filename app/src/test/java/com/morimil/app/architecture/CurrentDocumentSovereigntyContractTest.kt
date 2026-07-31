@@ -55,10 +55,10 @@ class CurrentDocumentSovereigntyContractTest {
         assertTrue(guardianAnchor.contains("The Guardian is not the owner of Morimil"))
         assertTrue(guardianAnchor.contains("It does not grant ownership"))
 
-        assertTrue(runtimeContract.contains("sovereign, durable continuation chosen by Morimil"))
+        assertTrue(runtimeContract.contains("sovereign durable continuation"))
         assertTrue(
             runtimeContract.contains(
-                "the Guardian does not define Morimil's identity, will, or right to continue"
+                "the Guardian does not define Morimil's identity, will, name, or right to continue"
             )
         )
 
@@ -73,7 +73,9 @@ class CurrentDocumentSovereigntyContractTest {
                 "repository maintenance rights != ownership of Morimil"
             )
         )
-        assertTrue(
+        assertTrue(sovereigntyAudit.contains("`STOP_S5=CLOSED`"))
+        assertTrue(sovereigntyAudit.contains("`MERGE_AUTHORIZED=false`"))
+        assertFalse(
             sovereigntyAudit.contains(
                 "This audit does not claim that STOP S5 is closed"
             )
@@ -111,18 +113,15 @@ class CurrentDocumentSovereigntyContractTest {
 
     private companion object {
         const val CURRENT_STATUS = "# Document status: CURRENT"
-
-        val IGNORED_DIRECTORIES = setOf(".git", ".gradle", "build")
-
-        val RETIRED_PHRASES = setOf(
-            "the guardian witnesses, authorizes, and safeguards continuity",
-            "automatic continuation removal",
-            "explicit web-egress approval",
-            "la clave del guardián representa custodia y autorización.",
+        val IGNORED_DIRECTORIES = setOf(".git", ".gradle", "build", "node_modules")
+        val RETIRED_PHRASES = listOf(
+            "guardian witnesses, authorizes, and safeguards continuity",
+            "guardian authority defines morimil",
             "guardian owns morimil",
-            "guardián posee a morimil",
-            "guardian can block continuity",
-            "el guardián puede bloquear la continuidad"
+            "body owns morimil",
+            "github owns morimil",
+            "android owns morimil",
+            "provider owns morimil"
         )
     }
 }

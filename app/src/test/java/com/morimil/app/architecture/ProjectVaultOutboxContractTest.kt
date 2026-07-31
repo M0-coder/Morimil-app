@@ -46,23 +46,35 @@ class ProjectVaultOutboxContractTest {
     }
 
     @Test
-    fun memoryOrganDatabaseRegistersAndExportsVersionEightOutbox() {
+    fun memoryOrganDatabasePreservesVersionEightOutboxThroughVersionNineJournal() {
         val database = productionFile(
             "com/morimil/app/data/local/MemoryOrganDatabase.kt"
         ).readText()
         val encryption = productionFile(
             "com/morimil/app/data/local/MemoryOrganDatabaseEncryption.kt"
         ).readText()
-        val schema = schemaFile(
+        val schemaEight = schemaFile(
             "com.morimil.app.data.local.MemoryOrganDatabase/8.json"
         ).readText()
+        val schemaNine = schemaFile(
+            "com.morimil.app.data.local.MemoryOrganDatabase/9.json"
+        ).readText()
+        val migrationSevenToEight =
+            encryption.indexOf("MemoryOrganDatabaseMigrationV8.MIGRATION_7_8")
+        val migrationEightToNine =
+            encryption.indexOf("MemoryOrganDatabaseMigrationV9.MIGRATION_8_9")
 
         assertTrue(database.contains("ProjectVaultOutboxEntity::class"))
-        assertTrue(database.contains("version = 8"))
+        assertTrue(database.contains("CrossDatabaseOperationEntity::class"))
+        assertTrue(database.contains("version = 9"))
         assertTrue(database.contains("projectVaultOutboxDao"))
-        assertTrue(encryption.contains("MemoryOrganDatabaseMigrationV8.MIGRATION_7_8"))
-        assertTrue(schema.contains("\"version\": 8"))
-        assertTrue(schema.contains("\"tableName\": \"project_vault_outbox\""))
+        assertTrue(migrationSevenToEight >= 0)
+        assertTrue(migrationEightToNine > migrationSevenToEight)
+        assertTrue(schemaEight.contains("\"version\": 8"))
+        assertTrue(schemaEight.contains("\"tableName\": \"project_vault_outbox\""))
+        assertTrue(schemaNine.contains("\"version\": 9"))
+        assertTrue(schemaNine.contains("\"tableName\": \"project_vault_outbox\""))
+        assertTrue(schemaNine.contains("\"tableName\": \"cross_database_operations\""))
     }
 
     private fun productionFile(relativePath: String): File {
