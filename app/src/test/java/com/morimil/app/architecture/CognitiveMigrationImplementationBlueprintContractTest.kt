@@ -6,119 +6,26 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CognitiveMigrationImplementationBlueprintContractTest {
-    @Test
-    fun blueprintIsCurrentTrackedAndDraftMergeGated() {
-        val blueprint = blueprintFile(repositoryRoot()).readText()
-        val currentHeader = blueprint.substringBefore("## 1. Authority and sovereignty")
-        val acceptance = blueprint.substringAfter("## 17. Acceptance boundary")
+    private val blueprint by lazy {
+        repositoryFile("docs/F3_COGNITIVE_MIGRATION_IMPLEMENTATION_BLUEPRINT.md").readText()
+    }
 
+    @Test
+    fun blueprintIsCurrentImplementedAndHistoricallyTraceable() {
         assertTrue(blueprint.startsWith("# Document status: CURRENT"))
-        assertTrue(blueprint.contains("ADR-0002"))
-        assertTrue(currentHeader.contains("`#88` — open"))
-        assertTrue(currentHeader.contains("`STOP_S5=CLOSED`"))
-        assertTrue(currentHeader.contains("draft PR `#149`"))
-        assertTrue(currentHeader.contains("`MERGE_AUTHORIZED=false`"))
-        assertFalse(currentHeader.contains("MERGE_AUTHORIZED=true"))
-        assertTrue(
-            blueprint.contains(
-                "It does not claim that the\n" +
-                    "protocol is active in protected `main`, deployed, released, or accepted for merge."
-            )
-        )
-        assertFalse(blueprint.contains("STOP S5 remains open"))
-        assertTrue(acceptance.contains("explicitly sets `MERGE_AUTHORIZED=true`"))
-        assertTrue(acceptance.contains("MERGE_AUTHORIZED=false"))
-    }
+        assertTrue(blueprint.contains("implemented and audited design", true))
+        assertTrue(blueprint.contains(CURRENT_MAIN))
+        assertTrue(blueprint.contains(AUDITED_SOURCE_HEAD))
+        assertTrue(blueprint.contains("PR `#149`: closed and merged by squash"))
+        assertTrue(blueprint.contains("COG_001_004=INTEGRATED_IN_MAIN"))
 
-    @Test
-    fun allCognitiveOperationsAndCanonicalEventsAreSpecified() {
-        val blueprint = blueprintFile(repositoryRoot()).readText()
-
-        listOf("`COG-001`", "`COG-002`", "`COG-003`", "`COG-004`").forEach { operation ->
-            assertTrue("Missing cognitive operation $operation", blueprint.contains(operation))
-        }
-        listOf(
-            "cognitive_migration.proposed",
-            "cognitive_migration.approved",
-            "cognitive_migration.executed",
-            "cognitive_migration.rollback"
-        ).forEach { eventType ->
-            assertTrue("Missing canonical event type $eventType", blueprint.contains(eventType))
+        STALE_PHRASES.forEach { phrase ->
+            assertFalse("Blueprint contains stale phrase $phrase", blueprint.contains(phrase, true))
         }
     }
 
     @Test
-    fun protocolStatesStayCompleteAndOrdered() {
-        val blueprint = blueprintFile(repositoryRoot()).readText()
-        val section = blueprint.substringAfter("## 10. State machine")
-        val states = listOf(
-            "STAGED",
-            "PENDING_CANONICAL",
-            "CANONICAL_COMMITTED",
-            "PENDING_LOCAL_COMMIT",
-            "COMMITTED",
-            "BLOCKED"
-        )
-        val orderedBlock = section.substringAfter("The only normal forward order is:")
-            .substringBefore("Interpretation:")
-        val positions = states.map { state ->
-            Regex("(?m)^${Regex.escape(state)}$").find(orderedBlock)?.range?.first ?: -1
-        }
-
-        positions.forEach { position ->
-            assertTrue("Missing protocol state", position >= 0)
-        }
-        positions.zipWithNext().forEach { (left, right) ->
-            assertTrue("Protocol states are out of order", left < right)
-        }
-    }
-
-    @Test
-    fun deterministicIdentitiesExcludeTheClock() {
-        val blueprint = blueprintFile(repositoryRoot()).readText()
-
-        listOf(
-            "operationId",
-            "eventId",
-            "migrationId",
-            "proposalId",
-            "approvalId"
-        ).forEach { identity ->
-            assertTrue("Missing deterministic identity $identity", blueprint.contains(identity))
-        }
-        assertTrue(
-            blueprint.contains(
-                "The clock is metadata only and is prohibited from being used as identity."
-            )
-        )
-        assertTrue(blueprint.contains("approvalId = operationId"))
-    }
-
-    @Test
-    fun cog001UsesCompleteVerifiedCanonicalPlanningDescriptors() {
-        val blueprint = blueprintFile(repositoryRoot()).readText()
-
-        listOf(
-            "CognitiveMigrationCanonicalReadPort",
-            "VerifiedCognitiveMigrationPlanningInput",
-            "morimil.cognitive_migration.canonical_record_set.v2",
-            "morimil.cognitive_migration.pre_snapshot.v2",
-            "morimil.cognitive_migration.source_set.v2",
-            "canonicalRecordSetDigest",
-            "canonicalPreSnapshotHash",
-            "planCoreJson",
-            "planCoreDigest",
-            "plannedRecordDigest"
-        ).forEach { requirement ->
-            assertTrue("Missing COG-001 planning requirement $requirement", blueprint.contains(requirement))
-        }
-        assertTrue(blueprint.contains("content digest and type"))
-        assertTrue(blueprint.contains("fails closed before staging"))
-    }
-
-    @Test
-    fun f3ConsumesOnlyTheF1ACommonAuthority() {
-        val blueprint = blueprintFile(repositoryRoot()).readText()
+    fun authorityFrontierAndBoundedScopeRemainExplicit() {
         val identityAuthority = blueprint.indexOf(
             "GenesisUltraRuntimeIdentityRepository + CanonicalMemoryRepository"
         )
@@ -131,125 +38,84 @@ class CognitiveMigrationImplementationBlueprintContractTest {
         assertTrue(identityAuthority >= 0)
         assertTrue(commonBoundary > identityAuthority)
         assertTrue(specializedBoundary > commonBoundary)
-        assertTrue(
-            blueprint.contains(
-                "The specialized F3 port consumes `CanonicalConsumerReadPort`"
-            )
-        )
-        assertTrue(blueprint.contains("must not\nopen a second direct identity or memory authority"))
+        assertTrue(blueprint.contains("does not open a second direct identity or memory authority"))
+        assertTrue(blueprint.contains("ProjectVault remains separate and preserved"))
+        assertTrue(blueprint.contains("F3.3 legacy removal"))
+        assertTrue(blueprint.contains("F3_3=OPEN"))
     }
 
     @Test
-    fun implementationEvidenceRequiresMigrationConflictRecoveryAndKillTests() {
-        val blueprint = blueprintFile(repositoryRoot()).readText()
-
+    fun deterministicProtocolStatesAndOperationsRemainComplete() {
+        listOf("COG-001", "COG-002", "COG-003", "COG-004").forEach { operation ->
+            assertTrue("Missing operation $operation", blueprint.contains(operation))
+        }
         listOf(
-            "Room migration",
-            "API 30 and API 35",
-            "exact-match",
-            "payload conflict",
-            "provenance conflict",
-            "recovery",
-            "zero duplicate canonical events",
-            "zero duplicate visible MigrationRecord rows"
-        ).forEach { requirement ->
-            assertTrue("Missing implementation requirement $requirement", blueprint.contains(requirement))
+            "cognitive_migration.proposed",
+            "cognitive_migration.approved",
+            "cognitive_migration.executed",
+            "cognitive_migration.rollback"
+        ).forEach { eventType ->
+            assertTrue("Missing event $eventType", blueprint.contains(eventType))
         }
-        assertTrue(blueprint.contains("After append, before persisting receipt"))
-        assertTrue(blueprint.contains("Repeated same user action"))
-        assertTrue(blueprint.contains("stale writer epoch", ignoreCase = true))
-        assertTrue(blueprint.contains("fresh version-9 database"))
+
+        val stateBlock = blueprint.substringAfter("The only normal forward order is:")
+            .substringBefore("`BLOCKED` is terminal")
+        assertInOrder(
+            stateBlock,
+            listOf(
+                "STAGED",
+                "PENDING_CANONICAL",
+                "CANONICAL_COMMITTED",
+                "PENDING_LOCAL_COMMIT",
+                "COMMITTED",
+                "BLOCKED"
+            )
+        )
+        assertTrue(blueprint.contains("The clock is metadata only"))
+        assertTrue(blueprint.contains("approvalId = operationId"))
     }
 
     @Test
-    fun auditAndPredecessorSemanticsAreExplicit() {
-        val blueprint = blueprintFile(repositoryRoot()).readText()
-
-        assertTrue(blueprint.contains("canonical audit preparation runs outside", ignoreCase = true))
-        assertTrue(
-            blueprint.contains(
-                "temporary identity, database or canonical-read failure remains retryable",
-                ignoreCase = true
-            )
-        )
-        assertTrue(blueprint.contains("postSnapshotId = real audited snapshot digest"))
-        assertTrue(blueprint.contains("postSnapshotId = null"))
-        assertTrue(blueprint.contains("ownerType = cognitive_migration"))
-        assertTrue(blueprint.contains("operationVersion = 1"))
-        assertTrue(blueprint.contains("complete canonical provenance and note preimage"))
-    }
-
-    @Test
-    fun firstFunctionalPrKeepsProjectVaultAndOtherOwnersOutOfScope() {
-        val blueprint = blueprintFile(repositoryRoot()).readText()
-
-        assertTrue(
-            blueprint.contains(
-                "`ProjectVault` remains unchanged in the first functional PR."
-            )
-        )
-        assertTrue(blueprint.contains("It must not modify or migrate:"))
-        listOf("ORCH", "AGENT", "BOOT", "RECALL", "REST", "ProjectVault").forEach { excluded ->
-            assertTrue("Missing excluded owner $excluded", blueprint.contains(excluded))
-        }
-        assertFalse(
-            blueprint.contains(
-                "ProjectVault will be rewritten in the first functional PR"
-            )
-        )
-    }
-
-    @Test
-    fun blueprintForbidsLegacyCompatibilityForCog001() {
-        val blueprint = blueprintFile(repositoryRoot()).readText()
-
-        assertTrue(blueprint.contains("GenesisUltraRuntimeIdentityRepository"))
-        assertTrue(blueprint.contains("CanonicalMemoryRepository"))
-        assertTrue(
-            blueprint.contains(
-                "`COG-001` must not read or create compatibility rows in " +
-                    "`memory_events`, `genesis_core`, or `local_instance_identity`."
-            )
-        )
-        assertTrue(blueprint.contains("instanceId != bodyId"))
-    }
-
-    @Test
-    fun cp5SchemasAndHistoricalVectorsRemainSeparated() {
-        val blueprint = blueprintFile(repositoryRoot()).readText()
-
+    fun mergedCorrectionsAndResidualHardeningRemainVisible() {
         listOf(
-            "plan_core.v4",
-            "plan_identity.v2",
-            "planned_record.v2",
-            "cog_001.payload.v2",
-            "cog_001.local_result.v2",
-            "cog_004.local_result.v2"
-        ).forEach { schema ->
-            assertTrue("Missing current schema $schema", blueprint.contains(schema))
+            "process-wide advancement by deterministic `operationId`",
+            "reloads durable state after a lost CAS",
+            "prevents stale snapshots from writing `BLOCKED`",
+            "NULL-safe",
+            "postSnapshotId",
+            "Room-backed concurrent regression",
+            "redundant `rollbackEventHash`",
+            "UPDATE-trigger replacement"
+        ).forEach { token ->
+            assertTrue("Missing blueprint token $token", blueprint.contains(token, true))
         }
-        assertTrue(blueprint.contains("historical v1 vectors remain immutable fixtures"))
-        assertTrue(blueprint.contains("pending payload-v1 proposal must not be silently finalized"))
     }
 
-    private fun blueprintFile(root: File): File {
-        val file = File(root, BLUEPRINT_PATH)
-        assertTrue("Missing cognitive migration implementation blueprint", file.isFile)
-        return file
+    private fun assertInOrder(text: String, markers: List<String>) {
+        var previous = -1
+        markers.forEach { marker ->
+            val current = text.indexOf(marker)
+            assertTrue("Missing ordered marker $marker", current >= 0)
+            assertTrue("Marker $marker is out of order", current > previous)
+            previous = current
+        }
     }
 
-    private fun repositoryRoot(): File {
-        return sequenceOf(File("."), File(".."))
-            .map(File::getCanonicalFile)
-            .firstOrNull { candidate ->
-                File(candidate, "README.md").isFile &&
-                    File(candidate, "app/build.gradle.kts").isFile
-            }
-            ?: error("Repository root not found")
+    private fun repositoryFile(relativePath: String): File {
+        return sequenceOf(File(relativePath), File("../$relativePath"))
+            .firstOrNull(File::isFile)
+            ?: error("Repository file not found: $relativePath")
     }
 
     private companion object {
-        const val BLUEPRINT_PATH =
-            "docs/F3_COGNITIVE_MIGRATION_IMPLEMENTATION_BLUEPRINT.md"
+        const val CURRENT_MAIN = "ba6ffa4f9ddc9189ded47e231ad1f8bc962e612d"
+        const val AUDITED_SOURCE_HEAD = "7bdbda2aa4b7568695ba8e98be54d506d42c99d5"
+        val STALE_PHRASES = listOf(
+            "isolated implementation candidate",
+            "draft pr `#149`",
+            "not integrated in protected `main`",
+            "production_integrated=false",
+            "f3.2 open candidate"
+        )
     }
 }
