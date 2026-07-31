@@ -1,6 +1,7 @@
+# Document status: CURRENT
+
 # Morimil Canvas runtime-recovery v1 provenance
 
-DOCUMENT_STATUS=CURRENT
 RECOVERY_ID=morimil.canvas.runtime-recovery.v1
 MORIMIL_COMMERCIAL_STATUS=NON_COMMERCIAL
 MORIMIL_APP_ROLE=CURRENT_PRIVATE_ANDROID_BODY
