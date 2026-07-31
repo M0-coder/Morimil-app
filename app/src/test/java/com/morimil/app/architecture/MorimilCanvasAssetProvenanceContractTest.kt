@@ -82,7 +82,12 @@ class MorimilCanvasAssetProvenanceContractTest {
             "successorBundleSha256",
             "successorBundleSizeBytes"
         )
-        assertEquals(expectedKeys, provenance.keySet())
+        val actualKeys = mutableSetOf<String>()
+        val keyIterator = provenance.keys()
+        while (keyIterator.hasNext()) {
+            actualKeys += keyIterator.next()
+        }
+        assertEquals(expectedKeys, actualKeys)
         assertEquals("morimil.canvas.runtime-recovery.provenance.v1", provenance.getString("schema"))
         assertEquals("morimil.canvas.runtime-recovery.v1", provenance.getString("recoveryId"))
         assertFalse(provenance.getBoolean("originalBundleRecovered"))
