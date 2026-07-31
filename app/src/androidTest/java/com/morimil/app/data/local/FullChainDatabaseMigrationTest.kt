@@ -165,7 +165,7 @@ class FullChainDatabaseMigrationTest {
             )
             database.execSQL(
                 UPDATE_RECEIPT,
-                arrayOf(EVENT_HASH, 8L, PROVENANCE_DIGEST, operationId(600))
+                arrayOf<Any?>(EVENT_HASH, 8L, PROVENANCE_DIGEST, operationId(600))
             )
             database.execSQL(
                 UPDATE_LOCAL_RESULT,
@@ -425,7 +425,7 @@ class FullChainDatabaseMigrationTest {
                 createdAtMillis, updatedAtMillis
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """.trimIndent(),
-            arrayOf(
+            arrayOf<Any?>(
                 migrationId, "instance-test", "sha256:" + "9".repeat(64), "proposal-test",
                 "test", "v1", "v2", "[]", "sha256:" + "8".repeat(64), 1, 1,
                 "[]", "preserve", "low", 1, 1, "approval-test", status,

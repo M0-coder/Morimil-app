@@ -110,7 +110,7 @@ class MemoryOrganDatabaseV8ToV9MigrationTest {
             )
             database.execSQL(
                 UPDATE_RECEIPT,
-                arrayOf(EVENT_HASH, 8L, PROVENANCE_DIGEST, operationId(100))
+                arrayOf<Any?>(EVENT_HASH, 8L, PROVENANCE_DIGEST, operationId(100))
             )
             database.execSQL(
                 UPDATE_LOCAL_RESULT,
