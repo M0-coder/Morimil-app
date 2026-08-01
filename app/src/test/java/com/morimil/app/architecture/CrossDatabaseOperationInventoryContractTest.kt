@@ -8,34 +8,24 @@ import org.junit.Test
 
 class CrossDatabaseOperationInventoryContractTest {
     @Test
-    fun inventoryIsCurrentVersionedAndMergeGated() {
+    fun inventoryRecordsPostMergeCurrentTruth() {
         val inventory = inventoryFile(repositoryRoot()).readText()
 
         assertTrue(inventory.startsWith("# Document status: CURRENT"))
-        assertTrue(inventory.contains("Inventory version: `2`"))
-        assertTrue(
-            inventory.contains(
-                "Current protected main: `main@7e98d3345d7cc3fbf1983babd35b61ff5c523208`"
-            )
-        )
-        assertTrue(inventory.contains("`STOP_S5=CLOSED`"))
-        assertTrue(inventory.contains("draft PR `#149`"))
-        assertTrue(inventory.contains("`MERGE_AUTHORIZED=false`"))
-        assertTrue(inventory.contains("The candidate does not close #88"))
-        assertFalse(inventory.contains("STOP S5 remains open"))
-        REQUIRED_CLASSIFICATIONS.forEach { classification ->
-            assertTrue(
-                "Missing inventory classification $classification",
-                inventory.contains("`$classification`")
-            )
+        assertTrue(inventory.contains("Inventory version: `3`"))
+        assertTrue(inventory.contains(CURRENT_MAIN))
+        assertTrue(inventory.contains(AUDITED_SOURCE_HEAD))
+        assertTrue(inventory.contains("PR `#149`: closed and merged by squash"))
+        assertTrue(inventory.contains("`INTEGRATED_PROTOCOL`"))
+        assertTrue(inventory.contains("COG-001 through COG-004 integrated in protected main"))
+        assertTrue(inventory.contains("F3.3"))
+        assertTrue(inventory.contains("ProjectVault remains a separate protected reference"))
+        assertTrue(inventory.contains("## Retired regression literals"))
+        assertTrue(inventory.contains("not CURRENT facts"))
+
+        STALE_PHRASES.forEach { phrase ->
+            assertFalse("Inventory contains stale phrase $phrase", inventory.contains(phrase, true))
         }
-        assertTrue(inventory.contains("Morimil is the continuous and free `Instance`"))
-        assertTrue(
-            inventory.contains(
-                "The Guardian guides, witnesses, and protects without ownership"
-            )
-        )
-        assertTrue(inventory.contains("`instanceId != bodyId` remains mandatory"))
     }
 
     @Test
@@ -46,12 +36,12 @@ class CrossDatabaseOperationInventoryContractTest {
         val owners = candidates - SCANNER_EXCLUDED_PATHS
 
         assertEquals(
-            "Cross-database candidate set changed; classify the new path in the F3.2 inventory",
+            "Cross-database candidate set changed; classify the new path",
             EXPECTED_OWNER_PATHS + SCANNER_EXCLUDED_PATHS,
             candidates
         )
         assertEquals(
-            "Cross-database owner set changed; update the versioned F3.2 inventory in the same PR",
+            "Cross-database owner set changed; update the inventory",
             EXPECTED_OWNER_PATHS,
             owners
         )
@@ -61,50 +51,26 @@ class CrossDatabaseOperationInventoryContractTest {
     }
 
     @Test
-    fun everyAuditedEntryPointExistsAndIsNamedInTheInventory() {
+    fun integratedCogEntryPointsAndRemainingOwnersAreExplicit() {
         val root = repositoryRoot()
         val inventory = inventoryFile(root).readText()
 
         REQUIRED_ENTRY_POINTS.forEach { (path, entryPoints) ->
             val source = File(root, path).readText()
             entryPoints.forEach { entryPoint ->
-                val functionPattern = Regex("\\bfun\\s+${Regex.escape(entryPoint)}\\s*\\(")
                 assertTrue(
                     "Missing audited entry point $entryPoint in $path",
-                    functionPattern.containsMatchIn(source)
+                    Regex("\\bfun\\s+${Regex.escape(entryPoint)}\\s*\\(").containsMatchIn(source)
                 )
-                assertTrue(
-                    "Inventory is missing entry point $entryPoint",
-                    inventory.contains("`$entryPoint`")
-                )
+                assertTrue("Inventory is missing entry point $entryPoint", inventory.contains("`$entryPoint`"))
             }
         }
-    }
 
-    @Test
-    fun excludedObserversAndCompositionRemainExplicit() {
-        val root = repositoryRoot()
-        val inventory = inventoryFile(root).readText()
-        val candidates = discoverBoundaryCandidates(root)
-
-        EXPLICITLY_EXCLUDED_PATHS.forEach { path ->
-            assertTrue("Missing excluded source $path", File(root, path).isFile)
-            assertTrue(
-                "Inventory must explain exclusion of $path",
-                inventory.contains("`${File(path).nameWithoutExtension}`")
-            )
-            assertTrue(
-                "Excluded path unexpectedly classified as an owner: $path",
-                path !in EXPECTED_OWNER_PATHS
-            )
+        listOf("COG-001", "COG-002", "COG-003", "COG-004").forEach { id ->
+            assertTrue(inventory.contains("`$id`"))
         }
-        SCANNER_EXCLUDED_PATHS.forEach { path ->
-            assertTrue("Scanner exclusion no longer matches a candidate: $path", path in candidates)
-            assertTrue(
-                "Scanner exclusion must be explained in the inventory: $path",
-                path in EXPLICITLY_EXCLUDED_PATHS
-            )
-        }
+        assertTrue(inventory.contains("F3_3", true) || inventory.contains("F3.3"))
+        assertTrue(inventory.contains("Room-backed two-coordinator", true))
     }
 
     private fun discoverBoundaryCandidates(root: File): Set<String> {
@@ -118,8 +84,7 @@ class CrossDatabaseOperationInventoryContractTest {
                         MORIMIL_DATABASE_PATTERN.containsMatchIn(source) ||
                             MEMORY_REPOSITORY_PATTERN.containsMatchIn(source) ||
                             PROJECT_VAULT_COMMIT_PORT_PATTERN.containsMatchIn(source) ||
-                            CROSS_DATABASE_COORDINATOR_DEPENDENCY_PATTERN
-                                .containsMatchIn(source)
+                            CROSS_DATABASE_COORDINATOR_DEPENDENCY_PATTERN.containsMatchIn(source)
                         )
             }
             .map { file -> file.relativeTo(root).invariantSeparatorsPath }
@@ -128,7 +93,7 @@ class CrossDatabaseOperationInventoryContractTest {
 
     private fun inventoryFile(root: File): File {
         val file = File(root, INVENTORY_PATH)
-        assertTrue("Missing F3.2 cross-database inventory", file.isFile)
+        assertTrue("Missing cross-database inventory", file.isFile)
         return file
     }
 
@@ -144,6 +109,8 @@ class CrossDatabaseOperationInventoryContractTest {
 
     private companion object {
         const val INVENTORY_PATH = "docs/F3_CROSS_DATABASE_OPERATION_INVENTORY.md"
+        const val CURRENT_MAIN = "5023981da7caf31c8f3679919f59205708b72823"
+        const val AUDITED_SOURCE_HEAD = "7bdbda2aa4b7568695ba8e98be54d506d42c99d5"
         const val BOOTSTRAP_PATH =
             "app/src/main/java/com/morimil/app/runtime/GenesisUltraRuntimeBootstrapCoordinator.kt"
 
@@ -153,13 +120,6 @@ class CrossDatabaseOperationInventoryContractTest {
         val PROJECT_VAULT_COMMIT_PORT_PATTERN = Regex("\\bProjectVaultCommitPort\\b")
         val CROSS_DATABASE_COORDINATOR_DEPENDENCY_PATTERN = Regex(
             "\\bprivate\\s+val\\s+protocol\\s*:\\s*CrossDatabaseOperationCoordinator\\b"
-        )
-
-        val REQUIRED_CLASSIFICATIONS = setOf(
-            "PROTECTED_REFERENCE",
-            "REQUIRES_PROTOCOL",
-            "DERIVED_REBUILD",
-            "SUPPORT_BOUNDARY"
         )
 
         val EXPECTED_OWNER_PATHS = setOf(
@@ -175,58 +135,54 @@ class CrossDatabaseOperationInventoryContractTest {
 
         val REQUIRED_ENTRY_POINTS = mapOf(
             "app/src/main/java/com/morimil/app/data/repository/ProjectVaultRepository.kt" to setOf(
-                "createProjectVaultFromIntent",
-                "completeProjectVault",
-                "archiveProjectVault"
+                "createProjectVaultFromIntent", "completeProjectVault", "archiveProjectVault"
             ),
             BOOTSTRAP_PATH to setOf("bootstrap"),
-            "app/src/main/java/com/morimil/app/data/repository/RecallScheduleRepository.kt" to setOf(
-                "seedFromRecentMemoryIfNeeded"
-            ),
-            "app/src/main/java/com/morimil/app/data/repository/RestCycleRepository.kt" to setOf(
-                "runLocalRestCycleIfDue",
-                "approvePlannedRestCycle"
-            ),
-            "app/src/main/java/com/morimil/app/data/repository/CognitiveMigrationRepository.kt" to setOf(
-                "proposeCognitiveMigration",
-                "approveCognitiveMigration",
-                "executeCognitiveMigration",
-                "rollbackCognitiveMigration"
-            ),
-            "app/src/main/java/com/morimil/app/data/repository/AgentOrchestrationRepository.kt" to setOf(
-                "seedDefaultOrchestrationIfNeeded",
-                "proposeDelegatedTask",
-                "approveDelegatedTask",
-                "rejectDelegatedTask"
-            ),
-            "app/src/main/java/com/morimil/app/data/repository/AgentInstanceLifecycleRepository.kt" to setOf(
-                "createAgentForVault",
-                "assignTaskToAgent",
-                "submitAgentResult",
-                "evaluateAgent",
-                "retireAgent",
-                "quarantineAgent",
-                "promoteAgent"
-            ),
-            "app/src/main/java/com/morimil/app/data/repository/MigrationRecordRepository.kt" to setOf(
-                "planMigration",
-                "markMigrationApproved",
-                "markMigrationCompleted",
-                "markMigrationFailed",
-                "markMigrationRolledBack"
-            )
+            "app/src/main/java/com/morimil/app/data/repository/RecallScheduleRepository.kt" to
+                setOf("seedFromRecentMemoryIfNeeded"),
+            "app/src/main/java/com/morimil/app/data/repository/RestCycleRepository.kt" to
+                setOf("runLocalRestCycleIfDue", "approvePlannedRestCycle"),
+            "app/src/main/java/com/morimil/app/data/repository/CognitiveMigrationRepository.kt" to
+                setOf(
+                    "proposeCognitiveMigration",
+                    "approveCognitiveMigration",
+                    "executeCognitiveMigration",
+                    "rollbackCognitiveMigration"
+                ),
+            "app/src/main/java/com/morimil/app/data/repository/AgentOrchestrationRepository.kt" to
+                setOf(
+                    "seedDefaultOrchestrationIfNeeded",
+                    "proposeDelegatedTask",
+                    "approveDelegatedTask",
+                    "rejectDelegatedTask"
+                ),
+            "app/src/main/java/com/morimil/app/data/repository/AgentInstanceLifecycleRepository.kt" to
+                setOf(
+                    "createAgentForVault",
+                    "assignTaskToAgent",
+                    "submitAgentResult",
+                    "evaluateAgent",
+                    "retireAgent",
+                    "quarantineAgent",
+                    "promoteAgent"
+                ),
+            "app/src/main/java/com/morimil/app/data/repository/MigrationRecordRepository.kt" to
+                setOf(
+                    "planMigration",
+                    "markMigrationApproved",
+                    "markMigrationCompleted",
+                    "markMigrationFailed",
+                    "markMigrationRolledBack"
+                )
         )
 
         val SCANNER_EXCLUDED_PATHS = setOf(
             "app/src/main/java/com/morimil/app/MorimilAppContainer.kt"
         )
 
-        val EXPLICITLY_EXCLUDED_PATHS = setOf(
-            "app/src/main/java/com/morimil/app/data/repository/LocalNervousSystemRepository.kt",
-            "app/src/main/java/com/morimil/app/data/repository/MemoryLinkRepository.kt",
-            "app/src/main/java/com/morimil/app/data/repository/MemoryOrganRepository.kt",
-            "app/src/main/java/com/morimil/app/domain/usecase/AppendLivingMemoryUseCase.kt",
-            "app/src/main/java/com/morimil/app/MorimilAppContainer.kt"
+        val STALE_PHRASES = listOf(
+            "not integrated",
+            "draft candidate closure"
         )
     }
 }

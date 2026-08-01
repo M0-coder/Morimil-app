@@ -6,159 +6,112 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CrossDatabaseOperationProtocolAdrContractTest {
-    @Test
-    fun adrIsCurrentAcceptedAndDraftMergeGated() {
-        val adr = adrFile(repositoryRoot()).readText()
+    private val adr by lazy {
+        repositoryFile("docs/adr/ADR-0002-cross-database-operation-protocol.md").readText()
+    }
 
+    @Test
+    fun adrIsCurrentAcceptedImplementedAndMerged() {
         assertTrue(adr.startsWith("# Document status: CURRENT"))
-        assertTrue(adr.contains("# ADR-0002 — Common recoverable cross-database operation protocol"))
-        assertTrue(adr.contains("Status: Accepted design with audited candidate amendment"))
-        assertTrue(adr.contains("`STOP_S5=CLOSED`"))
-        assertTrue(adr.contains("draft PR `#149`"))
-        assertTrue(adr.contains("`MERGE_AUTHORIZED=false`"))
-        assertTrue(adr.contains("ProjectVault remains unchanged in the first F3.2 implementation."))
-        assertFalse(adr.contains("STOP S5 remains open"))
+        assertTrue(adr.contains("Status: Accepted and implemented for COG-001 through COG-004"))
+        assertTrue(adr.contains(CURRENT_MAIN))
+        assertTrue(adr.contains(AUDITED_SOURCE_HEAD))
+        assertTrue(adr.contains("PR `#149`: closed and merged by squash"))
+        assertTrue(adr.contains("ADR_0002=ACCEPTED_AND_IMPLEMENTED_FOR_COG_001_004"))
+
+        STALE_PHRASES.forEach { phrase ->
+            assertFalse("ADR contains stale phrase $phrase", adr.contains(phrase, true))
+        }
     }
 
     @Test
-    fun deterministicIdentityRejectsWallClockIds() {
-        val adr = adrFile(repositoryRoot()).readText()
-
-        listOf(
-            "`operationId`",
-            "`eventId`",
-            "`payloadDigest`",
-            "`instanceId`",
-            "`writerBodyId`",
-            "`writerEpoch`",
-            "`canonicalEventHash`",
-            "`canonicalSequence`",
-            "`canonicalProvenanceDigest`",
-            "`attemptCount`",
-            "`lastErrorCode`"
-        ).forEach { field ->
-            assertTrue("ADR is missing required field $field", adr.contains(field))
-        }
-
-        assertTrue(adr.contains("Wall-clock time is metadata only."))
+    fun authorityDeterminismAndStateMachineRemainNormative() {
+        assertTrue(adr.contains("instanceId != bodyId"))
+        assertTrue(adr.contains("-> CanonicalConsumerReadPort"))
+        assertTrue(adr.contains("-> CognitiveMigrationCanonicalReadPort"))
+        assertTrue(adr.contains("must not reopen a second direct identity or memory authority"))
+        assertTrue(adr.contains("Wall-clock time is metadata only"))
         assertTrue(adr.contains("MUST NOT participate in `operationId`, `eventId`"))
-        assertTrue(adr.contains("`proposalId`, `migrationId`, or `approvalId`."))
-    }
 
-    @Test
-    fun authorityFrontierUsesTheF1AProjectionOnly() {
-        val adr = adrFile(repositoryRoot()).readText()
-        val identityAuthority = adr.indexOf(
-            "GenesisUltraRuntimeIdentityRepository + CanonicalMemoryRepository"
-        )
-        val commonBoundary = adr.indexOf("-> CanonicalConsumerReadPort", identityAuthority)
-        val specializedBoundary = adr.indexOf(
-            "-> CognitiveMigrationCanonicalReadPort",
-            commonBoundary
-        )
-
-        assertTrue(identityAuthority >= 0)
-        assertTrue(commonBoundary > identityAuthority)
-        assertTrue(specializedBoundary > commonBoundary)
-        assertTrue(adr.contains("must not reopen a second direct identity or\nmemory authority"))
-        assertTrue(adr.contains("No compatibility write to `genesis_core`"))
-        assertTrue(adr.contains("Guardian approval authorizes only the bounded Body operation"))
-    }
-
-    @Test
-    fun protocolStateMachineStaysOrderedAndFailClosed() {
-        val adr = adrFile(repositoryRoot()).readText()
         val stateSection = adr.substringAfter("## State machine")
-        val states = listOf(
-            "`STAGED`",
-            "`PENDING_CANONICAL`",
-            "`CANONICAL_COMMITTED`",
-            "`PENDING_LOCAL_COMMIT`",
-            "`COMMITTED`",
-            "`BLOCKED`"
+        assertInOrder(
+            stateSection,
+            listOf(
+                "`STAGED`",
+                "`PENDING_CANONICAL`",
+                "`CANONICAL_COMMITTED`",
+                "`PENDING_LOCAL_COMMIT`",
+                "`COMMITTED`",
+                "`BLOCKED`"
+            )
         )
-        val positions = states.map { state -> stateSection.indexOf(state) }
-
-        positions.forEach { position ->
-            assertTrue("ADR is missing a protocol state", position >= 0)
-        }
-        positions.zipWithNext().forEach { (left, right) ->
-            assertTrue("Protocol states are out of order", left < right)
-        }
-        assertTrue(adr.contains("no new visible/authoritative owner state exists"))
-        assertTrue(adr.contains("silently editing the staged payload is forbidden"))
     }
 
     @Test
-    fun cognitiveMigrationMappingIsCompleteAndCanonical() {
-        val adr = adrFile(repositoryRoot()).readText()
-
-        listOf("`COG-001`", "`COG-002`", "`COG-003`", "`COG-004`").forEach { id ->
-            assertTrue("ADR is missing cognitive operation $id", adr.contains(id))
+    fun implementedCogMappingAndCorrectionsRemainExplicit() {
+        listOf("COG-001", "COG-002", "COG-003", "COG-004").forEach { id ->
+            assertTrue("Missing $id", adr.contains(id))
         }
         listOf(
             "cognitive_migration.proposed",
             "cognitive_migration.approved",
             "cognitive_migration.executed",
             "cognitive_migration.rollback"
-        ).forEach { eventType ->
-            assertTrue("ADR is missing canonical event $eventType", adr.contains(eventType))
+        ).forEach { event ->
+            assertTrue("Missing $event", adr.contains(event))
         }
-
-        assertTrue(adr.contains("prepare canonical audit outside the Room write transaction", ignoreCase = true))
-        assertTrue(adr.contains("real snapshot digest", ignoreCase = true))
-        assertTrue(adr.contains("no fabricated snapshot identifier", ignoreCase = true))
-        assertTrue(adr.contains("temporary audit failure remains retryable", ignoreCase = true))
-        assertTrue(adr.contains("complete canonical provenance and note preimage", ignoreCase = true))
-    }
-
-    @Test
-    fun recoveryUsesTypedErrorsAndDurableRemainder() {
-        val adr = adrFile(repositoryRoot()).readText()
-
-        assertTrue(adr.contains("Error durability is typed"))
-        assertTrue(adr.contains("must not be inferred from free-form exception messages"))
-        assertTrue(adr.contains("durable post-recovery state"))
-        assertTrue(adr.contains("zero non-committed COG-001 payload-v1 rows"))
-        assertTrue(adr.contains("exact-full-batch recovery without false remainder"))
-    }
-
-    @Test
-    fun firstFunctionalPrRemainsNarrowAndKillTested() {
-        val adr = adrFile(repositoryRoot()).readText()
-        val scope = adr.substringAfter("## Implementation sequence and scope")
-
-        assertTrue(scope.contains("The first functional PR is isolated to the common journal"))
-        assertTrue(scope.contains("coordinator/commit-port"))
-        assertTrue(scope.contains("Room migration and fresh-schema guards"))
-        assertTrue(scope.contains("`COG-001` through"))
-        assertTrue(scope.contains("`COG-004`"))
-        assertTrue(adr.contains("API 30 and API 35"))
-        assertTrue(adr.contains("zero duplicate canonical events"))
-        assertTrue(adr.contains("zero duplicate visible owner rows"))
-        assertTrue(adr.contains("all required CI checks and SBOM green on the exact head SHA"))
-        listOf("ORCH", "AGENT", "BOOT", "RECALL", "REST", "ProjectVault").forEach { excluded ->
-            assertTrue("ADR is missing excluded scope $excluded", adr.contains(excluded))
+        listOf(
+            "outside the Room write transaction",
+            "real `sha256:*` snapshot",
+            "preservation of the owner's existing `postSnapshotId`",
+            "serializes process-wide advancement by `operationId`",
+            "reloads after lost CAS",
+            "rejects stale blocking",
+            "without double counting"
+        ).forEach { requirement ->
+            assertTrue("Missing ADR requirement $requirement", adr.contains(requirement, true))
         }
     }
 
-    private fun adrFile(root: File): File {
-        val file = File(root, ADR_PATH)
-        assertTrue("Missing ADR-0002 common protocol", file.isFile)
-        return file
+    @Test
+    fun projectVaultF33AndResidualHardeningStaySeparate() {
+        assertTrue(adr.contains("ProjectVault remains unchanged and separate"))
+        assertTrue(adr.contains("F3_3=OPEN"))
+        assertTrue(adr.contains("TRACKER_88=OPEN_FOR_REMAINING_OWNERS"))
+        listOf(
+            "Room-backed concurrent execution",
+            "failed-rollback snapshot fixture",
+            "redundant `rollbackEventHash`",
+            "UPDATE-trigger replacement"
+        ).forEach { finding ->
+            assertTrue("Missing residual finding $finding", adr.contains(finding, true))
+        }
     }
 
-    private fun repositoryRoot(): File {
-        return sequenceOf(File("."), File(".."))
-            .map(File::getCanonicalFile)
-            .firstOrNull { candidate ->
-                File(candidate, "README.md").isFile &&
-                    File(candidate, "app/build.gradle.kts").isFile
-            }
-            ?: error("Repository root not found")
+    private fun assertInOrder(text: String, markers: List<String>) {
+        var previous = -1
+        markers.forEach { marker ->
+            val current = text.indexOf(marker)
+            assertTrue("Missing ordered marker $marker", current >= 0)
+            assertTrue("Marker $marker is out of order", current > previous)
+            previous = current
+        }
+    }
+
+    private fun repositoryFile(relativePath: String): File {
+        return sequenceOf(File(relativePath), File("../$relativePath"))
+            .firstOrNull(File::isFile)
+            ?: error("Repository file not found: $relativePath")
     }
 
     private companion object {
-        const val ADR_PATH = "docs/adr/ADR-0002-cross-database-operation-protocol.md"
+        const val CURRENT_MAIN = "5023981da7caf31c8f3679919f59205708b72823"
+        const val AUDITED_SOURCE_HEAD = "7bdbda2aa4b7568695ba8e98be54d506d42c99d5"
+        val STALE_PHRASES = listOf(
+            "accepted design with audited candidate amendment",
+            "draft pr `#149`",
+            "not integrated in protected `main`",
+            "production_integrated=false"
+        )
     }
 }

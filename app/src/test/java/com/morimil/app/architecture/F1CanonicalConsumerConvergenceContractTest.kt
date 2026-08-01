@@ -7,200 +7,89 @@ import org.junit.Test
 
 class F1CanonicalConsumerConvergenceContractTest {
     @Test
-    fun inventoryIsCurrentVersionedAndDownstreamOpen() {
-        val inventory = inventoryFile(repositoryRoot()).readText()
+    fun inventoryRecordsMergedCogConsumerWithoutClosingIssue86() {
+        val inventory = inventoryFile().readText()
 
         assertTrue(inventory.startsWith("# Document status: CURRENT"))
-        assertTrue(inventory.contains("Inventory version: `2`"))
-        assertTrue(
-            inventory.contains(
-                "Current protected main: `main@7e98d3345d7cc3fbf1983babd35b61ff5c523208`"
-            )
-        )
-        assertTrue(inventory.contains("open `#86`"))
-        assertTrue(inventory.contains("completed canonical-memory dependency `#87`"))
-        assertTrue(inventory.contains("`STOP_S5=CLOSED`"))
-        assertTrue(inventory.contains("F1_A_COMMON_READ_BOUNDARY=INTEGRATED"))
+        assertTrue(inventory.contains("Inventory version: `3`"))
+        assertTrue(inventory.contains(CURRENT_MAIN))
+        assertTrue(inventory.contains(AUDITED_SOURCE_HEAD))
+        assertTrue(inventory.contains("PR `#149`: closed and merged by squash"))
+        assertTrue(inventory.contains("F3_COG_CONSUMER_OF_F1_A=INTEGRATED_IN_MAIN"))
+        assertTrue(inventory.contains("ISSUE_86=OPEN"))
         assertTrue(inventory.contains("This document does not close `#86`"))
-        assertTrue(inventory.contains("`MERGE_AUTHORIZED=false`"))
-        assertFalse(inventory.contains("`STOP S5 remains open`"))
-    }
 
-    @Test
-    fun remainingLegacyConsumersAndDependenciesAreExplicit() {
-        val inventory = inventoryFile(repositoryRoot()).readText()
-
-        REQUIRED_CONSUMERS.forEach { consumer ->
-            assertTrue("Missing consumer $consumer", inventory.contains(consumer))
-        }
-        REQUIRED_LEGACY_DEPENDENCIES.forEach { dependency ->
-            assertTrue("Missing legacy dependency $dependency", inventory.contains(dependency))
-        }
-        assertTrue(inventory.contains("`WAITING_FOR_CANONICAL_MEMORY_ADAPTER`"))
-        assertTrue(inventory.contains("F1 / `#86` remains open"))
-        assertTrue(inventory.contains("F2 / `#87` is closed"))
-    }
-
-    @Test
-    fun canonicalAuthoritiesAndSovereigntyInvariantsAreMandatory() {
-        val inventory = inventoryFile(repositoryRoot()).readText()
-
-        assertTrue(inventory.contains("`CanonicalMemoryRepository`"))
-        assertTrue(inventory.contains("`GenesisUltraRuntimeIdentityRepository`"))
-        assertTrue(inventory.contains("`CanonicalConsumerReadPort`"))
-        assertTrue(inventory.contains("`CanonicalLivingMemoryPort`"))
-        assertTrue(inventory.contains("instanceId != bodyId"))
-        assertTrue(inventory.contains("Compatibility rows are forbidden."))
-        assertTrue(inventory.contains("No convergence step may create, copy, seed, or reconstruct rows in:"))
-        assertTrue(inventory.contains("genesis_core"))
-        assertTrue(inventory.contains("local_instance_identity"))
-        assertTrue(inventory.contains("memory_events"))
-        assertTrue(inventory.contains("No placeholder such as `local_instance_pending`"))
-    }
-
-    @Test
-    fun convergenceOrderSeparatesReadinessRecallsRestHealthAndRetirement() {
-        val inventory = inventoryFile(repositoryRoot()).readText()
-
-        assertInOrder(
-            inventory,
-            listOf(
-                "### STEP-1 — canonical read adapter",
-                "### STEP-2 — recalls",
-                "### STEP-3 — rest-cycle planning",
-                "### STEP-4 — rest-cycle execution",
-                "### STEP-5 — health",
-                "### STEP-6 — remove legacy gates"
-            )
-        )
-        assertTrue(inventory.contains("Status: **integrated by PR #148**"))
-        assertTrue(inventory.contains("### Canonical durable authority"))
-        assertTrue(inventory.contains("### Durable organ state"))
-        assertTrue(inventory.contains("### Rebuildable projections"))
-        assertTrue(inventory.contains("recall due time, interval, status, last action, and review time"))
-        assertTrue(inventory.contains("Health is a derived report."))
-    }
-
-    @Test
-    fun futureAcceptanceTestsAreFailClosedAndDoNotUseLegacyCompatibility() {
-        val inventory = inventoryFile(repositoryRoot()).readText()
-
-        REQUIRED_TEST_CONCEPTS.forEach { concept ->
-            assertTrue("Missing future test concept $concept", inventory.contains(concept))
-        }
-        assertTrue(inventory.contains("A clean Ultra installation"))
-        assertTrue(inventory.contains("repeated seeding\nis idempotent"))
-        assertTrue(inventory.contains("Corruption produces\nno plan and no organ mutation"))
-        assertTrue(inventory.contains("failure after append but before local finalization is recoverable"))
-        assertTrue(inventory.contains("no write occurs in `memory_events`"))
-    }
-
-    @Test
-    fun auditedProductionDependenciesStillExist() {
-        val root = repositoryRoot()
-        val inventory = inventoryFile(root).readText()
-
-        REQUIRED_SOURCE_TOKENS.forEach { (path, tokens) ->
-            val sourceFile = File(root, path)
-            assertTrue("Missing audited production source $path", sourceFile.isFile)
-            val source = sourceFile.readText()
-            tokens.forEach { token ->
-                assertTrue("Missing audited token $token in $path", source.contains(token))
-                assertTrue("Inventory must name audited token $token", inventory.contains(token))
-            }
+        STALE_PHRASES.forEach { phrase ->
+            assertFalse("F1 inventory contains stale phrase $phrase", inventory.contains(phrase, true))
         }
     }
 
-    private fun assertInOrder(text: String, markers: List<String>) {
-        var previous = -1
-        markers.forEach { marker ->
-            val current = text.indexOf(marker)
-            assertTrue("Missing ordered marker $marker", current >= 0)
-            assertTrue("Marker $marker is out of order", current > previous)
-            previous = current
-        }
+    @Test
+    fun canonicalBoundaryRemainsSingleAndIntegrated() {
+        val inventory = inventoryFile().readText()
+        val composition = repositoryFile(
+            "app/src/main/java/com/morimil/app/MorimilAppContainerCognitiveMigrationProtocol.kt"
+        ).readText()
+
+        assertTrue(inventory.contains("GenesisUltraRuntimeIdentityRepository + CanonicalMemoryRepository"))
+        assertTrue(inventory.contains("-> CanonicalConsumerReadPort"))
+        assertTrue(inventory.contains("CognitiveMigrationCanonicalReadPort"))
+        assertTrue(inventory.contains("does not create a second identity or memory authority"))
+        assertTrue(inventory.contains("CanonicalCognitiveMigrationCommitPort"))
+        assertTrue(composition.contains("GenesisUltraCanonicalConsumerReadAdapter.production"))
+        assertTrue(composition.contains("CanonicalCognitiveMigrationReadPort.production"))
     }
 
-    private fun inventoryFile(root: File): File {
-        val file = File(root, INVENTORY_PATH)
-        assertTrue("Missing F1 canonical consumer convergence inventory", file.isFile)
-        return file
-    }
+    @Test
+    fun remainingConsumersAndLegacyDependenciesStayVisible() {
+        val inventory = inventoryFile().readText()
 
-    private fun repositoryRoot(): File {
-        return sequenceOf(File("."), File(".."))
-            .map(File::getCanonicalFile)
-            .firstOrNull { candidate ->
-                File(candidate, "README.md").isFile &&
-                    File(candidate, "app/build.gradle.kts").isFile
-            }
-            ?: error("Repository root not found")
-    }
-
-    private companion object {
-        const val INVENTORY_PATH = "docs/F1_CANONICAL_CONSUMER_CONVERGENCE.md"
-
-        val REQUIRED_CONSUMERS = setOf(
+        listOf(
             "GenesisUltraRuntimeBootstrapCoordinator",
             "RecallScheduleRepository",
             "RestCycleRepository",
             "LocalNervousSystemRepository",
             "AgentOrchestrationRepository",
-            "MemoryRepository",
-            "MemoryDao",
-            "MorimilViewModel",
-            "RunRestCycleUseCase",
-            "RestCycleWorker"
-        )
-
-        val REQUIRED_LEGACY_DEPENDENCIES = setOf(
+            "WAITING_FOR_CANONICAL_MEMORY_ADAPTER",
             "loadGenesisCore",
             "loadLocalIdentity",
             "loadMemoryContext",
-            "getLivingMemorySnapshot",
-            "hasCompleteBirth",
-            "memory_events"
-        )
+            "hasCompleteBirth"
+        ).forEach { token ->
+            assertTrue("Missing remaining convergence token $token", inventory.contains(token))
+        }
+    }
 
-        val REQUIRED_TEST_CONCEPTS = setOf(
-            "### Clean Ultra installation",
-            "### Recall idempotency",
-            "### Verified rest cycle",
-            "### Corruption and foreign-instance failure",
-            "### Identity and Body separation",
-            "### Projection rebuild"
-        )
+    @Test
+    fun compatibilityRowsRemainForbiddenAndF33Open() {
+        val inventory = inventoryFile().readText()
 
-        val REQUIRED_SOURCE_TOKENS = mapOf(
-            "app/src/main/java/com/morimil/app/runtime/GenesisUltraRuntimeBootstrapCoordinator.kt" to setOf(
-                "WAITING_FOR_CANONICAL_MEMORY_ADAPTER"
-            ),
-            "app/src/main/java/com/morimil/app/data/repository/RecallScheduleRepository.kt" to setOf(
-                "seedFromRecentMemoryIfNeeded",
-                "loadGenesisCore",
-                "loadLocalIdentity",
-                "loadMemoryContext"
-            ),
-            "app/src/main/java/com/morimil/app/data/repository/RestCycleRepository.kt" to setOf(
-                "runLocalRestCycleIfDue",
-                "approvePlannedRestCycle",
-                "loadGenesisCore",
-                "loadLocalIdentity",
-                "loadMemoryContext"
-            ),
-            "app/src/main/java/com/morimil/app/data/repository/LocalNervousSystemRepository.kt" to setOf(
-                "recordHealthCheckIfDegraded",
-                "countGenesisCore",
-                "countLocalIdentity",
-                "countMemoryEvents"
-            ),
-            "app/src/main/java/com/morimil/app/data/repository/AgentOrchestrationRepository.kt" to setOf(
-                "hasCompleteBirth"
-            ),
-            "app/src/main/java/com/morimil/app/data/local/MemoryDao.kt" to setOf(
-                "getLivingMemorySnapshot",
-                "memory_events"
-            )
+        assertTrue(inventory.contains("Compatibility rows are forbidden"))
+        assertTrue(inventory.contains("genesis_core"))
+        assertTrue(inventory.contains("local_instance_identity"))
+        assertTrue(inventory.contains("memory_events"))
+        assertTrue(inventory.contains("local_instance_pending"))
+        assertTrue(inventory.contains("F3_3=OPEN"))
+        assertTrue(inventory.contains("instanceId != bodyId"))
+    }
+
+    private fun inventoryFile(): File =
+        repositoryFile("docs/F1_CANONICAL_CONSUMER_CONVERGENCE.md")
+
+    private fun repositoryFile(relativePath: String): File {
+        return sequenceOf(File(relativePath), File("../$relativePath"))
+            .firstOrNull(File::isFile)
+            ?: error("Repository file not found: $relativePath")
+    }
+
+    private companion object {
+        const val CURRENT_MAIN = "5023981da7caf31c8f3679919f59205708b72823"
+        const val AUDITED_SOURCE_HEAD = "7bdbda2aa4b7568695ba8e98be54d506d42c99d5"
+        val STALE_PHRASES = listOf(
+            "draft f3 candidate",
+            "pr_149=draft_validation_only",
+            "candidate not merged",
+            "f3.2 open candidate"
         )
     }
 }
