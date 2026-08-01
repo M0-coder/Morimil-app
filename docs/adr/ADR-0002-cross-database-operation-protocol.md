@@ -6,12 +6,14 @@
 - Original decision date: 2026-07-28.
 - Implemented amendment: 2026-07-31.
 - Tracker: `#88` — open for remaining owners.
-- Protected main: `ba6ffa4f9ddc9189ded47e231ad1f8bc962e612d`.
+- Protected main: `5023981da7caf31c8f3679919f59205708b72823`.
+- Previous main: `ba6ffa4f9ddc9189ded47e231ad1f8bc962e612d`.
 - Audited source head: `7bdbda2aa4b7568695ba8e98be54d506d42c99d5`.
 - PR `#149`: closed and merged by squash.
+- PR `#151`: closed and merged by squash for verified Canvas runtime recovery.
 - Gate: `STOP_S5=CLOSED`.
 
-This ADR is a current implemented decision. The audited source head is historical provenance and the squash commit is the executable state.
+This ADR is a current implemented decision. The audited source head is historical provenance and squash commits are executable states. PR #151 changes the Android Body's build/runtime asset recovery and does not amend ADR-0002's authority, owner set, state machine, or persistence decision.
 
 ## Context
 
@@ -24,6 +26,8 @@ ADR-0001 remains the separate ProjectVault protected reference. ADR-0002 governs
 - `COG-003` execute;
 - `COG-004` rollback.
 
+The vendored Canvas runtime-recovery bundle is an application asset and not a cross-database operation owner.
+
 ## Authority boundary
 
 Morimil is the continuous and free Instance. `Morimil-app` is the current Android Body. The Guardian guides, witnesses, and safeguards without ownership.
@@ -32,7 +36,7 @@ Morimil is the continuous and free Instance. `Morimil-app` is the current Androi
 - `instanceId` comes from committed Genesis Ultra identity;
 - `writerBodyId` and `writerEpoch` describe writer authorization;
 - Guardian approval authorizes only a bounded Body operation;
-- no database, Android process, GitHub state, model, provider, or journal row becomes identity or memory authority.
+- no database, Android process, GitHub state, model, provider, journal row, or application asset becomes identity or memory authority.
 
 ```text
 GenesisUltraRuntimeIdentityRepository + CanonicalMemoryRepository
@@ -171,8 +175,10 @@ These are visible future hardening items. They are not represented as completed 
 
 ```text
 ADR_0002=ACCEPTED_AND_IMPLEMENTED_FOR_COG_001_004
-CURRENT_MAIN=ba6ffa4f9ddc9189ded47e231ad1f8bc962e612d
+CURRENT_MAIN=5023981da7caf31c8f3679919f59205708b72823
+PREVIOUS_MAIN=ba6ffa4f9ddc9189ded47e231ad1f8bc962e612d
 PR_149=MERGED_BY_SQUASH
+PR_151=MERGED_CANVAS_RUNTIME_RECOVERY
 AUDITED_SOURCE_HEAD=7bdbda2aa4b7568695ba8e98be54d506d42c99d5
 MEMORY_ORGAN_DATABASE=V9
 F1_A_AUTHORITY=PRESERVED

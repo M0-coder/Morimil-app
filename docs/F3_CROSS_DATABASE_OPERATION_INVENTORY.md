@@ -3,10 +3,11 @@
 # F3.2 — Cross-database operation inventory
 
 - Inventory version: `3`.
-- Current protected main: `main@ba6ffa4f9ddc9189ded47e231ad1f8bc962e612d`.
-- Previous main: `main@7e98d3345d7cc3fbf1983babd35b61ff5c523208`.
+- Current protected main: `main@5023981da7caf31c8f3679919f59205708b72823`.
+- Previous main: `main@ba6ffa4f9ddc9189ded47e231ad1f8bc962e612d`.
 - Audited source head: `7bdbda2aa4b7568695ba8e98be54d506d42c99d5`.
 - PR `#149`: closed and merged by squash.
+- PR `#151`: closed and merged by squash for verified Canvas runtime recovery.
 - Tracker: `#88` — open for remaining F3 owners.
 - Protocol: `docs/adr/ADR-0002-cross-database-operation-protocol.md`.
 - Gate: `STOP_S5=CLOSED`.
@@ -21,12 +22,13 @@ F3 consumes `CanonicalConsumerReadPort` and uses a specialized canonical commit 
 
 | Layer | State |
 | --- | --- |
-| Protected `main` | F1-A, ProjectVault, MemoryOrganDatabase v9, and COG-001 through COG-004 are integrated. |
-| Audited source head | Historical reviewed source before the squash merge. |
+| Protected `main` | F1-A, ProjectVault, MemoryOrganDatabase v9, COG-001 through COG-004, and the vendored Canvas runtime-recovery asset are integrated. |
+| Audited source head | Historical reviewed source before the PR #149 squash merge. |
+| Canvas recovery provenance | Historical PR #151 evidence for a Body application asset; it is not a cross-database owner. |
 | Remaining F3 owners | Open and separately scoped. |
 | F3.3 | Open; irreversible legacy removal has not begun. |
 
-ProjectVault remains a separate protected reference and was not rewritten by PR #149.
+ProjectVault remains a separate protected reference and was not rewritten by PR #149. PR #151 introduces no new protocol owner, durable operation type, identity source, or memory authority.
 
 ## Protocol classifications
 

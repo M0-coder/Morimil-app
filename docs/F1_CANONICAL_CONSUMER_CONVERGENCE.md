@@ -4,13 +4,15 @@
 
 Inventory version: `3`
 
-Current protected main: `main@ba6ffa4f9ddc9189ded47e231ad1f8bc962e612d`
+Current protected main: `main@5023981da7caf31c8f3679919f59205708b72823`
 
-Previous protected main: `main@7e98d3345d7cc3fbf1983babd35b61ff5c523208`
+Previous protected main: `main@ba6ffa4f9ddc9189ded47e231ad1f8bc962e612d`
 
 Historical audited F3 source head: `7bdbda2aa4b7568695ba8e98be54d506d42c99d5`
 
 PR `#149`: closed and merged by squash.
+
+PR `#151`: closed and merged by squash for vendored Canvas runtime recovery; it does not change the F1 authority frontier.
 
 Tracking: open `#86` and completed canonical-memory dependency `#87`.
 
@@ -38,6 +40,8 @@ GenesisUltraRuntimeIdentityRepository + CanonicalMemoryRepository
 ```
 
 The integrated cognitive migration protocol consumes that boundary through `CognitiveMigrationCanonicalReadPort`. It does not create a second identity or memory authority. `CanonicalCognitiveMigrationCommitPort` is a specialized canonical writer, not an identity source.
+
+The Canvas runtime-recovery bundle is a Body application asset. It does not read, write, project, replace, or expand canonical identity or memory authority.
 
 ## Integrated downstream consumer
 
@@ -106,10 +110,12 @@ No placeholder such as `local_instance_pending` and no Body ID may substitute fo
 ## Current closure state
 
 ```text
-CURRENT_MAIN=ba6ffa4f9ddc9189ded47e231ad1f8bc962e612d
+CURRENT_MAIN=5023981da7caf31c8f3679919f59205708b72823
+PREVIOUS_MAIN=ba6ffa4f9ddc9189ded47e231ad1f8bc962e612d
 F1_A_COMMON_READ_BOUNDARY=INTEGRATED
 F3_COG_CONSUMER_OF_F1_A=INTEGRATED_IN_MAIN
 PR_149=MERGED_BY_SQUASH_HISTORICAL
+PR_151=MERGED_CANVAS_RUNTIME_RECOVERY_HISTORICAL
 ISSUE_86=OPEN
 ISSUE_87=CLOSED
 RECALL_CONVERGED=false

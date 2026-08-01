@@ -1,14 +1,16 @@
 # Document status: CURRENT
 
-> **Protected main:** `ba6ffa4f9ddc9189ded47e231ad1f8bc962e612d`.
+> **Protected main:** `5023981da7caf31c8f3679919f59205708b72823`.
 >
-> **Previous main:** `7e98d3345d7cc3fbf1983babd35b61ff5c523208`.
+> **Previous main:** `ba6ffa4f9ddc9189ded47e231ad1f8bc962e612d`.
 >
 > **Audited source head:** `7bdbda2aa4b7568695ba8e98be54d506d42c99d5`.
 >
 > **PR #149:** closed and merged by squash into protected `main`.
 >
-> The audited head is historical provenance; the squash commit is the executable repository state.
+> **PR #151:** closed and merged by squash; the verified Canvas runtime-recovery bundle is vendored with provenance.
+>
+> The audited head is historical provenance; squash commits are executable repository states.
 
 # Current runtime contract
 
@@ -27,8 +29,9 @@ Morimil is the continuous personal Instance. `Morimil-app` is the current native
 
 | Layer | State |
 | --- | --- |
-| Protected `main` | F1-A, MemoryOrganDatabase v9, ProjectVault, and the durable COG-001 through COG-004 protocol are integrated. |
+| Protected `main` | F1-A, MemoryOrganDatabase v9, ProjectVault, the durable COG-001 through COG-004 protocol, and the vendored Canvas runtime-recovery bundle are integrated. |
 | Audited source head | Historical reviewed source for PR #149 before squash. |
+| Canvas recovery provenance | PR #151 records the recovered runtime asset, deterministic successor bundle, source artifact, and digest evidence. |
 | Historical preparation | ADRs, plans, checkpoints, and candidate reports explain prior decisions but do not override CURRENT truth. |
 
 ## Persistent stores
@@ -41,6 +44,10 @@ Morimil is the continuous personal Instance. `Morimil-app` is the current native
 MemoryOrganDatabase v9 enforces equivalent durable-journal invariants for migration 8→9, fresh v9 creation, and production open. NULL-safe guards reject partial receipts, partial local results, inconsistent committed rows, and vulnerable trigger definitions.
 
 Android backup is disabled. Production release signing fails closed when signing material is absent.
+
+## Application runtime assets
+
+The Canvas web runtime is supplied by the vendored recovery bundle recorded in `docs/MORIMIL_CANVAS_RUNTIME_RECOVERY_PROVENANCE.md`. Build preparation verifies the local bundle and provenance rather than depending on the retired remote ZIP URL. This asset is part of the Android Body and has no identity, canonical-memory, Guardian, or protocol authority.
 
 ## Canonical authority and ports
 

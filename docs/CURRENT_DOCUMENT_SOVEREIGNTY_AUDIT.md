@@ -4,19 +4,20 @@
 
 ## Executable truth
 
-- Protected `main`: `ba6ffa4f9ddc9189ded47e231ad1f8bc962e612d`.
-- Previous protected main: `7e98d3345d7cc3fbf1983babd35b61ff5c523208`.
+- Protected `main`: `5023981da7caf31c8f3679919f59205708b72823`.
+- Previous protected main: `ba6ffa4f9ddc9189ded47e231ad1f8bc962e612d`.
 - PR `#149`: closed and merged by squash.
+- PR `#151`: closed and merged by squash as the verified Canvas runtime-recovery integration.
 - Audited source head: `7bdbda2aa4b7568695ba8e98be54d506d42c99d5`.
-- Merge commit: `ba6ffa4f9ddc9189ded47e231ad1f8bc962e612d`.
+- Current squash commit: `5023981da7caf31c8f3679919f59205708b72823`.
 
-PR #149 is historical integration evidence. It is not an active draft, an isolated candidate, or an unmerged capability.
+PR #149 is historical integration evidence. It is not an active draft, an isolated candidate, or an unmerged capability. PR #151 is historical build/runtime-asset recovery evidence; it does not alter Morimil's identity, canonical-memory authority, or bounded F3 protocol scope.
 
 ## Document hierarchy
 
 Mutable documents whose first non-empty line is `# Document status: CURRENT` describe the executable repository truth. Historical plans, candidate reports, audit packages, superseded baselines, branch heads, and pre-merge gate language remain evidence of how a decision was reached, but they do not override protected `main`.
 
-The audited source head records provenance. The squash merge commit records the executable state. Those identifiers must not be conflated.
+The audited source head records provenance. Squash commits record executable states. Those identifiers must not be conflated.
 
 ## Bounded technical authority
 
@@ -37,7 +38,7 @@ A Guardian key verifies signed testimony and bounded permissions. A Body key pro
 
 Protected `main` now includes MemoryOrganDatabase version 9 and the durable COG-001 through COG-004 protocol. The protocol consumes canonical identity and memory only through `CanonicalConsumerReadPort`, uses `CanonicalCognitiveMigrationCommitPort` for its specialized canonical writer, and does not create a second identity authority.
 
-ProjectVault remains a separate protected protocol and was not rewritten by PR #149.
+ProjectVault remains a separate protected protocol and was not rewritten by PR #149. The vendored Canvas runtime-recovery bundle integrated by PR #151 is an application build asset with recorded provenance; it is not an identity, memory, or protocol authority.
 
 F3.2 is closed only for the bounded COG-001 through COG-004 scope. F3.3 remains open. F4 through F6 remain open and no Body succession, export/restore, production release, or continuity proof is implied.
 

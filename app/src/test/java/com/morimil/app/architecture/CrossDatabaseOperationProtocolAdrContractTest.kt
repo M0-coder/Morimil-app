@@ -105,7 +105,7 @@ class CrossDatabaseOperationProtocolAdrContractTest {
     }
 
     private companion object {
-        const val CURRENT_MAIN = "ba6ffa4f9ddc9189ded47e231ad1f8bc962e612d"
+        const val CURRENT_MAIN = "5023981da7caf31c8f3679919f59205708b72823"
         const val AUDITED_SOURCE_HEAD = "7bdbda2aa4b7568695ba8e98be54d506d42c99d5"
         val STALE_PHRASES = listOf(
             "accepted design with audited candidate amendment",

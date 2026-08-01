@@ -94,8 +94,8 @@ class CurrentDocumentSovereigntyContractTest {
 
     private companion object {
         const val CURRENT_STATUS = "# Document status: CURRENT"
-        const val CURRENT_MAIN = "ba6ffa4f9ddc9189ded47e231ad1f8bc962e612d"
-        const val PREVIOUS_MAIN = "7e98d3345d7cc3fbf1983babd35b61ff5c523208"
+        const val CURRENT_MAIN = "5023981da7caf31c8f3679919f59205708b72823"
+        const val PREVIOUS_MAIN = "ba6ffa4f9ddc9189ded47e231ad1f8bc962e612d"
         const val AUDITED_SOURCE_HEAD = "7bdbda2aa4b7568695ba8e98be54d506d42c99d5"
 
         val IGNORED_DIRECTORIES = setOf(".git", ".gradle", "build", "node_modules")

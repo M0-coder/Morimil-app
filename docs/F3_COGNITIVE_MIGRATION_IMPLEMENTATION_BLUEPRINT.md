@@ -4,14 +4,15 @@
 
 - Tracker: `#88` — open for remaining F3 owners.
 - Governing ADR: `ADR-0002`.
-- Protected main: `ba6ffa4f9ddc9189ded47e231ad1f8bc962e612d`.
-- Previous main: `7e98d3345d7cc3fbf1983babd35b61ff5c523208`.
+- Protected main: `5023981da7caf31c8f3679919f59205708b72823`.
+- Previous main: `ba6ffa4f9ddc9189ded47e231ad1f8bc962e612d`.
 - Audited source head: `7bdbda2aa4b7568695ba8e98be54d506d42c99d5`.
 - PR `#149`: closed and merged by squash.
+- PR `#151`: closed and merged by squash for verified Canvas runtime recovery.
 - Gate: `STOP_S5=CLOSED`.
 - Integrated scope: `COG-001` through `COG-004` only.
 
-This document records the implemented and independently audited design now present in protected main. The audited source head is historical provenance; the squash commit is the executable state.
+This document records the implemented and independently audited design now present in protected main. The audited source head is historical provenance; squash commits are executable states. PR #151 changes Body build/runtime-asset recovery only and does not alter this protocol's authority or scope.
 
 ## 1. Authority and sovereignty
 
@@ -47,7 +48,7 @@ Protected main includes:
 - fresh-v9 and migrated 8→9 journal guards;
 - API 30 and API 35 interruption and replay coverage.
 
-ProjectVault remains separate and preserved. ORCH, AGENT, BOOT, RECALL, REST, and F3.3 legacy removal are not promoted by this integration.
+ProjectVault remains separate and preserved. ORCH, AGENT, BOOT, RECALL, REST, and F3.3 legacy removal are not promoted by this integration. The vendored Canvas runtime-recovery asset introduced by PR #151 is outside the COG owner inventory and cannot become protocol state.
 
 F3.2 is closed only for COG-001 through COG-004. It is not a declaration that all F3 work is complete.
 
@@ -174,8 +175,10 @@ These items are future evidence/API hardening. They are not concealed, represent
 ## 10. Acceptance boundary
 
 ```text
-CURRENT_MAIN=ba6ffa4f9ddc9189ded47e231ad1f8bc962e612d
+CURRENT_MAIN=5023981da7caf31c8f3679919f59205708b72823
+PREVIOUS_MAIN=ba6ffa4f9ddc9189ded47e231ad1f8bc962e612d
 PR_149=MERGED_BY_SQUASH
+PR_151=MERGED_CANVAS_RUNTIME_RECOVERY
 AUDITED_SOURCE_HEAD=7bdbda2aa4b7568695ba8e98be54d506d42c99d5
 COG_001_004=INTEGRATED_IN_MAIN
 MEMORY_ORGAN_DATABASE=V9
