@@ -15,8 +15,11 @@ class CrossDatabaseOperationProtocolAdrContractTest {
         assertTrue(adr.startsWith("# Document status: CURRENT"))
         assertTrue(adr.contains("Status: Accepted and implemented for COG-001 through COG-004"))
         assertTrue(adr.contains(CURRENT_MAIN))
+        assertTrue(adr.contains(PREVIOUS_MAIN))
         assertTrue(adr.contains(AUDITED_SOURCE_HEAD))
         assertTrue(adr.contains("PR `#149`: closed and merged by squash"))
+        assertTrue(adr.contains("PR `#150`: closed and merged by squash"))
+        assertTrue(adr.contains("PR_150=MERGED_POST_MERGE_CURRENT_RECONCILIATION"))
         assertTrue(adr.contains("ADR_0002=ACCEPTED_AND_IMPLEMENTED_FOR_COG_001_004"))
 
         STALE_PHRASES.forEach { phrase ->
@@ -105,7 +108,8 @@ class CrossDatabaseOperationProtocolAdrContractTest {
     }
 
     private companion object {
-        const val CURRENT_MAIN = "5023981da7caf31c8f3679919f59205708b72823"
+        const val CURRENT_MAIN = "6250214bb6664a8fff851ed0afc2438bbc276931"
+        const val PREVIOUS_MAIN = "5023981da7caf31c8f3679919f59205708b72823"
         const val AUDITED_SOURCE_HEAD = "7bdbda2aa4b7568695ba8e98be54d506d42c99d5"
         val STALE_PHRASES = listOf(
             "accepted design with audited candidate amendment",

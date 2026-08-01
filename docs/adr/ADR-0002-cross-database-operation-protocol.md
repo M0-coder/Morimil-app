@@ -6,14 +6,15 @@
 - Original decision date: 2026-07-28.
 - Implemented amendment: 2026-07-31.
 - Tracker: `#88` — open for remaining owners.
-- Protected main: `5023981da7caf31c8f3679919f59205708b72823`.
-- Previous main: `ba6ffa4f9ddc9189ded47e231ad1f8bc962e612d`.
+- Protected main: `6250214bb6664a8fff851ed0afc2438bbc276931`.
+- Previous main: `5023981da7caf31c8f3679919f59205708b72823`.
 - Audited source head: `7bdbda2aa4b7568695ba8e98be54d506d42c99d5`.
 - PR `#149`: closed and merged by squash.
+- PR `#150`: closed and merged by squash for the post-merge CURRENT reconciliation.
 - PR `#151`: closed and merged by squash for verified Canvas runtime recovery.
 - Gate: `STOP_S5=CLOSED`.
 
-This ADR is a current implemented decision. The audited source head is historical provenance and squash commits are executable states. PR #151 changes the Android Body's build/runtime asset recovery and does not amend ADR-0002's authority, owner set, state machine, or persistence decision.
+This ADR is a current implemented decision. The audited source head is historical provenance and squash commits are executable states. PR #150 reconciles CURRENT documentation and architecture contracts only. PR #151 changes the Android Body's build/runtime asset recovery. Neither amends ADR-0002's authority, owner set, state machine, or persistence decision.
 
 ## Context
 
@@ -175,9 +176,10 @@ These are visible future hardening items. They are not represented as completed 
 
 ```text
 ADR_0002=ACCEPTED_AND_IMPLEMENTED_FOR_COG_001_004
-CURRENT_MAIN=5023981da7caf31c8f3679919f59205708b72823
-PREVIOUS_MAIN=ba6ffa4f9ddc9189ded47e231ad1f8bc962e612d
+CURRENT_MAIN=6250214bb6664a8fff851ed0afc2438bbc276931
+PREVIOUS_MAIN=5023981da7caf31c8f3679919f59205708b72823
 PR_149=MERGED_BY_SQUASH
+PR_150=MERGED_POST_MERGE_CURRENT_RECONCILIATION
 PR_151=MERGED_CANVAS_RUNTIME_RECOVERY
 AUDITED_SOURCE_HEAD=7bdbda2aa4b7568695ba8e98be54d506d42c99d5
 MEMORY_ORGAN_DATABASE=V9

@@ -4,14 +4,15 @@
 
 ## Executable truth
 
-- Protected `main`: `5023981da7caf31c8f3679919f59205708b72823`.
-- Previous protected main: `ba6ffa4f9ddc9189ded47e231ad1f8bc962e612d`.
+- Protected `main`: `6250214bb6664a8fff851ed0afc2438bbc276931`.
+- Previous protected main: `5023981da7caf31c8f3679919f59205708b72823`.
 - PR `#149`: closed and merged by squash.
+- PR `#150`: closed and merged by squash as the post-merge CURRENT reconciliation.
 - PR `#151`: closed and merged by squash as the verified Canvas runtime-recovery integration.
 - Audited source head: `7bdbda2aa4b7568695ba8e98be54d506d42c99d5`.
-- Current squash commit: `5023981da7caf31c8f3679919f59205708b72823`.
+- Current squash commit: `6250214bb6664a8fff851ed0afc2438bbc276931`.
 
-PR #149 is historical integration evidence. It is not an active draft, an isolated candidate, or an unmerged capability. PR #151 is historical build/runtime-asset recovery evidence; it does not alter Morimil's identity, canonical-memory authority, or bounded F3 protocol scope.
+PR #149 is historical integration evidence. It is not an active draft, an isolated candidate, or an unmerged capability. PR #150 is historical post-merge CURRENT reconciliation evidence. PR #151 is historical build/runtime-asset recovery evidence; neither PR #150 nor PR #151 alters Morimil's identity, canonical-memory authority, or bounded F3 protocol scope.
 
 ## Document hierarchy
 

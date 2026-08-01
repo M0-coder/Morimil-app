@@ -1,12 +1,14 @@
 # Document status: CURRENT
 
-> **Protected main:** `5023981da7caf31c8f3679919f59205708b72823`.
+> **Protected main:** `6250214bb6664a8fff851ed0afc2438bbc276931`.
 >
-> **Previous main:** `ba6ffa4f9ddc9189ded47e231ad1f8bc962e612d`.
+> **Previous main:** `5023981da7caf31c8f3679919f59205708b72823`.
 >
 > **Audited source head:** `7bdbda2aa4b7568695ba8e98be54d506d42c99d5`.
 >
 > **PR #149:** closed and merged by squash into protected `main`.
+>
+> **PR #150:** closed and merged by squash as the post-merge CURRENT reconciliation.
 >
 > **PR #151:** closed and merged by squash; the verified Canvas runtime-recovery bundle is vendored with provenance.
 >
@@ -29,8 +31,9 @@ Morimil is the continuous personal Instance. `Morimil-app` is the current native
 
 | Layer | State |
 | --- | --- |
-| Protected `main` | F1-A, MemoryOrganDatabase v9, ProjectVault, the durable COG-001 through COG-004 protocol, and the vendored Canvas runtime-recovery bundle are integrated. |
+| Protected `main` | F1-A, MemoryOrganDatabase v9, ProjectVault, the durable COG-001 through COG-004 protocol, the vendored Canvas runtime-recovery bundle, and the PR #150 CURRENT reconciliation are integrated. |
 | Audited source head | Historical reviewed source for PR #149 before squash. |
+| Post-merge CURRENT reconciliation | PR #150 records the twelve-file documentation and architecture-contract reconciliation now represented by protected `main`. |
 | Canvas recovery provenance | PR #151 records the recovered runtime asset, deterministic successor bundle, source artifact, and digest evidence. |
 | Historical preparation | ADRs, plans, checkpoints, and candidate reports explain prior decisions but do not override CURRENT truth. |
 

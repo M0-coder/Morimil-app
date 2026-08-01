@@ -14,8 +14,11 @@ class CrossDatabaseOperationInventoryContractTest {
         assertTrue(inventory.startsWith("# Document status: CURRENT"))
         assertTrue(inventory.contains("Inventory version: `3`"))
         assertTrue(inventory.contains(CURRENT_MAIN))
+        assertTrue(inventory.contains(PREVIOUS_MAIN))
         assertTrue(inventory.contains(AUDITED_SOURCE_HEAD))
         assertTrue(inventory.contains("PR `#149`: closed and merged by squash"))
+        assertTrue(inventory.contains("PR `#150`: closed and merged by squash"))
+        assertTrue(inventory.contains("post-merge CURRENT reconciliation", true))
         assertTrue(inventory.contains("`INTEGRATED_PROTOCOL`"))
         assertTrue(inventory.contains("COG-001 through COG-004 integrated in protected main"))
         assertTrue(inventory.contains("F3.3"))
@@ -109,7 +112,8 @@ class CrossDatabaseOperationInventoryContractTest {
 
     private companion object {
         const val INVENTORY_PATH = "docs/F3_CROSS_DATABASE_OPERATION_INVENTORY.md"
-        const val CURRENT_MAIN = "5023981da7caf31c8f3679919f59205708b72823"
+        const val CURRENT_MAIN = "6250214bb6664a8fff851ed0afc2438bbc276931"
+        const val PREVIOUS_MAIN = "5023981da7caf31c8f3679919f59205708b72823"
         const val AUDITED_SOURCE_HEAD = "7bdbda2aa4b7568695ba8e98be54d506d42c99d5"
         const val BOOTSTRAP_PATH =
             "app/src/main/java/com/morimil/app/runtime/GenesisUltraRuntimeBootstrapCoordinator.kt"

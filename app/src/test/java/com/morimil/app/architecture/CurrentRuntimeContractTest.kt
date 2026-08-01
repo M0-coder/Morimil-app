@@ -17,7 +17,9 @@ class CurrentRuntimeContractTest {
         assertTrue(contract.contains(PREVIOUS_MAIN))
         assertTrue(contract.contains(AUDITED_SOURCE_HEAD))
         assertTrue(contract.contains("PR #149", ignoreCase = true))
+        assertTrue(contract.contains("PR #150", ignoreCase = true))
         assertTrue(contract.contains("closed and merged by squash", ignoreCase = true))
+        assertTrue(contract.contains("post-merge CURRENT reconciliation", ignoreCase = true))
         assertTrue(contract.contains("| `MorimilDatabase` | `15` |"))
         assertTrue(contract.contains("| `MemoryOrganDatabase` | `9` |"))
         assertTrue(contract.contains("`cross_database_operations`"))
@@ -106,8 +108,8 @@ class CurrentRuntimeContractTest {
     }
 
     private companion object {
-        const val CURRENT_MAIN = "5023981da7caf31c8f3679919f59205708b72823"
-        const val PREVIOUS_MAIN = "ba6ffa4f9ddc9189ded47e231ad1f8bc962e612d"
+        const val CURRENT_MAIN = "6250214bb6664a8fff851ed0afc2438bbc276931"
+        const val PREVIOUS_MAIN = "5023981da7caf31c8f3679919f59205708b72823"
         const val AUDITED_SOURCE_HEAD = "7bdbda2aa4b7568695ba8e98be54d506d42c99d5"
         val STALE_PHRASES = listOf(
             "candidate not merged",
