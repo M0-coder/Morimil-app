@@ -2,16 +2,27 @@
 
 # F3.2 — Cross-database operation inventory
 
-- Inventory version: `3`.
-- Current protected main: `main@6250214bb6664a8fff851ed0afc2438bbc276931`.
-- Previous main: `main@5023981da7caf31c8f3679919f59205708b72823`.
+- Inventory version: `4`.
+- Content baseline SHA: `79460a32b4eba669216afcc501815d5ff09b0349`.
+- Content baseline parent SHA: `6250214bb6664a8fff851ed0afc2438bbc276931`.
+- Current protected `main`: resolved externally from `refs/heads/main`.
+- Merge SHA evidence: external GitHub and Morimil Control Tower evidence.
 - Audited source head: `7bdbda2aa4b7568695ba8e98be54d506d42c99d5`.
 - PR `#149`: closed and merged by squash.
-- PR `#150`: closed and merged by squash for the post-merge CURRENT reconciliation.
+- PR `#150`: closed and merged by squash for a historical CURRENT reconciliation.
 - PR `#151`: closed and merged by squash for verified Canvas runtime recovery.
+- PR `#153`: closed and merged by squash for the historical twelve-file CURRENT reconciliation represented by this content baseline.
 - Tracker: `#88` — open for remaining F3 owners.
 - Protocol: `docs/adr/ADR-0002-cross-database-operation-protocol.md`.
 - Gate: `STOP_S5=CLOSED`.
+
+```text
+CONTENT_BASELINE_SHA=79460a32b4eba669216afcc501815d5ff09b0349
+CONTENT_BASELINE_PARENT_SHA=6250214bb6664a8fff851ed0afc2438bbc276931
+CURRENT_MAIN_RESOLUTION=EXTERNAL_GIT_REF
+MERGE_SHA_EVIDENCE=EXTERNAL
+PR_153=MERGED_BY_SQUASH_HISTORICAL
+```
 
 ## Authority model
 
@@ -23,22 +34,23 @@ F3 consumes `CanonicalConsumerReadPort` and uses a specialized canonical commit 
 
 | Layer | State |
 | --- | --- |
-| Protected `main` | F1-A, ProjectVault, MemoryOrganDatabase v9, COG-001 through COG-004, the vendored Canvas runtime-recovery asset, and the PR #150 CURRENT reconciliation are integrated. |
+| Externally resolved protected `main` | F1-A, ProjectVault, MemoryOrganDatabase v9, COG-001 through COG-004, the vendored Canvas runtime-recovery asset, and historical CURRENT reconciliations are integrated. |
+| Content baseline | Exact repository state from which this inventory was prepared and reviewed; it does not predict the containing commit SHA. |
 | Audited source head | Historical reviewed source before the PR #149 squash merge. |
-| Post-merge CURRENT reconciliation | Historical PR #150 evidence for the twelve-file documentation and architecture-contract reconciliation. |
+| Historical CURRENT reconciliation | PR #150 and PR #153 evidence for prior twelve-file documentation and architecture-contract reconciliations. |
 | Canvas recovery provenance | Historical PR #151 evidence for a Body application asset; it is not a cross-database owner. |
 | Remaining F3 owners | Open and separately scoped. |
 | F3.3 | Open; irreversible legacy removal has not begun. |
 
-ProjectVault remains a separate protected reference and was not rewritten by PR #149. PR #150 introduces no runtime or protocol mutation. PR #151 introduces no new protocol owner, durable operation type, identity source, or memory authority.
+ProjectVault remains a separate protected reference and was not rewritten by PR #149. PR #150 and PR #153 introduce no runtime or protocol mutation. PR #151 introduces no new protocol owner, durable operation type, identity source, or memory authority.
 
 ## Retired regression literals
 
-The following verbatim strings are retained only as historical regression fixtures. They are not CURRENT facts and do not override the protected-main baseline above.
+The following verbatim strings are retained only as historical regression fixtures. They are not CURRENT facts and do not override the external main resolution or the content baseline above.
 
 ```text
-Historical audited baseline: `main@612d91aef131f367140ffb87a60a19ef49adcbc8`
-Current protected main: `main@7e98d3345d7cc3fbf1983babd35b61ff5c523208`
+Historical audited baseline literal: `main@612d91aef131f367140ffb87a60a19ef49adcbc8`
+Retired pre-integration baseline literal: `main@7e98d3345d7cc3fbf1983babd35b61ff5c523208`
 draft PR `#149`
 `MERGE_AUTHORIZED=false`
 The candidate does not close #88

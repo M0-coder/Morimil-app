@@ -11,15 +11,18 @@ class CrossDatabaseOperationProtocolAdrContractTest {
     }
 
     @Test
-    fun adrIsCurrentAcceptedImplementedAndMerged() {
+    fun adrIsCurrentAcceptedImplementedAndHistoricallyTraceable() {
         assertTrue(adr.startsWith("# Document status: CURRENT"))
         assertTrue(adr.contains("Status: Accepted and implemented for COG-001 through COG-004"))
-        assertTrue(adr.contains(CURRENT_MAIN))
-        assertTrue(adr.contains(PREVIOUS_MAIN))
+        assertTrue(adr.contains(CONTENT_BASELINE_SHA))
+        assertTrue(adr.contains(CONTENT_BASELINE_PARENT_SHA))
+        assertTrue(adr.contains(CURRENT_MAIN_RESOLUTION))
+        assertTrue(adr.contains(MERGE_SHA_EVIDENCE))
         assertTrue(adr.contains(AUDITED_SOURCE_HEAD))
         assertTrue(adr.contains("PR `#149`: closed and merged by squash"))
         assertTrue(adr.contains("PR `#150`: closed and merged by squash"))
-        assertTrue(adr.contains("PR_150=MERGED_POST_MERGE_CURRENT_RECONCILIATION"))
+        assertTrue(adr.contains("PR `#153`: closed and merged by squash"))
+        assertTrue(adr.contains("PR_153=MERGED_BY_SQUASH_HISTORICAL"))
         assertTrue(adr.contains("ADR_0002=ACCEPTED_AND_IMPLEMENTED_FOR_COG_001_004"))
 
         STALE_PHRASES.forEach { phrase ->
@@ -108,8 +111,12 @@ class CrossDatabaseOperationProtocolAdrContractTest {
     }
 
     private companion object {
-        const val CURRENT_MAIN = "6250214bb6664a8fff851ed0afc2438bbc276931"
-        const val PREVIOUS_MAIN = "5023981da7caf31c8f3679919f59205708b72823"
+        const val CONTENT_BASELINE_SHA =
+            "CONTENT_BASELINE_SHA=79460a32b4eba669216afcc501815d5ff09b0349"
+        const val CONTENT_BASELINE_PARENT_SHA =
+            "CONTENT_BASELINE_PARENT_SHA=6250214bb6664a8fff851ed0afc2438bbc276931"
+        const val CURRENT_MAIN_RESOLUTION = "CURRENT_MAIN_RESOLUTION=EXTERNAL_GIT_REF"
+        const val MERGE_SHA_EVIDENCE = "MERGE_SHA_EVIDENCE=EXTERNAL"
         const val AUDITED_SOURCE_HEAD = "7bdbda2aa4b7568695ba8e98be54d506d42c99d5"
         val STALE_PHRASES = listOf(
             "accepted design with audited candidate amendment",

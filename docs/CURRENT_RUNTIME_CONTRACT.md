@@ -1,20 +1,34 @@
 # Document status: CURRENT
 
-> **Protected main:** `6250214bb6664a8fff851ed0afc2438bbc276931`.
+> **Content baseline SHA:** `79460a32b4eba669216afcc501815d5ff09b0349`.
 >
-> **Previous main:** `5023981da7caf31c8f3679919f59205708b72823`.
+> **Content baseline parent SHA:** `6250214bb6664a8fff851ed0afc2438bbc276931`.
+>
+> **Current main resolution:** external Git ref `refs/heads/main`.
+>
+> **Merge SHA evidence:** external GitHub and Morimil Control Tower evidence.
 >
 > **Audited source head:** `7bdbda2aa4b7568695ba8e98be54d506d42c99d5`.
 >
-> **PR #149:** closed and merged by squash into protected `main`.
+> **PR #149:** closed and merged by squash.
 >
-> **PR #150:** closed and merged by squash as the post-merge CURRENT reconciliation.
+> **PR #150:** closed and merged by squash as a historical CURRENT reconciliation.
 >
 > **PR #151:** closed and merged by squash; the verified Canvas runtime-recovery bundle is vendored with provenance.
 >
-> The audited head is historical provenance; squash commits are executable repository states.
+> **PR #153:** closed and merged by squash as the historical twelve-file CURRENT reconciliation represented by this content baseline.
+>
+> A versioned document records a known content baseline. The moving SHA of protected `main` is resolved externally and is not predicted by the commit that contains this document.
 
 # Current runtime contract
+
+```text
+CONTENT_BASELINE_SHA=79460a32b4eba669216afcc501815d5ff09b0349
+CONTENT_BASELINE_PARENT_SHA=6250214bb6664a8fff851ed0afc2438bbc276931
+CURRENT_MAIN_RESOLUTION=EXTERNAL_GIT_REF
+MERGE_SHA_EVIDENCE=EXTERNAL
+PR_153=MERGED_BY_SQUASH_HISTORICAL
+```
 
 ## Identity and Body boundary
 
@@ -31,11 +45,12 @@ Morimil is the continuous personal Instance. `Morimil-app` is the current native
 
 | Layer | State |
 | --- | --- |
-| Protected `main` | F1-A, MemoryOrganDatabase v9, ProjectVault, the durable COG-001 through COG-004 protocol, the vendored Canvas runtime-recovery bundle, and the PR #150 CURRENT reconciliation are integrated. |
+| Externally resolved protected `main` | F1-A, MemoryOrganDatabase v9, ProjectVault, the durable COG-001 through COG-004 protocol, the vendored Canvas runtime-recovery bundle, and the historical CURRENT reconciliations are integrated. |
+| Content baseline | Exact repository state from which this document was prepared and reviewed; it is not a prediction of the containing commit SHA. |
 | Audited source head | Historical reviewed source for PR #149 before squash. |
-| Post-merge CURRENT reconciliation | PR #150 records the twelve-file documentation and architecture-contract reconciliation now represented by protected `main`. |
+| Historical CURRENT reconciliations | PR #150 and PR #153 record prior twelve-file documentation and architecture-contract reconciliations. |
 | Canvas recovery provenance | PR #151 records the recovered runtime asset, deterministic successor bundle, source artifact, and digest evidence. |
-| Historical preparation | ADRs, plans, checkpoints, and candidate reports explain prior decisions but do not override CURRENT truth. |
+| Historical preparation | ADRs, plans, checkpoints, and candidate reports explain prior decisions but do not override CURRENT semantics. |
 
 ## Persistent stores
 
@@ -168,4 +183,4 @@ Auxiliary providers return unverified advisory output. They cannot become Morimi
 
 These items remain visible. They are not represented as production defects, completed work, or blockers for the already merged PR #149.
 
-This contract must be updated in the same PR whenever a change alters a listed runtime authority, store version, allowlist, gate, or phase state.
+This contract must be updated in the same PR whenever a change alters a listed runtime authority, store version, allowlist, gate, or phase state. A post-merge SHA is recorded externally and must not be retrofitted as a self-referential CURRENT field.

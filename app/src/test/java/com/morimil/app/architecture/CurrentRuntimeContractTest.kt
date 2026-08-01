@@ -12,14 +12,17 @@ class CurrentRuntimeContractTest {
     }
 
     @Test
-    fun contractTracksExactPostMergeMainAndStoreVersions() {
-        assertTrue(contract.contains(CURRENT_MAIN))
-        assertTrue(contract.contains(PREVIOUS_MAIN))
+    fun contractUsesStableBaselineResolutionAndStoreVersions() {
+        assertTrue(contract.contains(CONTENT_BASELINE_SHA))
+        assertTrue(contract.contains(CONTENT_BASELINE_PARENT_SHA))
+        assertTrue(contract.contains(CURRENT_MAIN_RESOLUTION))
+        assertTrue(contract.contains(MERGE_SHA_EVIDENCE))
         assertTrue(contract.contains(AUDITED_SOURCE_HEAD))
         assertTrue(contract.contains("PR #149", ignoreCase = true))
         assertTrue(contract.contains("PR #150", ignoreCase = true))
+        assertTrue(contract.contains("PR #153", ignoreCase = true))
         assertTrue(contract.contains("closed and merged by squash", ignoreCase = true))
-        assertTrue(contract.contains("post-merge CURRENT reconciliation", ignoreCase = true))
+        assertTrue(contract.contains("historical CURRENT reconciliation", ignoreCase = true))
         assertTrue(contract.contains("| `MorimilDatabase` | `15` |"))
         assertTrue(contract.contains("| `MemoryOrganDatabase` | `9` |"))
         assertTrue(contract.contains("`cross_database_operations`"))
@@ -108,8 +111,12 @@ class CurrentRuntimeContractTest {
     }
 
     private companion object {
-        const val CURRENT_MAIN = "6250214bb6664a8fff851ed0afc2438bbc276931"
-        const val PREVIOUS_MAIN = "5023981da7caf31c8f3679919f59205708b72823"
+        const val CONTENT_BASELINE_SHA =
+            "CONTENT_BASELINE_SHA=79460a32b4eba669216afcc501815d5ff09b0349"
+        const val CONTENT_BASELINE_PARENT_SHA =
+            "CONTENT_BASELINE_PARENT_SHA=6250214bb6664a8fff851ed0afc2438bbc276931"
+        const val CURRENT_MAIN_RESOLUTION = "CURRENT_MAIN_RESOLUTION=EXTERNAL_GIT_REF"
+        const val MERGE_SHA_EVIDENCE = "MERGE_SHA_EVIDENCE=EXTERNAL"
         const val AUDITED_SOURCE_HEAD = "7bdbda2aa4b7568695ba8e98be54d506d42c99d5"
         val STALE_PHRASES = listOf(
             "candidate not merged",
