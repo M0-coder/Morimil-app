@@ -165,7 +165,7 @@ The merged implementation passed unit tests, lint, debug and instrumentation APK
 
 Residual non-blocking hardening remains:
 
-- two coordinators against the same real Room database;
+- Room-backed concurrent regression with two coordinators against the same real Room database;
 - a failed rollback fixture with a pre-existing non-null `sha256:*` snapshot;
 - redundant `rollbackEventHash` API cleanup;
 - direct vulnerable UPDATE-trigger replacement coverage.

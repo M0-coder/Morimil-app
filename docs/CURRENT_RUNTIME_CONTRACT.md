@@ -83,7 +83,9 @@ After committed identity verification, startup performs the bounded COG recovery
 6. finalizes owner state and journal result atomically;
 7. stops on blocked or incomplete relevant work.
 
-ProjectVault recovery remains a separate protocol and gate.
+Activation blocks before recovery when a pending legacy `cog_001.payload.v1` operation exists. The gate requires zero non-committed COG-001 v1 operations before loading recoverable work.
+
+ProjectVault remains a separate protocol and gate. It remains the protected reference protocol.
 
 ## Integrated COG-001 through COG-004 contract
 
@@ -103,7 +105,7 @@ The rollback event hash remains in the journal, canonical receipt, and local res
 
 ## ProjectVault and owner separation
 
-ProjectVault remains the protected reference protocol. PR #149 did not rewrite it or merge it into the COG journal. ORCH, AGENT, BOOT, RECALL, and REST owners remain outside the bounded COG integration unless separately implemented and audited.
+ProjectVault remains a separate protocol and the protected reference protocol. PR #149 did not rewrite it or merge it into the COG journal. ORCH, AGENT, BOOT, RECALL, and REST owners remain outside the bounded COG integration unless separately implemented and audited.
 
 ## F1 convergence and legacy quarantine
 

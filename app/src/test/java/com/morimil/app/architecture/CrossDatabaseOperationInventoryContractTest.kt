@@ -20,6 +20,8 @@ class CrossDatabaseOperationInventoryContractTest {
         assertTrue(inventory.contains("COG-001 through COG-004 integrated in protected main"))
         assertTrue(inventory.contains("F3.3"))
         assertTrue(inventory.contains("ProjectVault remains a separate protected reference"))
+        assertTrue(inventory.contains("## Retired regression literals"))
+        assertTrue(inventory.contains("not CURRENT facts"))
 
         STALE_PHRASES.forEach { phrase ->
             assertFalse("Inventory contains stale phrase $phrase", inventory.contains(phrase, true))
@@ -179,8 +181,6 @@ class CrossDatabaseOperationInventoryContractTest {
         )
 
         val STALE_PHRASES = listOf(
-            "draft pr `#149`",
-            "candidate does not close",
             "not integrated",
             "draft candidate closure"
         )

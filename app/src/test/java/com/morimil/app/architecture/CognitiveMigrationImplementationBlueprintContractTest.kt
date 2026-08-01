@@ -63,12 +63,12 @@ class CognitiveMigrationImplementationBlueprintContractTest {
         assertInOrder(
             stateBlock,
             listOf(
-                "STAGED",
-                "PENDING_CANONICAL",
-                "CANONICAL_COMMITTED",
-                "PENDING_LOCAL_COMMIT",
-                "COMMITTED",
-                "BLOCKED"
+                "STAGED\n",
+                "PENDING_CANONICAL\n",
+                "CANONICAL_COMMITTED\n",
+                "PENDING_LOCAL_COMMIT\n",
+                "\nCOMMITTED\n",
+                "\nBLOCKED\n"
             )
         )
         assertTrue(blueprint.contains("The clock is metadata only"))

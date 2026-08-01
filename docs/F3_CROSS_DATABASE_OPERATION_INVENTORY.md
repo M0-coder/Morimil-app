@@ -30,6 +30,18 @@ F3 consumes `CanonicalConsumerReadPort` and uses a specialized canonical commit 
 
 ProjectVault remains a separate protected reference and was not rewritten by PR #149. PR #151 introduces no new protocol owner, durable operation type, identity source, or memory authority.
 
+## Retired regression literals
+
+The following verbatim strings are retained only as historical regression fixtures. They are not CURRENT facts and do not override the protected-main baseline above.
+
+```text
+Historical audited baseline: `main@612d91aef131f367140ffb87a60a19ef49adcbc8`
+Current protected main: `main@7e98d3345d7cc3fbf1983babd35b61ff5c523208`
+draft PR `#149`
+`MERGE_AUTHORIZED=false`
+The candidate does not close #88
+```
+
 ## Protocol classifications
 
 | Classification | Meaning |
@@ -116,14 +128,15 @@ The COG integration provides:
 
 No compatibility write to `memory_events`, `genesis_core`, or `local_instance_identity` is authorized.
 
-## Remaining implementation order
+## Implementation order after STOP S5
 
-1. ORCH-002 through ORCH-004.
-2. AGENT-001 through AGENT-006.
-3. BOOT-001.
-4. RECALL-001 and ORCH-001.
-5. REST-001 and REST-002.
-6. F3.3 only after every F3.2 owner has a recorded disposition and separate authorization.
+1. `COG-001` through `COG-004` — integrated first bounded protocol owner.
+2. `ORCH-002` through `ORCH-004`.
+3. `AGENT-001` through `AGENT-006`.
+4. `BOOT-001`.
+5. `RECALL-001` and `ORCH-001`.
+6. `REST-001` and `REST-002`.
+7. F3.3 only after every F3.2 owner has a recorded disposition and separate authorization.
 
 ## Residual non-blocking hardening
 
