@@ -35,7 +35,9 @@ class CurrentDocumentSovereigntyContractTest {
         assertTrue(audit.contains(PREVIOUS_MAIN))
         assertTrue(audit.contains(AUDITED_SOURCE_HEAD))
         assertTrue(audit.contains("PR `#149`: closed and merged by squash"))
+        assertTrue(audit.contains("PR `#150`: closed and merged by squash"))
         assertTrue(audit.contains("PR #149 is historical integration evidence"))
+        assertTrue(audit.contains("PR #150 is historical post-merge CURRENT reconciliation evidence"))
         assertTrue(audit.contains("MemoryOrganDatabase version 9"))
         assertTrue(audit.contains("COG-001 through COG-004"))
         assertTrue(audit.contains("`CanonicalConsumerReadPort`"))
@@ -94,8 +96,8 @@ class CurrentDocumentSovereigntyContractTest {
 
     private companion object {
         const val CURRENT_STATUS = "# Document status: CURRENT"
-        const val CURRENT_MAIN = "5023981da7caf31c8f3679919f59205708b72823"
-        const val PREVIOUS_MAIN = "ba6ffa4f9ddc9189ded47e231ad1f8bc962e612d"
+        const val CURRENT_MAIN = "6250214bb6664a8fff851ed0afc2438bbc276931"
+        const val PREVIOUS_MAIN = "5023981da7caf31c8f3679919f59205708b72823"
         const val AUDITED_SOURCE_HEAD = "7bdbda2aa4b7568695ba8e98be54d506d42c99d5"
 
         val IGNORED_DIRECTORIES = setOf(".git", ".gradle", "build", "node_modules")

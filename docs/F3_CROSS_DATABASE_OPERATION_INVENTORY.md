@@ -3,10 +3,11 @@
 # F3.2 — Cross-database operation inventory
 
 - Inventory version: `3`.
-- Current protected main: `main@5023981da7caf31c8f3679919f59205708b72823`.
-- Previous main: `main@ba6ffa4f9ddc9189ded47e231ad1f8bc962e612d`.
+- Current protected main: `main@6250214bb6664a8fff851ed0afc2438bbc276931`.
+- Previous main: `main@5023981da7caf31c8f3679919f59205708b72823`.
 - Audited source head: `7bdbda2aa4b7568695ba8e98be54d506d42c99d5`.
 - PR `#149`: closed and merged by squash.
+- PR `#150`: closed and merged by squash for the post-merge CURRENT reconciliation.
 - PR `#151`: closed and merged by squash for verified Canvas runtime recovery.
 - Tracker: `#88` — open for remaining F3 owners.
 - Protocol: `docs/adr/ADR-0002-cross-database-operation-protocol.md`.
@@ -22,13 +23,14 @@ F3 consumes `CanonicalConsumerReadPort` and uses a specialized canonical commit 
 
 | Layer | State |
 | --- | --- |
-| Protected `main` | F1-A, ProjectVault, MemoryOrganDatabase v9, COG-001 through COG-004, and the vendored Canvas runtime-recovery asset are integrated. |
+| Protected `main` | F1-A, ProjectVault, MemoryOrganDatabase v9, COG-001 through COG-004, the vendored Canvas runtime-recovery asset, and the PR #150 CURRENT reconciliation are integrated. |
 | Audited source head | Historical reviewed source before the PR #149 squash merge. |
+| Post-merge CURRENT reconciliation | Historical PR #150 evidence for the twelve-file documentation and architecture-contract reconciliation. |
 | Canvas recovery provenance | Historical PR #151 evidence for a Body application asset; it is not a cross-database owner. |
 | Remaining F3 owners | Open and separately scoped. |
 | F3.3 | Open; irreversible legacy removal has not begun. |
 
-ProjectVault remains a separate protected reference and was not rewritten by PR #149. PR #151 introduces no new protocol owner, durable operation type, identity source, or memory authority.
+ProjectVault remains a separate protected reference and was not rewritten by PR #149. PR #150 introduces no runtime or protocol mutation. PR #151 introduces no new protocol owner, durable operation type, identity source, or memory authority.
 
 ## Retired regression literals
 

@@ -4,15 +4,16 @@
 
 - Tracker: `#88` — open for remaining F3 owners.
 - Governing ADR: `ADR-0002`.
-- Protected main: `5023981da7caf31c8f3679919f59205708b72823`.
-- Previous main: `ba6ffa4f9ddc9189ded47e231ad1f8bc962e612d`.
+- Protected main: `6250214bb6664a8fff851ed0afc2438bbc276931`.
+- Previous main: `5023981da7caf31c8f3679919f59205708b72823`.
 - Audited source head: `7bdbda2aa4b7568695ba8e98be54d506d42c99d5`.
 - PR `#149`: closed and merged by squash.
+- PR `#150`: closed and merged by squash for the post-merge CURRENT reconciliation.
 - PR `#151`: closed and merged by squash for verified Canvas runtime recovery.
 - Gate: `STOP_S5=CLOSED`.
 - Integrated scope: `COG-001` through `COG-004` only.
 
-This document records the implemented and independently audited design now present in protected main. The audited source head is historical provenance; squash commits are executable states. PR #151 changes Body build/runtime-asset recovery only and does not alter this protocol's authority or scope.
+This document records the implemented and independently audited design now present in protected main. The audited source head is historical provenance; squash commits are executable states. PR #150 reconciles CURRENT documentation and architecture contracts only. PR #151 changes Body build/runtime-asset recovery only. Neither alters this protocol's authority or scope.
 
 ## 1. Authority and sovereignty
 
@@ -175,9 +176,10 @@ These items are future evidence/API hardening. They are not concealed, represent
 ## 10. Acceptance boundary
 
 ```text
-CURRENT_MAIN=5023981da7caf31c8f3679919f59205708b72823
-PREVIOUS_MAIN=ba6ffa4f9ddc9189ded47e231ad1f8bc962e612d
+CURRENT_MAIN=6250214bb6664a8fff851ed0afc2438bbc276931
+PREVIOUS_MAIN=5023981da7caf31c8f3679919f59205708b72823
 PR_149=MERGED_BY_SQUASH
+PR_150=MERGED_POST_MERGE_CURRENT_RECONCILIATION
 PR_151=MERGED_CANVAS_RUNTIME_RECOVERY
 AUDITED_SOURCE_HEAD=7bdbda2aa4b7568695ba8e98be54d506d42c99d5
 COG_001_004=INTEGRATED_IN_MAIN

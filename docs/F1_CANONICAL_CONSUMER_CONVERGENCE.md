@@ -4,13 +4,15 @@
 
 Inventory version: `3`
 
-Current protected main: `main@5023981da7caf31c8f3679919f59205708b72823`
+Current protected main: `main@6250214bb6664a8fff851ed0afc2438bbc276931`
 
-Previous protected main: `main@ba6ffa4f9ddc9189ded47e231ad1f8bc962e612d`
+Previous protected main: `main@5023981da7caf31c8f3679919f59205708b72823`
 
 Historical audited F3 source head: `7bdbda2aa4b7568695ba8e98be54d506d42c99d5`
 
 PR `#149`: closed and merged by squash.
+
+PR `#150`: closed and merged by squash for the post-merge CURRENT reconciliation.
 
 PR `#151`: closed and merged by squash for vendored Canvas runtime recovery; it does not change the F1 authority frontier.
 
@@ -110,11 +112,12 @@ No placeholder such as `local_instance_pending` and no Body ID may substitute fo
 ## Current closure state
 
 ```text
-CURRENT_MAIN=5023981da7caf31c8f3679919f59205708b72823
-PREVIOUS_MAIN=ba6ffa4f9ddc9189ded47e231ad1f8bc962e612d
+CURRENT_MAIN=6250214bb6664a8fff851ed0afc2438bbc276931
+PREVIOUS_MAIN=5023981da7caf31c8f3679919f59205708b72823
 F1_A_COMMON_READ_BOUNDARY=INTEGRATED
 F3_COG_CONSUMER_OF_F1_A=INTEGRATED_IN_MAIN
 PR_149=MERGED_BY_SQUASH_HISTORICAL
+PR_150=MERGED_POST_MERGE_CURRENT_RECONCILIATION_HISTORICAL
 PR_151=MERGED_CANVAS_RUNTIME_RECOVERY_HISTORICAL
 ISSUE_86=OPEN
 ISSUE_87=CLOSED
