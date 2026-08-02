@@ -2,17 +2,13 @@ package com.morimil.app
 
 import com.morimil.app.data.genesis.ultra.CanonicalCognitiveMigrationCommitPort
 import com.morimil.app.data.genesis.ultra.CanonicalCognitiveMigrationReadPort
-import com.morimil.app.data.genesis.ultra.GenesisUltraCanonicalConsumerReadAdapter
 import com.morimil.app.data.repository.CognitiveMigrationProtocolFinalizer
 import com.morimil.app.data.repository.CrossDatabaseOperationCoordinator
 
 internal val MorimilAppContainer.canonicalCognitiveMigrationReadPort:
     CanonicalCognitiveMigrationReadPort
     get() = CanonicalCognitiveMigrationReadPort.production(
-        consumerReadPort = GenesisUltraCanonicalConsumerReadAdapter.production(
-            identityRepository = genesisUltraRuntimeIdentityRepository,
-            memoryRepository = canonicalMemoryRepository
-        )
+        consumerReadPort = canonicalConsumerReadPort
     )
 
 internal val MorimilAppContainer.canonicalCognitiveMigrationCommitPort:
