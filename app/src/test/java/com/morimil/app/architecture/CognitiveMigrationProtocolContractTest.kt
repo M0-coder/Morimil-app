@@ -31,17 +31,24 @@ class CognitiveMigrationProtocolContractTest {
         val readPort = source(
             "data/genesis/ultra/CanonicalCognitiveMigrationReadPort.kt"
         ).readText()
-        val composition = sourceAtRoot(
+        val canonicalComposition = sourceAtRoot(
+            "MorimilAppContainerCanonicalConsumers.kt"
+        ).readText()
+        val cognitiveComposition = sourceAtRoot(
             "MorimilAppContainerCognitiveMigrationProtocol.kt"
         ).readText()
 
         assertTrue(readPort.contains("private val consumerReadPort: CanonicalConsumerReadPort"))
         assertFalse(readPort.contains("GenesisUltraRuntimeIdentityRepository"))
         assertFalse(readPort.contains("readCommittedIdentity"))
-        assertTrue(composition.contains("CanonicalCognitiveMigrationReadPort.production("))
-        assertTrue(composition.contains("consumerReadPort = GenesisUltraCanonicalConsumerReadAdapter.production("))
+        assertTrue(canonicalComposition.contains("GenesisUltraCanonicalConsumerReadAdapter.production("))
+        assertTrue(canonicalComposition.contains("identityRepository = genesisUltraRuntimeIdentityRepository"))
+        assertTrue(canonicalComposition.contains("memoryRepository = canonicalMemoryRepository"))
+        assertTrue(cognitiveComposition.contains("CanonicalCognitiveMigrationReadPort.production("))
+        assertTrue(cognitiveComposition.contains("consumerReadPort = canonicalConsumerReadPort"))
+        assertFalse(cognitiveComposition.contains("GenesisUltraCanonicalConsumerReadAdapter.production("))
         assertFalse(
-            composition.contains(
+            cognitiveComposition.contains(
                 "CanonicalCognitiveMigrationReadPort.production(\n" +
                     "        identityRepository"
             )

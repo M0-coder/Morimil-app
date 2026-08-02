@@ -33,7 +33,10 @@ class F1CanonicalConsumerConvergenceContractTest {
     @Test
     fun canonicalBoundaryRemainsSingleAndIntegrated() {
         val inventory = inventoryFile().readText()
-        val composition = repositoryFile(
+        val canonicalComposition = repositoryFile(
+            "app/src/main/java/com/morimil/app/MorimilAppContainerCanonicalConsumers.kt"
+        ).readText()
+        val cognitiveComposition = repositoryFile(
             "app/src/main/java/com/morimil/app/MorimilAppContainerCognitiveMigrationProtocol.kt"
         ).readText()
 
@@ -42,8 +45,12 @@ class F1CanonicalConsumerConvergenceContractTest {
         assertTrue(inventory.contains("CognitiveMigrationCanonicalReadPort"))
         assertTrue(inventory.contains("does not create a second identity or memory authority"))
         assertTrue(inventory.contains("CanonicalCognitiveMigrationCommitPort"))
-        assertTrue(composition.contains("GenesisUltraCanonicalConsumerReadAdapter.production"))
-        assertTrue(composition.contains("CanonicalCognitiveMigrationReadPort.production"))
+        assertTrue(canonicalComposition.contains("GenesisUltraCanonicalConsumerReadAdapter.production"))
+        assertTrue(canonicalComposition.contains("identityRepository = genesisUltraRuntimeIdentityRepository"))
+        assertTrue(canonicalComposition.contains("memoryRepository = canonicalMemoryRepository"))
+        assertTrue(cognitiveComposition.contains("consumerReadPort = canonicalConsumerReadPort"))
+        assertFalse(cognitiveComposition.contains("GenesisUltraCanonicalConsumerReadAdapter.production"))
+        assertTrue(cognitiveComposition.contains("CanonicalCognitiveMigrationReadPort.production"))
     }
 
     @Test
