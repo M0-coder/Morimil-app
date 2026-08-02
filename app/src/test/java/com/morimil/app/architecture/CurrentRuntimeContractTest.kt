@@ -37,6 +37,9 @@ class CurrentRuntimeContractTest {
 
     @Test
     fun integratedCompositionPreservesTheF1AAuthorityFrontier() {
+        val canonicalComposition = productionFile(
+            "com/morimil/app/MorimilAppContainerCanonicalConsumers.kt"
+        ).readText()
         val cognitiveComposition = productionFile(
             "com/morimil/app/MorimilAppContainerCognitiveMigrationProtocol.kt"
         ).readText()
@@ -44,7 +47,11 @@ class CurrentRuntimeContractTest {
             "com/morimil/app/data/local/MemoryOrganDatabase.kt"
         ).readText()
 
-        assertTrue(cognitiveComposition.contains("GenesisUltraCanonicalConsumerReadAdapter.production"))
+        assertTrue(canonicalComposition.contains("GenesisUltraCanonicalConsumerReadAdapter.production"))
+        assertTrue(canonicalComposition.contains("identityRepository = genesisUltraRuntimeIdentityRepository"))
+        assertTrue(canonicalComposition.contains("memoryRepository = canonicalMemoryRepository"))
+        assertTrue(cognitiveComposition.contains("consumerReadPort = canonicalConsumerReadPort"))
+        assertFalse(cognitiveComposition.contains("GenesisUltraCanonicalConsumerReadAdapter.production"))
         assertTrue(cognitiveComposition.contains("CanonicalCognitiveMigrationReadPort.production"))
         assertTrue(contract.contains("CanonicalConsumerReadPort"))
         assertTrue(contract.contains("CanonicalCognitiveMigrationCommitPort"))
