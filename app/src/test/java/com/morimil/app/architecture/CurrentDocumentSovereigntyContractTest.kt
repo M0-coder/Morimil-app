@@ -27,17 +27,45 @@ class CurrentDocumentSovereigntyContractTest {
     }
 
     @Test
-    fun sovereigntyAuditRecordsPostMergeTruthAndHistoricalProvenance() {
+    fun governedCurrentDocumentsResolveMovingMainExternally() {
+        val root = repositoryRoot()
+
+        GOVERNED_CURRENT_DOCUMENTS.forEach { relativePath ->
+            val document = File(root, relativePath)
+            assertTrue("Missing governed CURRENT document $relativePath", document.isFile)
+            val text = document.readText()
+
+            assertTrue("$relativePath is not CURRENT", text.startsWith(CURRENT_STATUS))
+            assertTrue("$relativePath missing content baseline", text.contains(CONTENT_BASELINE_SHA))
+            assertTrue("$relativePath missing baseline parent", text.contains(CONTENT_BASELINE_PARENT_SHA))
+            assertTrue("$relativePath missing external main resolution", text.contains(CURRENT_MAIN_RESOLUTION))
+            assertTrue("$relativePath missing external merge evidence", text.contains(MERGE_SHA_EVIDENCE))
+            assertTrue("$relativePath missing PR #153 history", text.contains(PR_153_HISTORY))
+
+            SELF_REFERENTIAL_MAIN_PATTERNS.forEach { pattern ->
+                assertFalse(
+                    "$relativePath contains a self-referential main SHA field: ${pattern.pattern}",
+                    pattern.containsMatchIn(text)
+                )
+            }
+        }
+    }
+
+    @Test
+    fun sovereigntyAuditRecordsBaselineResolutionAndHistoricalProvenance() {
         val audit = repositoryFile("docs/CURRENT_DOCUMENT_SOVEREIGNTY_AUDIT.md").readText()
 
         assertTrue(audit.startsWith(CURRENT_STATUS))
-        assertTrue(audit.contains(CURRENT_MAIN))
-        assertTrue(audit.contains(PREVIOUS_MAIN))
+        assertTrue(audit.contains(CONTENT_BASELINE_SHA))
+        assertTrue(audit.contains(CONTENT_BASELINE_PARENT_SHA))
+        assertTrue(audit.contains(CURRENT_MAIN_RESOLUTION))
+        assertTrue(audit.contains(MERGE_SHA_EVIDENCE))
         assertTrue(audit.contains(AUDITED_SOURCE_HEAD))
         assertTrue(audit.contains("PR `#149`: closed and merged by squash"))
         assertTrue(audit.contains("PR `#150`: closed and merged by squash"))
+        assertTrue(audit.contains("PR `#153`: closed and merged by squash"))
         assertTrue(audit.contains("PR #149 is historical integration evidence"))
-        assertTrue(audit.contains("PR #150 is historical post-merge CURRENT reconciliation evidence"))
+        assertTrue(audit.contains("PR #150 and PR #153 are historical CURRENT reconciliation evidence"))
         assertTrue(audit.contains("MemoryOrganDatabase version 9"))
         assertTrue(audit.contains("COG-001 through COG-004"))
         assertTrue(audit.contains("`CanonicalConsumerReadPort`"))
@@ -96,10 +124,36 @@ class CurrentDocumentSovereigntyContractTest {
 
     private companion object {
         const val CURRENT_STATUS = "# Document status: CURRENT"
-        const val CURRENT_MAIN = "6250214bb6664a8fff851ed0afc2438bbc276931"
-        const val PREVIOUS_MAIN = "5023981da7caf31c8f3679919f59205708b72823"
+        const val CONTENT_BASELINE_SHA =
+            "CONTENT_BASELINE_SHA=79460a32b4eba669216afcc501815d5ff09b0349"
+        const val CONTENT_BASELINE_PARENT_SHA =
+            "CONTENT_BASELINE_PARENT_SHA=6250214bb6664a8fff851ed0afc2438bbc276931"
+        const val CURRENT_MAIN_RESOLUTION = "CURRENT_MAIN_RESOLUTION=EXTERNAL_GIT_REF"
+        const val MERGE_SHA_EVIDENCE = "MERGE_SHA_EVIDENCE=EXTERNAL"
+        const val PR_153_HISTORY = "PR_153=MERGED_BY_SQUASH_HISTORICAL"
         const val AUDITED_SOURCE_HEAD = "7bdbda2aa4b7568695ba8e98be54d506d42c99d5"
 
+        val GOVERNED_CURRENT_DOCUMENTS = setOf(
+            "docs/CURRENT_DOCUMENT_SOVEREIGNTY_AUDIT.md",
+            "docs/CURRENT_RUNTIME_CONTRACT.md",
+            "docs/F1_CANONICAL_CONSUMER_CONVERGENCE.md",
+            "docs/F3_COGNITIVE_MIGRATION_IMPLEMENTATION_BLUEPRINT.md",
+            "docs/F3_CROSS_DATABASE_OPERATION_INVENTORY.md",
+            "docs/adr/ADR-0002-cross-database-operation-protocol.md"
+        )
+        val SELF_REFERENTIAL_MAIN_PATTERNS = listOf(
+            Regex("""(?im)^\s*CURRENT_MAIN=[0-9a-f]{40}\s*$"""),
+            Regex("""(?im)^\s*PREVIOUS_MAIN=[0-9a-f]{40}\s*$"""),
+            Regex(
+                """(?im)^\s*(?:[-*>]\s*)?(?:\*\*)?(?:current\s+)?protected\s+main""" +
+                    """(?:\*\*)?\s*:\s*`?(?:main@)?[0-9a-f]{40}`?\.?\s*$"""
+            ),
+            Regex(
+                """(?im)^\s*(?:[-*>]\s*)?(?:\*\*)?previous(?:\s+protected)?\s+main""" +
+                    """(?:\*\*)?\s*:\s*`?(?:main@)?[0-9a-f]{40}`?\.?\s*$"""
+            ),
+            Regex("""(?im)^\s*-\s*Current squash commit:\s*`?[0-9a-f]{40}`?\.?\s*$""")
+        )
         val IGNORED_DIRECTORIES = setOf(".git", ".gradle", "build", "node_modules")
         val RETIRED_OWNERSHIP_PHRASES = listOf(
             "guardian witnesses, authorizes, and safeguards continuity",

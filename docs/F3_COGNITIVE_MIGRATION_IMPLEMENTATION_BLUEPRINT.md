@@ -4,16 +4,27 @@
 
 - Tracker: `#88` — open for remaining F3 owners.
 - Governing ADR: `ADR-0002`.
-- Protected main: `6250214bb6664a8fff851ed0afc2438bbc276931`.
-- Previous main: `5023981da7caf31c8f3679919f59205708b72823`.
+- Content baseline SHA: `79460a32b4eba669216afcc501815d5ff09b0349`.
+- Content baseline parent SHA: `6250214bb6664a8fff851ed0afc2438bbc276931`.
+- Current protected `main`: resolved externally from `refs/heads/main`.
+- Merge SHA evidence: external GitHub and Morimil Control Tower evidence.
 - Audited source head: `7bdbda2aa4b7568695ba8e98be54d506d42c99d5`.
 - PR `#149`: closed and merged by squash.
-- PR `#150`: closed and merged by squash for the post-merge CURRENT reconciliation.
+- PR `#150`: closed and merged by squash for a historical CURRENT reconciliation.
 - PR `#151`: closed and merged by squash for verified Canvas runtime recovery.
+- PR `#153`: closed and merged by squash for the historical twelve-file CURRENT reconciliation represented by this content baseline.
 - Gate: `STOP_S5=CLOSED`.
 - Integrated scope: `COG-001` through `COG-004` only.
 
-This document records the implemented and independently audited design now present in protected main. The audited source head is historical provenance; squash commits are executable states. PR #150 reconciles CURRENT documentation and architecture contracts only. PR #151 changes Body build/runtime-asset recovery only. Neither alters this protocol's authority or scope.
+This document records the implemented and independently audited design represented by the content baseline and present in the externally resolved protected main. The audited source head is historical provenance. A later squash SHA is integration evidence and cannot be predicted by the versioned content that produces it. PR #150 and PR #153 reconcile CURRENT documentation and architecture contracts only. PR #151 changes Body build/runtime-asset recovery only. None alters this protocol's authority or scope.
+
+```text
+CONTENT_BASELINE_SHA=79460a32b4eba669216afcc501815d5ff09b0349
+CONTENT_BASELINE_PARENT_SHA=6250214bb6664a8fff851ed0afc2438bbc276931
+CURRENT_MAIN_RESOLUTION=EXTERNAL_GIT_REF
+MERGE_SHA_EVIDENCE=EXTERNAL
+PR_153=MERGED_BY_SQUASH_HISTORICAL
+```
 
 ## 1. Authority and sovereignty
 
@@ -176,11 +187,14 @@ These items are future evidence/API hardening. They are not concealed, represent
 ## 10. Acceptance boundary
 
 ```text
-CURRENT_MAIN=6250214bb6664a8fff851ed0afc2438bbc276931
-PREVIOUS_MAIN=5023981da7caf31c8f3679919f59205708b72823
+CONTENT_BASELINE_SHA=79460a32b4eba669216afcc501815d5ff09b0349
+CONTENT_BASELINE_PARENT_SHA=6250214bb6664a8fff851ed0afc2438bbc276931
+CURRENT_MAIN_RESOLUTION=EXTERNAL_GIT_REF
+MERGE_SHA_EVIDENCE=EXTERNAL
 PR_149=MERGED_BY_SQUASH
 PR_150=MERGED_POST_MERGE_CURRENT_RECONCILIATION
 PR_151=MERGED_CANVAS_RUNTIME_RECOVERY
+PR_153=MERGED_BY_SQUASH_HISTORICAL
 AUDITED_SOURCE_HEAD=7bdbda2aa4b7568695ba8e98be54d506d42c99d5
 COG_001_004=INTEGRATED_IN_MAIN
 MEMORY_ORGAN_DATABASE=V9

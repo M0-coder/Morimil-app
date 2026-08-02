@@ -14,12 +14,15 @@ class CognitiveMigrationImplementationBlueprintContractTest {
     fun blueprintIsCurrentImplementedAndHistoricallyTraceable() {
         assertTrue(blueprint.startsWith("# Document status: CURRENT"))
         assertTrue(blueprint.contains("implemented and audited design", true))
-        assertTrue(blueprint.contains(CURRENT_MAIN))
-        assertTrue(blueprint.contains(PREVIOUS_MAIN))
+        assertTrue(blueprint.contains(CONTENT_BASELINE_SHA))
+        assertTrue(blueprint.contains(CONTENT_BASELINE_PARENT_SHA))
+        assertTrue(blueprint.contains(CURRENT_MAIN_RESOLUTION))
+        assertTrue(blueprint.contains(MERGE_SHA_EVIDENCE))
         assertTrue(blueprint.contains(AUDITED_SOURCE_HEAD))
         assertTrue(blueprint.contains("PR `#149`: closed and merged by squash"))
         assertTrue(blueprint.contains("PR `#150`: closed and merged by squash"))
-        assertTrue(blueprint.contains("PR_150=MERGED_POST_MERGE_CURRENT_RECONCILIATION"))
+        assertTrue(blueprint.contains("PR `#153`: closed and merged by squash"))
+        assertTrue(blueprint.contains("PR_153=MERGED_BY_SQUASH_HISTORICAL"))
         assertTrue(blueprint.contains("COG_001_004=INTEGRATED_IN_MAIN"))
 
         STALE_PHRASES.forEach { phrase ->
@@ -111,8 +114,12 @@ class CognitiveMigrationImplementationBlueprintContractTest {
     }
 
     private companion object {
-        const val CURRENT_MAIN = "6250214bb6664a8fff851ed0afc2438bbc276931"
-        const val PREVIOUS_MAIN = "5023981da7caf31c8f3679919f59205708b72823"
+        const val CONTENT_BASELINE_SHA =
+            "CONTENT_BASELINE_SHA=79460a32b4eba669216afcc501815d5ff09b0349"
+        const val CONTENT_BASELINE_PARENT_SHA =
+            "CONTENT_BASELINE_PARENT_SHA=6250214bb6664a8fff851ed0afc2438bbc276931"
+        const val CURRENT_MAIN_RESOLUTION = "CURRENT_MAIN_RESOLUTION=EXTERNAL_GIT_REF"
+        const val MERGE_SHA_EVIDENCE = "MERGE_SHA_EVIDENCE=EXTERNAL"
         const val AUDITED_SOURCE_HEAD = "7bdbda2aa4b7568695ba8e98be54d506d42c99d5"
         val STALE_PHRASES = listOf(
             "isolated implementation candidate",

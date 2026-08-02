@@ -2,23 +2,35 @@
 
 # F1 canonical consumer convergence inventory
 
-Inventory version: `3`
+Inventory version: `4`
 
-Current protected main: `main@6250214bb6664a8fff851ed0afc2438bbc276931`
+Content baseline SHA: `79460a32b4eba669216afcc501815d5ff09b0349`
 
-Previous protected main: `main@5023981da7caf31c8f3679919f59205708b72823`
+Content baseline parent SHA: `6250214bb6664a8fff851ed0afc2438bbc276931`
+
+Current protected `main` is resolved externally from `refs/heads/main`; its moving SHA is not embedded as normative truth in this document.
 
 Historical audited F3 source head: `7bdbda2aa4b7568695ba8e98be54d506d42c99d5`
 
 PR `#149`: closed and merged by squash.
 
-PR `#150`: closed and merged by squash for the post-merge CURRENT reconciliation.
+PR `#150`: closed and merged by squash for a historical CURRENT reconciliation.
 
 PR `#151`: closed and merged by squash for vendored Canvas runtime recovery; it does not change the F1 authority frontier.
+
+PR `#153`: closed and merged by squash for the historical twelve-file CURRENT reconciliation represented by this content baseline.
 
 Tracking: open `#86` and completed canonical-memory dependency `#87`.
 
 Gate truth: `STOP_S5=CLOSED`.
+
+```text
+CONTENT_BASELINE_SHA=79460a32b4eba669216afcc501815d5ff09b0349
+CONTENT_BASELINE_PARENT_SHA=6250214bb6664a8fff851ed0afc2438bbc276931
+CURRENT_MAIN_RESOLUTION=EXTERNAL_GIT_REF
+MERGE_SHA_EVIDENCE=EXTERNAL
+PR_153=MERGED_BY_SQUASH_HISTORICAL
+```
 
 This document does not close `#86`. F1-A is integrated and is now consumed by the merged COG-001 through COG-004 implementation, but downstream recalls, RestCycle, health, orchestration gates, and final legacy retirement remain incomplete.
 
@@ -47,7 +59,7 @@ The Canvas runtime-recovery bundle is a Body application asset. It does not read
 
 ## Integrated downstream consumer
 
-`CognitiveMigrationRepository` is now integrated in protected main for COG-001 through COG-004. Its planning input is a verified F1-A projection. It rejects foreign Instance data, unverified payloads, unknown semantics, and legacy compatibility input before staging.
+`CognitiveMigrationRepository` is integrated in protected main for COG-001 through COG-004. Its planning input is a verified F1-A projection. It rejects foreign Instance data, unverified payloads, unknown semantics, and legacy compatibility input before staging.
 
 This integration proves one downstream consumer family has converged. It does not prove total F1 convergence and does not close `#86`.
 
@@ -112,13 +124,16 @@ No placeholder such as `local_instance_pending` and no Body ID may substitute fo
 ## Current closure state
 
 ```text
-CURRENT_MAIN=6250214bb6664a8fff851ed0afc2438bbc276931
-PREVIOUS_MAIN=5023981da7caf31c8f3679919f59205708b72823
+CONTENT_BASELINE_SHA=79460a32b4eba669216afcc501815d5ff09b0349
+CONTENT_BASELINE_PARENT_SHA=6250214bb6664a8fff851ed0afc2438bbc276931
+CURRENT_MAIN_RESOLUTION=EXTERNAL_GIT_REF
+MERGE_SHA_EVIDENCE=EXTERNAL
 F1_A_COMMON_READ_BOUNDARY=INTEGRATED
 F3_COG_CONSUMER_OF_F1_A=INTEGRATED_IN_MAIN
 PR_149=MERGED_BY_SQUASH_HISTORICAL
 PR_150=MERGED_POST_MERGE_CURRENT_RECONCILIATION_HISTORICAL
 PR_151=MERGED_CANVAS_RUNTIME_RECOVERY_HISTORICAL
+PR_153=MERGED_BY_SQUASH_HISTORICAL
 ISSUE_86=OPEN
 ISSUE_87=CLOSED
 RECALL_CONVERGED=false
