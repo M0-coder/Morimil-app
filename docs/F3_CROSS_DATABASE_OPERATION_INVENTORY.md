@@ -49,8 +49,8 @@ ProjectVault remains a separate protected reference and was not rewritten by PR 
 The following verbatim strings are retained only as historical regression fixtures. They are not CURRENT facts and do not override the external main resolution or the content baseline above.
 
 ```text
-Historical audited baseline literal: `main@612d91aef131f367140ffb87a60a19ef49adcbc8`
-Retired pre-integration baseline literal: `main@7e98d3345d7cc3fbf1983babd35b61ff5c523208`
+Historical regression fixture — Historical audited baseline: `main@612d91aef131f367140ffb87a60a19ef49adcbc8`
+Historical regression fixture — Current protected main: `main@7e98d3345d7cc3fbf1983babd35b61ff5c523208`
 draft PR `#149`
 `MERGE_AUTHORIZED=false`
 The candidate does not close #88
