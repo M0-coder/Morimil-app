@@ -411,6 +411,28 @@ class ReleaseSigningIsolationContractTest {
         assertTrue(ReleaseWorkflowPolicy.gradleBoundaryIsSafe(gradle))
     }
 
+    @Test
+    fun constructedTaskNamesCannotDisableVerifierOrInjectAssembleDebug() {
+        val mutation = """
+            val verifierTaskName = listOf("verifyReleaseUnsigned", "Boundary").joinToString("")
+            tasks.named(verifierTaskName).configure {
+                enabled = false
+            }
+            val debugTaskName = listOf("assemble", "Debug").joinToString("")
+            tasks.named("assembleUnsignedReleaseForSigning").configure {
+                dependsOn(debugTaskName)
+            }
+        """.trimIndent()
+        val mutated = gradle + "\n" + mutation + "\n"
+
+        assertTrue(ReleaseWorkflowPolicy.gradleBoundaryIsSafe(gradle))
+        assertTrue(mutated != gradle)
+        assertTrue(mutation in mutated)
+        assertFalse("verifyReleaseUnsignedBoundary" in mutation)
+        assertFalse("assembleDebug" in mutation)
+        assertFalse(ReleaseWorkflowPolicy.gradleBoundaryIsSafe(mutated))
+    }
+
     private fun repositoryFile(path: String): File = File(repositoryRoot(), path)
 
     private fun repositoryRoot(): File {
@@ -456,12 +478,8 @@ internal object ReleaseWorkflowPolicy {
             "2a0c78c6bca2046f89d7836436c7581c85fdefabe667bb64ee97207be23370a8"
     )
 
-    private const val expectedUnsignedBuildTypeSha256 =
-        "0f33841357c5c9775dfa8bdd0df4e5ff31a02c08e88d0c7a09df39b23ce604ac"
-    private const val expectedUnsignedTasksSha256 =
-        "bb429de4b8a16ee7398835ff52f2190f9e6c56fe7c374ce42d67e801639c59e9"
-    private const val expectedReleaseUnsignedOccurrences = 11
-    private const val expectedVerifierOccurrences = 3
+    private const val expectedNormalizedGradleSha256 =
+        "f6ed90f22c7a6256db04c4f81f3b17992bb4bc3a33bda1a2bac76f727ecb3d27"
 
     fun validate(source: String): Boolean = runCatching {
         validateOrThrow(source)
@@ -606,32 +624,8 @@ internal object ReleaseWorkflowPolicy {
         return true
     }
 
-    fun gradleBoundaryIsSafe(source: String): Boolean = runCatching {
-        require(sha256(sealedSection(
-            source,
-            "// MORIMIL_RELEASE_UNSIGNED_BUILD_TYPE_BEGIN",
-            "// MORIMIL_RELEASE_UNSIGNED_BUILD_TYPE_END"
-        )) == expectedUnsignedBuildTypeSha256)
-        require(sha256(sealedSection(
-            source,
-            "// MORIMIL_RELEASE_UNSIGNED_TASKS_BEGIN",
-            "// MORIMIL_RELEASE_UNSIGNED_TASKS_END"
-        )) == expectedUnsignedTasksSha256)
-        require(source.countOccurrences("releaseUnsigned") == expectedReleaseUnsignedOccurrences)
-        require(source.countOccurrences("verifyReleaseUnsignedBoundary") == expectedVerifierOccurrences)
-        require("assembleDebug" !in source)
-        require(
-            "tasks.matching { task -> task.name == \"preReleaseBuild\" }.configureEach {\n" +
-                "    dependsOn(validateReleaseSigning)\n" +
-                "}" in source
-        )
-        require(
-            "getByName(\"release\") {\n" +
-                "            signingConfig = signingConfigs.getByName(\"release\")\n" +
-                "        }" in source
-        )
-        true
-    }.getOrDefault(false)
+    fun gradleBoundaryIsSafe(source: String): Boolean =
+        sha256(source) == expectedNormalizedGradleSha256
 
     fun finalInventoryIsExact(root: File): Boolean {
         val entries = root.listFiles()?.toList() ?: return false
@@ -640,30 +634,10 @@ internal object ReleaseWorkflowPolicy {
         return entries.map { it.name }.toSet() == expectedFinalFiles && entries.size == expectedFinalFiles.size
     }
 
-    private fun sealedSection(source: String, startMarker: String, endMarker: String): String {
-        val normalized = source.replace("\r\n", "\n").replace('\r', '\n')
-        val start = normalized.indexOf(startMarker)
-        require(start >= 0 && normalized.indexOf(startMarker, start + 1) < 0)
-        val endStart = normalized.indexOf(endMarker, start + startMarker.length)
-        require(endStart >= 0 && normalized.indexOf(endMarker, endStart + 1) < 0)
-        return normalized.substring(start, endStart + endMarker.length)
-    }
-
     private fun sha256(value: String): String =
         MessageDigest.getInstance("SHA-256")
             .digest(value.replace("\r\n", "\n").replace('\r', '\n').toByteArray(Charsets.UTF_8))
             .joinToString("") { byte -> "%02x".format(byte) }
-
-    private fun String.countOccurrences(token: String): Int {
-        var count = 0
-        var index = 0
-        while (true) {
-            index = indexOf(token, index)
-            if (index < 0) return count
-            count++
-            index += token.length
-        }
-    }
 
     private fun WorkflowStep.runText(): String? =
         (mapping.entries["run"] as? YamlScalar)?.value
