@@ -317,12 +317,14 @@ android {
         getByName("release") {
             signingConfig = signingConfigs.getByName("release")
         }
+        // MORIMIL_RELEASE_UNSIGNED_BUILD_TYPE_BEGIN
         create("releaseUnsigned") {
             initWith(getByName("release"))
             signingConfig = null
             isDebuggable = false
             matchingFallbacks += listOf("release")
         }
+        // MORIMIL_RELEASE_UNSIGNED_BUILD_TYPE_END
     }
 
     buildFeatures {
@@ -369,6 +371,33 @@ tasks.matching { task -> task.name == "preReleaseBuild" }.configureEach {
     dependsOn(validateReleaseSigning)
 }
 
+// MORIMIL_RELEASE_UNSIGNED_TASKS_BEGIN
+val verifyReleaseUnsignedBoundary = tasks.register("verifyReleaseUnsignedBoundary") {
+    group = "verification"
+    description = "Verifies the final releaseUnsigned model and unsigned task graph."
+
+    doLast {
+        val releaseUnsigned = android.buildTypes.getByName("releaseUnsigned")
+        check(!releaseUnsigned.isDebuggable) {
+            "releaseUnsigned must remain non-debuggable"
+        }
+        check(releaseUnsigned.signingConfig == null) {
+            "releaseUnsigned must not have a signingConfig"
+        }
+        check("release" in releaseUnsigned.matchingFallbacks) {
+            "releaseUnsigned must retain the release fallback"
+        }
+
+        val debugTasks = gradle.taskGraph.allTasks
+            .filter { task -> task.project == project && task.name.contains("debug", ignoreCase = true) }
+            .map { task -> task.path }
+            .sorted()
+        check(debugTasks.isEmpty()) {
+            "Unsigned release flow must not include debug tasks: $debugTasks"
+        }
+    }
+}
+
 // Explicit CI-only input for the isolated signing job. The normal release task remains gated above.
 val isolatedUnsignedApk = layout.buildDirectory.file(
     "outputs/isolatedUnsigned/app-release-unsigned.apk"
@@ -376,7 +405,7 @@ val isolatedUnsignedApk = layout.buildDirectory.file(
 tasks.register("assembleUnsignedReleaseForSigning") {
     group = "build"
     description = "Builds and stages one non-debuggable unsigned release input for isolated signing."
-    dependsOn("assembleReleaseUnsigned")
+    dependsOn(verifyReleaseUnsignedBoundary, "assembleReleaseUnsigned")
     outputs.file(isolatedUnsignedApk)
     // Staging must always refresh after the unsigned variant is assembled.
     outputs.upToDateWhen { false }
@@ -401,6 +430,7 @@ tasks.register("assembleUnsignedReleaseForSigning") {
         check(target.isFile && target.length() > 0L && !Files.isSymbolicLink(target.toPath()))
     }
 }
+// MORIMIL_RELEASE_UNSIGNED_TASKS_END
 
 ksp {
     arg("room.schemaLocation", "$projectDir/schemas")

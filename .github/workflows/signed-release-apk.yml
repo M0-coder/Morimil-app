@@ -126,6 +126,7 @@ jobs:
       - name: Sign, verify, and close final artifact inventory
         shell: bash
         env:
+          EXPECTED_UNSIGNED_SHA256: ${{ needs.build-unsigned-release.outputs.unsigned_apk_sha256 }}
           MORIMIL_RELEASE_KEYSTORE_BASE64: ${{ secrets.MORIMIL_RELEASE_KEYSTORE_BASE64 }}
           MORIMIL_RELEASE_STORE_PASSWORD: ${{ secrets.MORIMIL_RELEASE_STORE_PASSWORD }}
           MORIMIL_RELEASE_KEY_ALIAS: ${{ secrets.MORIMIL_RELEASE_KEY_ALIAS }}
@@ -176,6 +177,13 @@ jobs:
           install -d -m 0700 release-output
           test ! -L release-output
           [[ -z "$(find release-output -mindepth 1 -print -quit)" ]]
+
+          signing_input_sha256="$(sha256sum "$unsigned_apk" | awk '{print $1}')"
+          [[ "$EXPECTED_UNSIGNED_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          if [[ "$signing_input_sha256" != "$EXPECTED_UNSIGNED_SHA256" ]]; then
+            echo "Unsigned APK digest changed before signing." >&2
+            exit 1
+          fi
 
           "$apksigner" sign \
             --ks "$keystore" \

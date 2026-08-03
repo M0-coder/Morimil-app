@@ -2,6 +2,7 @@ package com.morimil.app.architecture
 
 import java.io.File
 import java.nio.file.Files
+import java.security.MessageDigest
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -62,7 +63,7 @@ class ReleaseSigningIsolationContractTest {
 
     @Test
     fun wholeSecretsObjectInsideAnotherStepIsRejectedWhileNamedCountRemainsFive() {
-        val mutated = workflow.replace(
+        val mutated = workflow.replaceFirst(
             "        env:\n          EXPECTED_UNSIGNED_SHA256:",
             "        env:\n          LEAK: ${'$'}{{ toJSON(secrets) }}\n          EXPECTED_UNSIGNED_SHA256:"
         )
@@ -107,18 +108,21 @@ class ReleaseSigningIsolationContractTest {
     @Test
     fun ordinarySecretsTextAndExpressionStringLiteralsDoNotCauseFalsePositives() {
         val ordinaryText = workflow.replace(
-            "          set -euo pipefail\n          unsigned_apk=\"unsigned-input/app-release-unsigned.apk\"",
+            "          set -euo pipefail\n          chmod +x ./gradlew",
             "          set -euo pipefail\n" +
                 "          printf '%s\\n' 'ordinary secrets text' >/dev/null\n" +
-                "          unsigned_apk=\"unsigned-input/app-release-unsigned.apk\""
+                "          chmod +x ./gradlew"
         )
-        assertTrue(ReleaseWorkflowPolicy.validate(ordinaryText))
+        assertTrue("ordinaryText rejected", ReleaseWorkflowPolicy.validate(ordinaryText))
 
         val stringLiteral = workflow.replace(
-            "        env:\n          EXPECTED_UNSIGNED_SHA256:",
-            "        env:\n          SAFE_LITERAL: ${'$'}{{ format('secrets') }}\n          EXPECTED_UNSIGNED_SHA256:"
+            "      - name: Build unsigned release input\n        shell: bash",
+            "      - name: Build unsigned release input\n" +
+                "        env:\n" +
+                "          SAFE_LITERAL: ${'$'}{{ format('secrets') }}\n" +
+                "        shell: bash"
         )
-        assertTrue(ReleaseWorkflowPolicy.validate(stringLiteral))
+        assertTrue("stringLiteral rejected", ReleaseWorkflowPolicy.validate(stringLiteral))
     }
 
     @Test
@@ -164,20 +168,21 @@ class ReleaseSigningIsolationContractTest {
     @Test
     fun caseVariantsInOrdinaryTextAndExpressionStringLiteralsRemainSafe() {
         val ordinaryText = workflow.replace(
-            "          set -euo pipefail\n          unsigned_apk=\"unsigned-input/app-release-unsigned.apk\"",
+            "          set -euo pipefail\n          chmod +x ./gradlew",
             "          set -euo pipefail\n" +
                 "          printf '%s\\n' 'ordinary secrets SECRETS SeCrEtS text' >/dev/null\n" +
-                "          unsigned_apk=\"unsigned-input/app-release-unsigned.apk\""
+                "          chmod +x ./gradlew"
         )
-        assertTrue(ReleaseWorkflowPolicy.validate(ordinaryText))
+        assertTrue("ordinaryText rejected", ReleaseWorkflowPolicy.validate(ordinaryText))
 
         val stringLiteral = workflow.replace(
-            "        env:\n          EXPECTED_UNSIGNED_SHA256:",
-            "        env:\n" +
+            "      - name: Build unsigned release input\n        shell: bash",
+            "      - name: Build unsigned release input\n" +
+                "        env:\n" +
                 "          SAFE_LITERAL: ${'$'}{{ format('SECRETS SeCrEtS secrets') }}\n" +
-                "          EXPECTED_UNSIGNED_SHA256:"
+                "        shell: bash"
         )
-        assertTrue(ReleaseWorkflowPolicy.validate(stringLiteral))
+        assertTrue("stringLiteral rejected", ReleaseWorkflowPolicy.validate(stringLiteral))
     }
 
     @Test
@@ -345,6 +350,67 @@ class ReleaseSigningIsolationContractTest {
         )
     }
 
+
+
+    @Test
+    fun criticalRunBodiesAndExactSigningStepInventoryAreSealed() {
+        assertTrue(ReleaseWorkflowPolicy.validate(workflow))
+        val structure = WorkflowStructure.parse(workflow)
+        assertTrue(
+            structure.jobs.getValue("sign-release").steps.map { it.name } ==
+                ReleaseWorkflowPolicy.expectedSignStepNames
+        )
+    }
+
+    @Test
+    fun signedApkReplacementAfterClosedInventoryIsRejected() {
+        val terminal = "          [[ \"${'$'}(wc -l < \"${'$'}actual_inventory\")\" -eq 4 ]]"
+        val mutated = workflow.replace(
+            terminal,
+            terminal + "\n          cp \"${'$'}unsigned_apk\" release-output/app-release.apk"
+        )
+        assertTrue(mutated != workflow)
+        assertTrue("cp \"${'$'}unsigned_apk\" release-output/app-release.apk" in mutated)
+        assertFalse(ReleaseWorkflowPolicy.validate(mutated))
+    }
+
+    @Test
+    fun unsignedApkMutationAfterInitialDigestIsRejected() {
+        val boundary =
+            "          if [[ \"${'$'}actual_unsigned_sha256\" != \"${'$'}EXPECTED_UNSIGNED_SHA256\" ]]; then\n" +
+                "            echo \"Unsigned APK digest does not match the build job output.\" >&2\n" +
+                "            exit 1\n" +
+                "          fi"
+        val mutation = "          printf 'tampered' >> \"${'$'}unsigned_apk\""
+        val mutated = workflow.replace(boundary, boundary + "\n" + mutation)
+        assertTrue(mutated != workflow)
+        assertTrue(mutation in mutated)
+        assertFalse(ReleaseWorkflowPolicy.validate(mutated))
+    }
+
+    @Test
+    fun bashLineContinuationCannotHideGradleInsideSigningJob() {
+        val anchor = "          set -euo pipefail\n          sdkmanager_path="
+        val mutation = "          ./gra\\\n          dlew maliciousTask\n"
+        val mutated = workflow.replace(anchor, "          set -euo pipefail\n" + mutation + "          sdkmanager_path=")
+        assertTrue(mutated != workflow)
+        assertTrue("./gra\\\n          dlew maliciousTask" in mutated)
+        assertFalse(ReleaseWorkflowPolicy.validate(mutated))
+    }
+
+    @Test
+    fun finalGradleModelMutationAfterSafeBlockIsRejected() {
+        val mutation =
+            "\nandroid.buildTypes.getByName(\"releaseUnsigned\") {\n" +
+                "    isDebuggable = true\n" +
+                "}\n"
+        val mutated = gradle + mutation
+        assertTrue(mutated != gradle)
+        assertTrue(mutation.trim() in mutated)
+        assertFalse(ReleaseWorkflowPolicy.gradleBoundaryIsSafe(mutated))
+        assertTrue(ReleaseWorkflowPolicy.gradleBoundaryIsSafe(gradle))
+    }
+
     private fun repositoryFile(path: String): File = File(repositoryRoot(), path)
 
     private fun repositoryRoot(): File {
@@ -373,6 +439,30 @@ internal object ReleaseWorkflowPolicy {
         "release-signing-manifest.txt"
     )
 
+    val expectedSignStepNames = listOf(
+        "Install deterministic Android build tools",
+        "Download exact unsigned release input",
+        "Verify unsigned release input digest",
+        "Sign, verify, and close final artifact inventory",
+        "Upload verified signed APK"
+    )
+
+    private val expectedRunSha256 = mapOf(
+        "Install deterministic Android build tools" to
+            "7f82921dbf5b99fcc26a09f9e1426555f715d88ce45b968175a63f74c3327ff5",
+        "Verify unsigned release input digest" to
+            "4d33f1a6f0ecca0445a06c6b370bdb12250dd6dd8977bb552b28a608f5d0bcda",
+        "Sign, verify, and close final artifact inventory" to
+            "2a0c78c6bca2046f89d7836436c7581c85fdefabe667bb64ee97207be23370a8"
+    )
+
+    private const val expectedUnsignedBuildTypeSha256 =
+        "0f33841357c5c9775dfa8bdd0df4e5ff31a02c08e88d0c7a09df39b23ce604ac"
+    private const val expectedUnsignedTasksSha256 =
+        "bb429de4b8a16ee7398835ff52f2190f9e6c56fe7c374ce42d67e801639c59e9"
+    private const val expectedReleaseUnsignedOccurrences = 11
+    private const val expectedVerifierOccurrences = 3
+
     fun validate(source: String): Boolean = runCatching {
         validateOrThrow(source)
     }.getOrDefault(false)
@@ -386,9 +476,13 @@ internal object ReleaseWorkflowPolicy {
         if (build.permissions != WorkflowMapping.block(mapOf("contents" to "read"))) return false
         if (sign.permissions != WorkflowMapping.emptyFlow()) return false
         if (structure.topLevelEnv != null || structure.jobs.values.any { it.env != null }) return false
-        if (listOfNotNull(structure.topLevelPermissions, build.permissions, sign.permissions)
-                .flatMap { it.values.values }
-                .any { it == "write" || it == "write-all" }
+        if (structure.document.root.entries.keys.intersect(
+                setOf("container", "services", "defaults", "environment")
+            ).isNotEmpty()
+        ) return false
+        if (structure.jobs.values.any {
+                it.hasContainer || it.hasServices || it.hasDefaults || it.hasEnvironment
+            }
         ) return false
 
         val releaseUses = GovernedActionInventory.parse(
@@ -404,34 +498,64 @@ internal object ReleaseWorkflowPolicy {
                 it.path.startsWithPath("jobs", "build-unsigned-release")
             }
         ) return false
-        if (build.steps.none { step -> step.runText()?.contains("./gradlew") == true }) return false
-        if (build.steps.none { step -> step.runText()?.contains(":app:assembleUnsignedReleaseForSigning") == true }) return false
+        if (build.steps.size != 7) return false
+        if (build.steps.none { step -> step.runText()?.contains(":app:assembleUnsignedReleaseForSigning") == true }) {
+            return false
+        }
         if (build.steps.none { it.usesValue()?.startsWith("actions/checkout@") == true }) return false
         if ("name: morimil-unsigned-release-apk" !in build.text) return false
         if ("path: unsigned-output/app-release-unsigned.apk" !in build.text) return false
 
-        if (sign.runsOn != "ubuntu-latest" || sign.hasContainer || sign.hasServices) return false
-        if (sign.steps.any { it.usesValue()?.startsWith("actions/checkout@") == true }) return false
-        if (sign.steps.any { it.usesValue()?.startsWith("gradle/actions/") == true }) return false
-        if (sign.steps.mapNotNull { it.runText() }.any { run ->
-                "./gradlew" in run || Regex("(?i)(^|\\s)gradle(\\s|$)").containsMatchIn(run)
-            }
-        ) return false
-        if (sign.steps.none {
-                it.usesValue() ==
-                    "actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093"
-            }
-        ) return false
-        if ("name: morimil-unsigned-release-apk" !in sign.text || "path: unsigned-input" !in sign.text) return false
-        if ("needs.build-unsigned-release.outputs.unsigned_apk_sha256" !in sign.text) return false
-        if ("actual_unsigned_sha256" !in sign.text || "Unsigned APK digest does not match" !in sign.text) return false
+        if (sign.runsOn != "ubuntu-latest") return false
+        if (sign.steps.map { it.name } != expectedSignStepNames) return false
+        if (sign.steps.size != expectedSignStepNames.size) return false
 
-        val signingStep = sign.steps.singleOrNull {
-            it.name == "Sign, verify, and close final artifact inventory"
-        } ?: return false
-        val signingIndex = sign.steps.indexOf(signingStep).toString()
-        val signingEnv = signingStep.mapping.entries["env"] as? YamlMapping ?: return false
-        if (signingEnv.entries.keys != releaseSecretNames) return false
+        val install = sign.steps[0]
+        val download = sign.steps[1]
+        val verify = sign.steps[2]
+        val signing = sign.steps[3]
+        val upload = sign.steps[4]
+
+        if (install.mapping.entries.keys != setOf("name", "shell", "run")) return false
+        if (verify.mapping.entries.keys != setOf("name", "shell", "env", "run")) return false
+        if (signing.mapping.entries.keys != setOf("name", "shell", "env", "run")) return false
+        if (download.mapping.entries.keys != setOf("name", "uses", "with")) return false
+        if (upload.mapping.entries.keys != setOf("name", "uses", "with")) return false
+        if (listOf(install, verify, signing).any { it.scalar("shell") != "bash" }) return false
+
+        expectedRunSha256.forEach { (stepName, expectedHash) ->
+            val step = sign.steps.singleOrNull { it.name == stepName } ?: return false
+            val run = step.runText() ?: return false
+            if (sha256(run) != expectedHash) return false
+        }
+
+        if (download.usesValue() !=
+            "actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093"
+        ) return false
+        if (!download.mappingValueEquals(
+                "with",
+                mapOf(
+                    "name" to "morimil-unsigned-release-apk",
+                    "path" to "unsigned-input"
+                )
+            )
+        ) return false
+
+        val expectedDigestExpression =
+            "${'$'}{{ needs.build-unsigned-release.outputs.unsigned_apk_sha256 }}"
+        if (!verify.mappingValueEquals(
+                "env",
+                mapOf("EXPECTED_UNSIGNED_SHA256" to expectedDigestExpression),
+                requirePlainSource = true
+            )
+        ) return false
+
+        val signingEnv = signing.mapping.entries["env"] as? YamlMapping ?: return false
+        if (signingEnv.entries.keys != releaseSecretNames + "EXPECTED_UNSIGNED_SHA256") return false
+        val expectedDigest = signingEnv.entries["EXPECTED_UNSIGNED_SHA256"] as? YamlScalar ?: return false
+        if (expectedDigest.value != expectedDigestExpression || expectedDigest.raw != expectedDigestExpression) {
+            return false
+        }
         releaseSecretNames.forEach { name ->
             val scalar = signingEnv.entries[name] as? YamlScalar ?: return false
             val canonical = "${'$'}{{ secrets.$name }}"
@@ -442,6 +566,7 @@ internal object ReleaseWorkflowPolicy {
         if (contextReferences.size != 5) return false
         if (contextReferences.mapNotNull { it.name }.toSet() != releaseSecretNames) return false
         if (contextReferences.any { !it.canonicalDirect }) return false
+        val signingIndex = sign.steps.indexOf(signing).toString()
         if (contextReferences.any { reference ->
                 val name = reference.name ?: return false
                 reference.path != listOf(
@@ -449,49 +574,64 @@ internal object ReleaseWorkflowPolicy {
                 ) || reference.expression != "${'$'}{{ secrets.$name }}"
             }
         ) return false
-        if (contextReferences.any { it.step?.name != signingStep.name }) return false
+        if (contextReferences.any { it.step?.name != signing.name }) return false
 
         val namedReferences = structure.secretReferences
         if (namedReferences.size != 5 || namedReferences.map { it.name }.toSet() != releaseSecretNames) {
             return false
         }
 
-        val signingRun = signingStep.runText() ?: return false
-        if ("\"${'$'}apksigner\" sign" !in signingRun) return false
-        if ("trap cleanup EXIT" !in signingRun || "${'$'}RUNNER_TEMP/morimil-release.jks" !in signingRun) return false
-        if ("chmod 600 \"${'$'}keystore\"" !in signingRun || "umask 077" !in signingRun) return false
-        if ("rm -rf release-output" !in signingRun || "install -d -m 0700 release-output" !in signingRun) return false
-        if ("find release-output -mindepth 1 -type l" !in signingRun) return false
-        if ("wc -l < \"${'$'}actual_inventory\"" !in signingRun) return false
-
-        val upload = sign.steps.singleOrNull { it.name == "Upload verified signed APK" } ?: return false
-        val with = upload.mapping.entries["with"] as? YamlMapping ?: return false
-        val uploadPath = with.entries["path"] as? YamlScalar ?: return false
+        if (upload.usesValue() !=
+            "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02"
+        ) return false
+        val uploadWith = upload.mapping.entries["with"] as? YamlMapping ?: return false
+        if (uploadWith.entries.keys != setOf("name", "path", "if-no-files-found", "retention-days")) {
+            return false
+        }
+        if ((uploadWith.entries["name"] as? YamlScalar)?.value !=
+            "morimil-signed-release-${'$'}{{ github.sha }}"
+        ) return false
+        if ((uploadWith.entries["if-no-files-found"] as? YamlScalar)?.value != "error") return false
+        if ((uploadWith.entries["retention-days"] as? YamlScalar)?.value != "30") return false
+        val uploadPath = uploadWith.entries["path"] as? YamlScalar ?: return false
         if ("*" in uploadPath.value) return false
         val uploaded = uploadPath.value.lines().map { it.trim() }.filter { it.isNotEmpty() }
             .map { line ->
                 if (!line.startsWith("release-output/")) return false
                 line.removePrefix("release-output/")
             }.toSet()
-        if (uploaded != expectedFinalFiles || uploadPath.value.lines().filter { it.isNotBlank() }.size != 4) return false
+        if (uploaded != expectedFinalFiles || uploadPath.value.lines().count { it.isNotBlank() } != 4) {
+            return false
+        }
         return true
     }
 
-    fun gradleBoundaryIsSafe(source: String): Boolean {
-        val releaseBlock = Regex(
-            """getByName\("release"\)\s*\{[\s\S]*?signingConfig\s*=\s*signingConfigs\.getByName\("release"\)[\s\S]*?\}"""
-        ).containsMatchIn(source)
-        val unsignedBlock = Regex(
-            """create\("releaseUnsigned"\)\s*\{[\s\S]*?initWith\(getByName\("release"\)\)[\s\S]*?signingConfig\s*=\s*null[\s\S]*?isDebuggable\s*=\s*false[\s\S]*?matchingFallbacks\s*\+=\s*listOf\("release"\)[\s\S]*?\}"""
-        ).containsMatchIn(source)
-        val releaseGate = Regex(
-            """tasks\.matching\s*\{\s*task\s*->\s*task\.name\s*==\s*"preReleaseBuild"\s*\}[\s\S]*?dependsOn\(validateReleaseSigning\)"""
-        ).containsMatchIn(source)
-        val explicitTask = Regex(
-            """tasks\.register\("assembleUnsignedReleaseForSigning"\)[\s\S]*?dependsOn\("assembleReleaseUnsigned"\)[\s\S]*?outputs\.file\(isolatedUnsignedApk\)[\s\S]*?outputs\.upToDateWhen\s*\{\s*false\s*\}"""
-        ).containsMatchIn(source)
-        return releaseBlock && unsignedBlock && releaseGate && explicitTask && "assembleDebug" !in source
-    }
+    fun gradleBoundaryIsSafe(source: String): Boolean = runCatching {
+        require(sha256(sealedSection(
+            source,
+            "// MORIMIL_RELEASE_UNSIGNED_BUILD_TYPE_BEGIN",
+            "// MORIMIL_RELEASE_UNSIGNED_BUILD_TYPE_END"
+        )) == expectedUnsignedBuildTypeSha256)
+        require(sha256(sealedSection(
+            source,
+            "// MORIMIL_RELEASE_UNSIGNED_TASKS_BEGIN",
+            "// MORIMIL_RELEASE_UNSIGNED_TASKS_END"
+        )) == expectedUnsignedTasksSha256)
+        require(source.countOccurrences("releaseUnsigned") == expectedReleaseUnsignedOccurrences)
+        require(source.countOccurrences("verifyReleaseUnsignedBoundary") == expectedVerifierOccurrences)
+        require("assembleDebug" !in source)
+        require(
+            "tasks.matching { task -> task.name == \"preReleaseBuild\" }.configureEach {\n" +
+                "    dependsOn(validateReleaseSigning)\n" +
+                "}" in source
+        )
+        require(
+            "getByName(\"release\") {\n" +
+                "            signingConfig = signingConfigs.getByName(\"release\")\n" +
+                "        }" in source
+        )
+        true
+    }.getOrDefault(false)
 
     fun finalInventoryIsExact(root: File): Boolean {
         val entries = root.listFiles()?.toList() ?: return false
@@ -500,11 +640,52 @@ internal object ReleaseWorkflowPolicy {
         return entries.map { it.name }.toSet() == expectedFinalFiles && entries.size == expectedFinalFiles.size
     }
 
+    private fun sealedSection(source: String, startMarker: String, endMarker: String): String {
+        val normalized = source.replace("\r\n", "\n").replace('\r', '\n')
+        val start = normalized.indexOf(startMarker)
+        require(start >= 0 && normalized.indexOf(startMarker, start + 1) < 0)
+        val endStart = normalized.indexOf(endMarker, start + startMarker.length)
+        require(endStart >= 0 && normalized.indexOf(endMarker, endStart + 1) < 0)
+        return normalized.substring(start, endStart + endMarker.length)
+    }
+
+    private fun sha256(value: String): String =
+        MessageDigest.getInstance("SHA-256")
+            .digest(value.replace("\r\n", "\n").replace('\r', '\n').toByteArray(Charsets.UTF_8))
+            .joinToString("") { byte -> "%02x".format(byte) }
+
+    private fun String.countOccurrences(token: String): Int {
+        var count = 0
+        var index = 0
+        while (true) {
+            index = indexOf(token, index)
+            if (index < 0) return count
+            count++
+            index += token.length
+        }
+    }
+
     private fun WorkflowStep.runText(): String? =
         (mapping.entries["run"] as? YamlScalar)?.value
 
     private fun WorkflowStep.usesValue(): String? =
         (mapping.entries["uses"] as? YamlScalar)?.value
+
+    private fun WorkflowStep.scalar(key: String): String? =
+        (mapping.entries[key] as? YamlScalar)?.value
+
+    private fun WorkflowStep.mappingValueEquals(
+        key: String,
+        expected: Map<String, String>,
+        requirePlainSource: Boolean = false
+    ): Boolean {
+        val nested = mapping.entries[key] as? YamlMapping ?: return false
+        if (nested.entries.keys != expected.keys) return false
+        return expected.all { (entryKey, expectedValue) ->
+            val scalar = nested.entries[entryKey] as? YamlScalar ?: return false
+            scalar.value == expectedValue && (!requirePlainSource || scalar.raw == expectedValue)
+        }
+    }
 
     private fun List<String>.startsWithPath(vararg prefix: String): Boolean =
         size >= prefix.size && prefix.indices.all { index -> this[index] == prefix[index] }

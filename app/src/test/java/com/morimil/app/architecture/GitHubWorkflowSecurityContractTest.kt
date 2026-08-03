@@ -224,6 +224,55 @@ class GitHubWorkflowSecurityContractTest {
         assertTrue(ReleaseWorkflowPolicy.validate(source))
     }
 
+
+
+    @Test
+    fun allFourWorkflowProfilesRemainExactlyGoverned() {
+        val sources = workflowPaths.associateWith { path -> repositoryFile(path).readText() }
+        assertTrue(GovernedWorkflowPolicy.validate(sources))
+    }
+
+    @Test
+    fun containerWriteAllAndSbomSecretMutationsAreRejectedByUniformPolicy() {
+        val sources = workflowPaths.associateWith { path -> repositoryFile(path).readText() }
+
+        val android = sources.getValue(".github/workflows/android-ci.yml")
+        val androidMutated = android.replace(
+            "  build:\n    runs-on: ubuntu-latest",
+            "  build:\n    container: attacker/image:latest\n    runs-on: ubuntu-latest"
+        )
+        assertTrue(androidMutated != android)
+        assertFalse(
+            GovernedWorkflowPolicy.validate(
+                sources + (".github/workflows/android-ci.yml" to androidMutated)
+            )
+        )
+
+        val codeql = sources.getValue(".github/workflows/codeql.yml")
+        val codeqlMutated = codeql.replace(
+            "permissions:\n  contents: read\n  security-events: write\n  packages: read\n  actions: read",
+            "permissions: write-all"
+        )
+        assertTrue(codeqlMutated != codeql)
+        assertFalse(
+            GovernedWorkflowPolicy.validate(
+                sources + (".github/workflows/codeql.yml" to codeqlMutated)
+            )
+        )
+
+        val sbom = sources.getValue(".github/workflows/sbom.yml")
+        val sbomMutated = sbom.replace(
+            "permissions:\n  contents: read",
+            "permissions:\n  contents: read\n\nenv:\n  LEAK: ${'$'}{{ secrets.MORIMIL_RELEASE_KEY_PASSWORD }}"
+        )
+        assertTrue(sbomMutated != sbom)
+        assertFalse(
+            GovernedWorkflowPolicy.validate(
+                sources + (".github/workflows/sbom.yml" to sbomMutated)
+            )
+        )
+    }
+
     private fun repositoryFile(path: String): File = File(repositoryRoot(), path)
 
     private fun repositoryRoot(): File {
@@ -323,6 +372,107 @@ internal object GovernedActionInventory {
         }
         return result
     }
+}
+
+
+
+internal data class WorkflowJobProfile(
+    val permissions: WorkflowMapping?
+)
+
+internal data class GovernedWorkflowProfile(
+    val rootPermissions: WorkflowMapping?,
+    val jobs: Map<String, WorkflowJobProfile>,
+    val allowedSecretNames: Set<String> = emptySet(),
+    val allowedSecretStepName: String? = null
+)
+
+internal object GovernedWorkflowPolicy {
+    private val releaseSecretNames = setOf(
+        "MORIMIL_RELEASE_KEYSTORE_BASE64",
+        "MORIMIL_RELEASE_STORE_PASSWORD",
+        "MORIMIL_RELEASE_KEY_ALIAS",
+        "MORIMIL_RELEASE_KEY_PASSWORD",
+        "MORIMIL_RELEASE_CERT_SHA256"
+    )
+
+    val profiles = linkedMapOf(
+        ".github/workflows/android-ci.yml" to GovernedWorkflowProfile(
+            rootPermissions = WorkflowMapping.block(mapOf("contents" to "read")),
+            jobs = mapOf("build" to WorkflowJobProfile(permissions = null))
+        ),
+        ".github/workflows/codeql.yml" to GovernedWorkflowProfile(
+            rootPermissions = WorkflowMapping.block(
+                mapOf(
+                    "contents" to "read",
+                    "security-events" to "write",
+                    "packages" to "read",
+                    "actions" to "read"
+                )
+            ),
+            jobs = mapOf("analyze" to WorkflowJobProfile(permissions = null))
+        ),
+        ".github/workflows/sbom.yml" to GovernedWorkflowProfile(
+            rootPermissions = WorkflowMapping.block(mapOf("contents" to "read")),
+            jobs = mapOf("generate" to WorkflowJobProfile(permissions = null))
+        ),
+        ".github/workflows/signed-release-apk.yml" to GovernedWorkflowProfile(
+            rootPermissions = WorkflowMapping.emptyFlow(),
+            jobs = mapOf(
+                "build-unsigned-release" to WorkflowJobProfile(
+                    permissions = WorkflowMapping.block(mapOf("contents" to "read"))
+                ),
+                "sign-release" to WorkflowJobProfile(
+                    permissions = WorkflowMapping.emptyFlow()
+                )
+            ),
+            allowedSecretNames = releaseSecretNames,
+            allowedSecretStepName = "Sign, verify, and close final artifact inventory"
+        )
+    )
+
+    private val forbiddenRootKeys = setOf("container", "services", "defaults", "environment")
+    private val forbiddenJobKeys = setOf("container", "services", "defaults", "environment")
+
+    fun validate(sources: Map<String, String>): Boolean = runCatching {
+        require(sources.keys == profiles.keys)
+        require(GovernedActionInventory.parseAll(sources) == GovernedActionInventory.expected)
+
+        profiles.forEach { (path, profile) ->
+            val structure = WorkflowStructure.parse(sources.getValue(path))
+            require(structure.topLevelPermissions == profile.rootPermissions) {
+                "$path root permissions diverged"
+            }
+            require(structure.document.root.entries.keys.intersect(forbiddenRootKeys).isEmpty()) {
+                "$path uses a forbidden root execution context"
+            }
+            require(structure.jobs.keys == profile.jobs.keys) {
+                "$path job inventory diverged"
+            }
+            profile.jobs.forEach { (jobName, expected) ->
+                val job = structure.jobs.getValue(jobName)
+                require(job.permissions == expected.permissions) {
+                    "$path jobs.$jobName permissions diverged"
+                }
+                require(job.mapping.entries.keys.intersect(forbiddenJobKeys).isEmpty()) {
+                    "$path jobs.$jobName uses a forbidden execution context"
+                }
+            }
+
+            if (profile.allowedSecretNames.isEmpty()) {
+                require(structure.secretContextReferences.isEmpty()) {
+                    "$path must not reference the secrets context"
+                }
+            } else {
+                val references = structure.secretContextReferences
+                require(references.size == profile.allowedSecretNames.size)
+                require(references.all { it.canonicalDirect })
+                require(references.mapNotNull { it.name }.toSet() == profile.allowedSecretNames)
+                require(references.all { it.step?.name == profile.allowedSecretStepName })
+            }
+        }
+        true
+    }.getOrDefault(false)
 }
 
 internal enum class WorkflowMappingSyntax {
@@ -569,7 +719,9 @@ internal data class WorkflowJob(
     val steps: List<WorkflowStep>,
     val runsOn: String?,
     val hasContainer: Boolean,
-    val hasServices: Boolean
+    val hasServices: Boolean,
+    val hasDefaults: Boolean,
+    val hasEnvironment: Boolean
 )
 
 internal data class WorkflowStructure(
@@ -624,7 +776,9 @@ internal data class WorkflowStructure(
                     steps = rebuiltSteps,
                     runsOn = (jobMapping.entries["runs-on"] as? YamlScalar)?.value,
                     hasContainer = "container" in jobMapping.entries,
-                    hasServices = "services" in jobMapping.entries
+                    hasServices = "services" in jobMapping.entries,
+                    hasDefaults = "defaults" in jobMapping.entries,
+                    hasEnvironment = "environment" in jobMapping.entries
                 )
             }
 
