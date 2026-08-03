@@ -301,7 +301,7 @@ internal object GovernedActionInventory {
         ActionUse(".github/workflows/android-ci.yml", "actions/upload-artifact", "043fb46d1a93c77aae656e7c1c64a875d1fc6a0a", "v7.0.1"),
         ActionUse(".github/workflows/codeql.yml", "actions/checkout", "3d3c42e5aac5ba805825da76410c181273ba90b1", "v7.0.1"),
         ActionUse(".github/workflows/codeql.yml", "actions/setup-java", "d7793b545071e98d581d3bf084a51c3213318a07", "v4"),
-        ActionUse(".github/workflows/codeql.yml", "gradle/actions/setup-gradle", "017a9effdb900e5b5b2fddfb590a105619dca3c3", "v4.4.2"),
+        ActionUse(".github/workflows/codeql.yml", "gradle/actions/setup-gradle", "3f131e8634966bd73d06cc69884922b02e6faf92", "v6.2.0"),
         ActionUse(".github/workflows/codeql.yml", "github/codeql-action/init", "f205ea1c3313d32999d8d6a48b4f6530d4437b38", "v4"),
         ActionUse(".github/workflows/codeql.yml", "github/codeql-action/analyze", "f205ea1c3313d32999d8d6a48b4f6530d4437b38", "v4"),
         ActionUse(".github/workflows/sbom.yml", "actions/checkout", "3d3c42e5aac5ba805825da76410c181273ba90b1", "v7.0.1"),
@@ -309,7 +309,7 @@ internal object GovernedActionInventory {
         ActionUse(".github/workflows/sbom.yml", "actions/upload-artifact", "043fb46d1a93c77aae656e7c1c64a875d1fc6a0a", "v7.0.1"),
         ActionUse(".github/workflows/signed-release-apk.yml", "actions/checkout", "3d3c42e5aac5ba805825da76410c181273ba90b1", "v7.0.1"),
         ActionUse(".github/workflows/signed-release-apk.yml", "actions/setup-java", "c1e323688fd81a25caa38c78aa6df2d33d3e20d9", "v4.8.0"),
-        ActionUse(".github/workflows/signed-release-apk.yml", "gradle/actions/setup-gradle", "ed408507eac070d1f99cc633dbcf757c94c7933a", "v4"),
+        ActionUse(".github/workflows/signed-release-apk.yml", "gradle/actions/setup-gradle", "3f131e8634966bd73d06cc69884922b02e6faf92", "v6.2.0"),
         ActionUse(".github/workflows/signed-release-apk.yml", "actions/upload-artifact", "ea165f8d65b6e75b540449e92b4886f43607fa02", "v4.6.2"),
         ActionUse(".github/workflows/signed-release-apk.yml", "actions/download-artifact", "d3f86a106a0bac45b974a628896c90dbdf5c8093", "v4.3.0"),
         ActionUse(".github/workflows/signed-release-apk.yml", "actions/upload-artifact", "ea165f8d65b6e75b540449e92b4886f43607fa02", "v4.6.2")
