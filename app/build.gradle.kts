@@ -2,6 +2,7 @@ import com.android.build.api.dsl.ManagedVirtualDevice
 import groovy.json.JsonSlurper
 import java.io.File
 import java.security.MessageDigest
+import java.nio.file.Files
 import java.util.zip.ZipInputStream
 
 plugins {
@@ -316,6 +317,14 @@ android {
         getByName("release") {
             signingConfig = signingConfigs.getByName("release")
         }
+        // MORIMIL_RELEASE_UNSIGNED_BUILD_TYPE_BEGIN
+        create("releaseUnsigned") {
+            initWith(getByName("release"))
+            signingConfig = null
+            isDebuggable = false
+            matchingFallbacks += listOf("release")
+        }
+        // MORIMIL_RELEASE_UNSIGNED_BUILD_TYPE_END
     }
 
     buildFeatures {
@@ -361,6 +370,67 @@ tasks.named("preBuild").configure {
 tasks.matching { task -> task.name == "preReleaseBuild" }.configureEach {
     dependsOn(validateReleaseSigning)
 }
+
+// MORIMIL_RELEASE_UNSIGNED_TASKS_BEGIN
+val verifyReleaseUnsignedBoundary = tasks.register("verifyReleaseUnsignedBoundary") {
+    group = "verification"
+    description = "Verifies the final releaseUnsigned model and unsigned task graph."
+
+    doLast {
+        val releaseUnsigned = android.buildTypes.getByName("releaseUnsigned")
+        check(!releaseUnsigned.isDebuggable) {
+            "releaseUnsigned must remain non-debuggable"
+        }
+        check(releaseUnsigned.signingConfig == null) {
+            "releaseUnsigned must not have a signingConfig"
+        }
+        check("release" in releaseUnsigned.matchingFallbacks) {
+            "releaseUnsigned must retain the release fallback"
+        }
+
+        val debugTasks = gradle.taskGraph.allTasks
+            .filter { task -> task.project == project && task.name.contains("debug", ignoreCase = true) }
+            .map { task -> task.path }
+            .sorted()
+        check(debugTasks.isEmpty()) {
+            "Unsigned release flow must not include debug tasks: $debugTasks"
+        }
+    }
+}
+
+// Explicit CI-only input for the isolated signing job. The normal release task remains gated above.
+val isolatedUnsignedApk = layout.buildDirectory.file(
+    "outputs/isolatedUnsigned/app-release-unsigned.apk"
+)
+tasks.register("assembleUnsignedReleaseForSigning") {
+    group = "build"
+    description = "Builds and stages one non-debuggable unsigned release input for isolated signing."
+    dependsOn(verifyReleaseUnsignedBoundary, "assembleReleaseUnsigned")
+    outputs.file(isolatedUnsignedApk)
+    // Staging must always refresh after the unsigned variant is assembled.
+    outputs.upToDateWhen { false }
+
+    doLast {
+        val sourceDirectory = layout.buildDirectory.dir("outputs/apk/releaseUnsigned").get().asFile
+        val candidates = sourceDirectory.listFiles().orEmpty()
+            .filter { candidate -> candidate.isFile && candidate.extension == "apk" }
+            .sortedBy(File::getName)
+        check(candidates.size == 1) {
+            "Expected exactly one unsigned release APK, found ${candidates.map(File::getName)}"
+        }
+        val source = candidates.single()
+        check(!Files.isSymbolicLink(source.toPath())) {
+            "Unsigned release input must not be a symbolic link"
+        }
+
+        val target = isolatedUnsignedApk.get().asFile
+        target.parentFile.deleteRecursively()
+        check(target.parentFile.mkdirs()) { "Unable to create isolated unsigned output directory" }
+        source.copyTo(target, overwrite = false)
+        check(target.isFile && target.length() > 0L && !Files.isSymbolicLink(target.toPath()))
+    }
+}
+// MORIMIL_RELEASE_UNSIGNED_TASKS_END
 
 ksp {
     arg("room.schemaLocation", "$projectDir/schemas")

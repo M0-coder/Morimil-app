@@ -3,30 +3,27 @@ name: Signed Release APK
 on:
   workflow_dispatch:
 
-permissions:
-  contents: read
+permissions: {}
 
 concurrency:
   group: signed-release-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  build-signed-release:
+  build-unsigned-release:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    env:
-      MORIMIL_RELEASE_KEYSTORE_BASE64: ${{ secrets.MORIMIL_RELEASE_KEYSTORE_BASE64 }}
-      MORIMIL_RELEASE_STORE_PASSWORD: ${{ secrets.MORIMIL_RELEASE_STORE_PASSWORD }}
-      MORIMIL_RELEASE_KEY_ALIAS: ${{ secrets.MORIMIL_RELEASE_KEY_ALIAS }}
-      MORIMIL_RELEASE_KEY_PASSWORD: ${{ secrets.MORIMIL_RELEASE_KEY_PASSWORD }}
-      MORIMIL_RELEASE_CERT_SHA256: ${{ secrets.MORIMIL_RELEASE_CERT_SHA256 }}
+    permissions:
+      contents: read
+    outputs:
+      unsigned_apk_sha256: ${{ steps.stage-unsigned.outputs.sha256 }}
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up JDK 17
-        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
+        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4.8.0
         with:
           distribution: temurin
           java-version: "17"
@@ -34,7 +31,7 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
 
-      - name: Validate protected source and release secrets
+      - name: Validate protected source
         shell: bash
         run: |
           set -euo pipefail
@@ -42,6 +39,114 @@ jobs:
             echo "Signed release builds are permitted only from the protected main branch." >&2
             exit 1
           fi
+
+      - name: Build unsigned release input
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x ./gradlew
+          ./gradlew --no-daemon --stacktrace --console=plain \
+            :app:assembleUnsignedReleaseForSigning
+
+      - name: Stage and hash unsigned release input
+        id: stage-unsigned
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_apk="app/build/outputs/isolatedUnsigned/app-release-unsigned.apk"
+          test -f "$source_apk"
+          test ! -L "$source_apk"
+
+          rm -rf unsigned-output
+          install -d -m 0700 unsigned-output
+          install -m 0600 "$source_apk" unsigned-output/app-release-unsigned.apk
+          test -f unsigned-output/app-release-unsigned.apk
+          test ! -L unsigned-output/app-release-unsigned.apk
+
+          unsigned_sha256="$(sha256sum unsigned-output/app-release-unsigned.apk | awk '{print $1}')"
+          [[ "$unsigned_sha256" =~ ^[0-9a-f]{64}$ ]]
+          printf 'sha256=%s\n' "$unsigned_sha256" >> "$GITHUB_OUTPUT"
+
+      - name: Upload unsigned release input
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: morimil-unsigned-release-apk
+          path: unsigned-output/app-release-unsigned.apk
+          if-no-files-found: error
+          retention-days: 1
+
+  sign-release:
+    needs: build-unsigned-release
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions: {}
+
+    steps:
+      - name: Install deterministic Android build tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdkmanager_path="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          test -x "$sdkmanager_path"
+          yes | "$sdkmanager_path" --licenses > /dev/null 2>&1 || true
+          "$sdkmanager_path" --install "build-tools;35.0.0"
+          test -x "$ANDROID_HOME/build-tools/35.0.0/apksigner"
+
+      - name: Download exact unsigned release input
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: morimil-unsigned-release-apk
+          path: unsigned-input
+
+      - name: Verify unsigned release input digest
+        shell: bash
+        env:
+          EXPECTED_UNSIGNED_SHA256: ${{ needs.build-unsigned-release.outputs.unsigned_apk_sha256 }}
+        run: |
+          set -euo pipefail
+          unsigned_apk="unsigned-input/app-release-unsigned.apk"
+          test -f "$unsigned_apk"
+          test ! -L "$unsigned_apk"
+          [[ "$EXPECTED_UNSIGNED_SHA256" =~ ^[0-9a-f]{64}$ ]]
+
+          mapfile -t downloaded_files < <(find unsigned-input -mindepth 1 -maxdepth 1 -type f -printf '%f\n' | sort)
+          [[ "${#downloaded_files[@]}" -eq 1 ]]
+          [[ "${downloaded_files[0]}" == "app-release-unsigned.apk" ]]
+          if find unsigned-input -mindepth 1 -type l -print -quit | grep -q .; then
+            echo "Unsigned input must not contain symbolic links." >&2
+            exit 1
+          fi
+
+          actual_unsigned_sha256="$(sha256sum "$unsigned_apk" | awk '{print $1}')"
+          if [[ "$actual_unsigned_sha256" != "$EXPECTED_UNSIGNED_SHA256" ]]; then
+            echo "Unsigned APK digest does not match the build job output." >&2
+            exit 1
+          fi
+
+      - name: Sign, verify, and close final artifact inventory
+        shell: bash
+        env:
+          EXPECTED_UNSIGNED_SHA256: ${{ needs.build-unsigned-release.outputs.unsigned_apk_sha256 }}
+          MORIMIL_RELEASE_KEYSTORE_BASE64: ${{ secrets.MORIMIL_RELEASE_KEYSTORE_BASE64 }}
+          MORIMIL_RELEASE_STORE_PASSWORD: ${{ secrets.MORIMIL_RELEASE_STORE_PASSWORD }}
+          MORIMIL_RELEASE_KEY_ALIAS: ${{ secrets.MORIMIL_RELEASE_KEY_ALIAS }}
+          MORIMIL_RELEASE_KEY_PASSWORD: ${{ secrets.MORIMIL_RELEASE_KEY_PASSWORD }}
+          MORIMIL_RELEASE_CERT_SHA256: ${{ secrets.MORIMIL_RELEASE_CERT_SHA256 }}
+        run: |
+          set -euo pipefail
+          umask 077
+          unsigned_apk="unsigned-input/app-release-unsigned.apk"
+          keystore="$RUNNER_TEMP/morimil-release.jks"
+          apksigner="$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          cleanup() {
+            rm -f "$keystore"
+            unset MORIMIL_RELEASE_KEYSTORE_BASE64
+            unset MORIMIL_RELEASE_STORE_PASSWORD
+            unset MORIMIL_RELEASE_KEY_ALIAS
+            unset MORIMIL_RELEASE_KEY_PASSWORD
+            unset MORIMIL_RELEASE_CERT_SHA256
+          }
+          trap cleanup EXIT
 
           required=(
             MORIMIL_RELEASE_KEYSTORE_BASE64
@@ -61,43 +166,34 @@ jobs:
             exit 1
           fi
 
-      - name: Materialize protected keystore
-        shell: bash
-        run: |
-          set -euo pipefail
-          keystore="$RUNNER_TEMP/morimil-release.jks"
+          test -f "$unsigned_apk"
+          test ! -L "$unsigned_apk"
+          test -x "$apksigner"
           printf '%s' "$MORIMIL_RELEASE_KEYSTORE_BASE64" | base64 --decode > "$keystore"
           test -s "$keystore"
           chmod 600 "$keystore"
-          printf 'MORIMIL_RELEASE_STORE_FILE=%s\n' "$keystore" >> "$GITHUB_ENV"
 
-      - name: Install deterministic Android build tools
-        shell: bash
-        run: |
-          set -euo pipefail
-          sdkmanager_path="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
-          test -x "$sdkmanager_path"
-          yes | "$sdkmanager_path" --licenses > /dev/null 2>&1 || true
-          "$sdkmanager_path" --install "build-tools;35.0.0"
-          test -x "$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          rm -rf release-output
+          install -d -m 0700 release-output
+          test ! -L release-output
+          [[ -z "$(find release-output -mindepth 1 -print -quit)" ]]
 
-      - name: Build signed release APK
-        shell: bash
-        run: |
-          set -euo pipefail
-          chmod +x ./gradlew
-          ./gradlew --no-daemon --stacktrace --console=plain :app:assembleRelease
+          signing_input_sha256="$(sha256sum "$unsigned_apk" | awk '{print $1}')"
+          [[ "$EXPECTED_UNSIGNED_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          if [[ "$signing_input_sha256" != "$EXPECTED_UNSIGNED_SHA256" ]]; then
+            echo "Unsigned APK digest changed before signing." >&2
+            exit 1
+          fi
 
-      - name: Verify certificate fingerprint and APK digest
-        shell: bash
-        run: |
-          set -euo pipefail
-          apk="app/build/outputs/apk/release/app-release.apk"
-          apksigner="$ANDROID_HOME/build-tools/35.0.0/apksigner"
-          test -s "$apk"
+          "$apksigner" sign \
+            --ks "$keystore" \
+            --ks-pass env:MORIMIL_RELEASE_STORE_PASSWORD \
+            --ks-key-alias "$MORIMIL_RELEASE_KEY_ALIAS" \
+            --key-pass env:MORIMIL_RELEASE_KEY_PASSWORD \
+            --out release-output/app-release.apk \
+            "$unsigned_apk"
 
-          mkdir -p release-output
-          "$apksigner" verify --verbose --print-certs "$apk" \
+          "$apksigner" verify --verbose --print-certs release-output/app-release.apk \
             | tee release-output/app-release-signature.txt
 
           actual_fingerprint="$(
@@ -120,25 +216,45 @@ jobs:
             exit 1
           fi
 
-          apk_sha256="$(sha256sum "$apk" | awk '{print $1}')"
-          cp "$apk" release-output/app-release.apk
+          apk_sha256="$(sha256sum release-output/app-release.apk | awk '{print $1}')"
           printf '%s  app-release.apk\n' "$apk_sha256" \
             > release-output/app-release.apk.sha256
           {
             printf 'certificate_sha256=%s\n' "$actual_fingerprint"
             printf 'apk_sha256=%s\n' "$apk_sha256"
+            printf 'unsigned_apk_sha256=%s\n' \
+              "${{ needs.build-unsigned-release.outputs.unsigned_apk_sha256 }}"
             printf 'source_commit=%s\n' "$GITHUB_SHA"
           } > release-output/release-signing-manifest.txt
 
+          if find release-output -mindepth 1 -type l -print -quit | grep -q .; then
+            echo "Final release inventory must not contain symbolic links." >&2
+            exit 1
+          fi
+          expected_inventory="$RUNNER_TEMP/release-output.expected"
+          actual_inventory="$RUNNER_TEMP/release-output.actual"
+          printf '%s\n' \
+            app-release.apk \
+            app-release.apk.sha256 \
+            app-release-signature.txt \
+            release-signing-manifest.txt \
+            | sort > "$expected_inventory"
+          find release-output -mindepth 1 -maxdepth 1 -printf '%f\n' \
+            | sort > "$actual_inventory"
+          if ! diff -u "$expected_inventory" "$actual_inventory"; then
+            echo "Final release inventory is not exactly the authorized four files." >&2
+            exit 1
+          fi
+          [[ "$(wc -l < "$actual_inventory")" -eq 4 ]]
+
       - name: Upload verified signed APK
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: morimil-signed-release-${{ github.sha }}
-          path: release-output/**
+          path: |
+            release-output/app-release.apk
+            release-output/app-release.apk.sha256
+            release-output/app-release-signature.txt
+            release-output/release-signing-manifest.txt
           if-no-files-found: error
           retention-days: 30
-
-      - name: Remove materialized keystore
-        if: always()
-        shell: bash
-        run: rm -f "$RUNNER_TEMP/morimil-release.jks"
