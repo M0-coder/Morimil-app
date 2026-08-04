@@ -149,8 +149,15 @@ internal fun OnboardingScreen(viewModel: GenesisUltraOnboardingViewModel) {
                 status = state.preparationStatus?.name ?: "LOADING"
             )
 
-            provisioningState.bodyReceipt?.let(::BodyProvisioningReceiptCard)
-            provisioningState.guardianReceipt?.let(::GuardianProvisioningReceiptCard)
+            val bodyReceipt = provisioningState.bodyReceipt
+            if (bodyReceipt != null) {
+                BodyProvisioningReceiptCard(receipt = bodyReceipt)
+            }
+
+            val guardianReceipt = provisioningState.guardianReceipt
+            if (guardianReceipt != null) {
+                GuardianProvisioningReceiptCard(receipt = guardianReceipt)
+            }
 
             when (state.preparationStatus) {
                 GenesisUltraBirthPreparationStatus.BODY_IDENTITY_REQUIRED ->
