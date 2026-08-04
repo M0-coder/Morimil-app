@@ -41,6 +41,29 @@ Morimil is the continuous personal Instance. `Morimil-app` is the current native
 - Body succession, export, and restore are not implemented;
 - reasoning output, a provider, a database, Android, GitHub, or a Guardian cannot create a second identity authority.
 
+## Pre-birth provisioning boundary
+
+Production onboarding can now resolve the two local cryptographic preparation
+states without invoking Genesis birth:
+
+```text
+BODY_IDENTITY_REQUIRED
+  -> explicit user-presence Body provisioning
+  -> GUARDIAN_TRUST_REQUIRED
+  -> exact RAW Guardian key + independently confirmed fingerprint + user presence
+  -> READY_FOR_SIGNED_CANDIDATE
+```
+
+`GenesisUltraPreBirthProvisioningCoordinator` re-inspects durable state before
+and after each mutation. It cannot accept a Seed, persist a candidate, record
+consent, issue authorization, execute birth, open runtime, or activate motors.
+Provisioning receipts are reconstructable views of authenticated stores and are
+not identity or canonical-memory authorities.
+
+The real Guardian public key, signed Seed, final witnessed evidence, and the
+user's explicit atomic-execution decision remain required deployment and
+ceremony inputs. `MORIMIL_OPERATIONAL_BIRTH=NOT_OCCURRED` remains unchanged.
+
 ## Evidence layers
 
 | Layer | State |

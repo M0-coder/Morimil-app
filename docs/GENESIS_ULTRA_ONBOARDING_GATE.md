@@ -32,6 +32,19 @@ is local UI state only and is not persisted or treated as consent. It must be:
 
 The name alone cannot construct or authorize a birth.
 
+## Pre-birth provisioning
+
+Before Seed selection, onboarding now owns two explicit local-presence
+ceremonies:
+
+1. create the first Android Body root only from `BODY_IDENTITY_REQUIRED`;
+2. pin one Guardian epoch only from `GUARDIAN_TRUST_REQUIRED` after importing
+   an exact 32-byte RAW key and matching its fingerprint against a separately
+   confirmed value.
+
+Both actions expose public reconstructable receipts, advance only through a
+re-inspected durable state, and remain unable to authorize or commit birth.
+
 ## Legacy path
 
 `MorimilChatCoordinator.bornInstance()` remains only as a fail-closed source and
@@ -53,9 +66,10 @@ constructs an in-memory candidate bound to the canonical companion name.
 Only a non-secret summary is displayed. Changing the name or rechecking local
 state clears the preview. The archive and candidate are not persisted.
 
-## Remaining work
+## Runtime boundary
 
-The onboarding gate still does not record host consent, receive the final
-Guardian birth testimony, issue atomic-birth authorization or invoke atomic
-activation. A verified preview cannot open runtime and the birth button remains
-disabled. Deliberative and metacognitive motors remain blocked.
+The wider onboarding flow records candidate-bound host consent, verifies the
+final Guardian/Body testimony, retains authorization only in process memory,
+and requires a second local-presence ceremony before atomic execution. No
+preparation or preview state opens runtime. Deliberative and metacognitive
+motors remain blocked.

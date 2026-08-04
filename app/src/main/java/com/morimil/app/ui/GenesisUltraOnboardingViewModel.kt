@@ -8,10 +8,14 @@ import com.morimil.app.MorimilAppContainer
 import com.morimil.app.data.genesis.ultra.GenesisUltraAtomicBirthExecutionCeremonyRequest
 import com.morimil.app.data.genesis.ultra.GenesisUltraAtomicBirthWitnessAuthorizationCoordinator
 import com.morimil.app.data.genesis.ultra.GenesisUltraAuthorizedAtomicBirth
+import com.morimil.app.data.genesis.ultra.GenesisUltraBodyProvisioningCeremonyRequest
 import com.morimil.app.data.genesis.ultra.GenesisUltraCompanionNamePolicy
 import com.morimil.app.data.genesis.ultra.GenesisUltraCompanionNameValidation
+import com.morimil.app.data.genesis.ultra.GenesisUltraGuardianPublicKeyImportCoordinator
+import com.morimil.app.data.genesis.ultra.GenesisUltraGuardianPublicKeyPreview
 import com.morimil.app.data.genesis.ultra.GenesisUltraHostBirthConsentRequest
 import com.morimil.app.data.genesis.ultra.GenesisUltraHostBirthConsentState
+import com.morimil.app.data.genesis.ultra.GenesisUltraPreBirthProvisioningSnapshot
 import com.morimil.app.data.genesis.ultra.GenesisUltraSignedSeedCandidateSession
 import com.morimil.app.data.genesis.ultra.GenesisUltraSignedSeedPreviewCoordinator
 import kotlinx.coroutines.Dispatchers
@@ -36,6 +40,10 @@ class GenesisUltraOnboardingViewModel(
 ) : AndroidViewModel(application) {
     private val container = MorimilAppContainer.from(application)
     private val preparationCoordinator = container.genesisUltraBirthPreparationCoordinator
+    private val preBirthProvisioningCoordinator =
+        container.genesisUltraPreBirthProvisioningCoordinator
+    private val guardianPublicKeyImportCoordinator =
+        GenesisUltraGuardianPublicKeyImportCoordinator(application)
     private val hostBirthConsentStore = container.genesisUltraHostBirthConsentStore
     private val hostBirthConsentRecoveryCoordinator =
         container.genesisUltraHostBirthConsentRecoveryCoordinator
@@ -55,6 +63,7 @@ class GenesisUltraOnboardingViewModel(
 
     private var candidateSession: GenesisUltraSignedSeedCandidateSession? = null
     private var authorizedBirth: GenesisUltraAuthorizedAtomicBirth? = null
+    private var guardianPublicKeyPreview: GenesisUltraGuardianPublicKeyPreview? = null
 
     private val _state = MutableStateFlow(GenesisUltraOnboardingUiStateMapper.loading())
     internal val state: StateFlow<GenesisUltraOnboardingUiState> = _state.asStateFlow()
@@ -62,6 +71,11 @@ class GenesisUltraOnboardingViewModel(
     private val _signedSeedPreview = MutableStateFlow(GenesisUltraSignedSeedPreviewUiState())
     internal val signedSeedPreview: StateFlow<GenesisUltraSignedSeedPreviewUiState> =
         _signedSeedPreview.asStateFlow()
+
+    private val _preBirthProvisioning =
+        MutableStateFlow(GenesisUltraPreBirthProvisioningUiState())
+    internal val preBirthProvisioning: StateFlow<GenesisUltraPreBirthProvisioningUiState> =
+        _preBirthProvisioning.asStateFlow()
 
     private val _hostBirthConsent = MutableStateFlow(GenesisUltraHostBirthConsentUiState())
     internal val hostBirthConsent: StateFlow<GenesisUltraHostBirthConsentUiState> =
@@ -85,11 +99,17 @@ class GenesisUltraOnboardingViewModel(
         if (
             _hostBirthConsent.value.busy ||
             _hostBirthConsent.value.hasPersistedConsent ||
+            _preBirthProvisioning.value.busy ||
             _atomicBirthAuthorization.value.verifying ||
             authorizedBirth != null ||
             _atomicBirthExecution.value.executing ||
             _atomicBirthExecution.value.birthCommitted
         ) return
+        guardianPublicKeyPreview = null
+        _preBirthProvisioning.value = _preBirthProvisioning.value.copy(
+            guardianPublicKeyRef = null,
+            errorMessage = null
+        )
         clearCandidateSession()
         viewModelScope.launch(Dispatchers.IO) {
             inspectPreBirthState()
@@ -102,9 +122,145 @@ class GenesisUltraOnboardingViewModel(
         return GenesisUltraCompanionNamePolicy.validate(value)
     }
 
+    internal fun provisionBodyIdentity(userPresenceConfirmed: Boolean) {
+        if (
+            _preBirthProvisioning.value.busy ||
+            _hostBirthConsent.value.busy ||
+            _atomicBirthExecution.value.executing ||
+            _atomicBirthExecution.value.birthCommitted
+        ) return
+        _preBirthProvisioning.value = GenesisUltraPreBirthProvisioningUiState(
+            bodyProvisioning = true,
+            bodyReceipt = _preBirthProvisioning.value.bodyReceipt,
+            guardianReceipt = _preBirthProvisioning.value.guardianReceipt
+        )
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                preBirthProvisioningCoordinator.provisionBody(
+                    GenesisUltraBodyProvisioningCeremonyRequest(
+                        confirmationPurpose =
+                            GenesisUltraBodyProvisioningCeremonyRequest.CONFIRMATION_PURPOSE,
+                        userPresenceConfirmed = userPresenceConfirmed
+                    )
+                )
+            }.fold(
+                onSuccess = ::applyProvisioningSnapshot,
+                onFailure = { error ->
+                    _preBirthProvisioning.value = GenesisUltraPreBirthProvisioningUiState(
+                        bodyReceipt = _preBirthProvisioning.value.bodyReceipt,
+                        guardianReceipt = _preBirthProvisioning.value.guardianReceipt,
+                        errorMessage = error.message?.take(220) ?: error::class.java.simpleName
+                    )
+                }
+            )
+        }
+    }
+
+    internal fun previewGuardianPublicKey(uri: Uri) {
+        if (
+            _preBirthProvisioning.value.busy ||
+            _hostBirthConsent.value.busy ||
+            _atomicBirthExecution.value.executing ||
+            _atomicBirthExecution.value.birthCommitted
+        ) return
+        guardianPublicKeyPreview = null
+        _preBirthProvisioning.value = GenesisUltraPreBirthProvisioningUiState(
+            guardianKeyImporting = true,
+            bodyReceipt = _preBirthProvisioning.value.bodyReceipt,
+            guardianReceipt = _preBirthProvisioning.value.guardianReceipt
+        )
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { guardianPublicKeyImportCoordinator.preview(uri) }
+                .fold(
+                    onSuccess = { preview ->
+                        guardianPublicKeyPreview = preview
+                        _preBirthProvisioning.value = GenesisUltraPreBirthProvisioningUiState(
+                            guardianPublicKeyRef = preview.publicKeyRef,
+                            bodyReceipt = _preBirthProvisioning.value.bodyReceipt,
+                            guardianReceipt = _preBirthProvisioning.value.guardianReceipt
+                        )
+                    },
+                    onFailure = { error ->
+                        guardianPublicKeyPreview = null
+                        _preBirthProvisioning.value = GenesisUltraPreBirthProvisioningUiState(
+                            bodyReceipt = _preBirthProvisioning.value.bodyReceipt,
+                            guardianReceipt = _preBirthProvisioning.value.guardianReceipt,
+                            errorMessage =
+                                error.message?.take(220) ?: error::class.java.simpleName
+                        )
+                    }
+                )
+        }
+    }
+
+    internal fun provisionGuardianTrustAnchor(
+        guardianId: String,
+        keyEpochId: String,
+        confirmedPublicKeyRef: String,
+        independentConfirmationAcknowledged: Boolean,
+        userPresenceConfirmed: Boolean
+    ) {
+        if (
+            _preBirthProvisioning.value.busy ||
+            _hostBirthConsent.value.busy ||
+            _atomicBirthExecution.value.executing ||
+            _atomicBirthExecution.value.birthCommitted
+        ) return
+        val preview = guardianPublicKeyPreview
+        if (preview == null) {
+            _preBirthProvisioning.value = _preBirthProvisioning.value.copy(
+                errorMessage = "guardian_public_key_preview_missing"
+            )
+            return
+        }
+        _preBirthProvisioning.value = GenesisUltraPreBirthProvisioningUiState(
+            guardianPinning = true,
+            guardianPublicKeyRef = preview.publicKeyRef,
+            bodyReceipt = _preBirthProvisioning.value.bodyReceipt,
+            guardianReceipt = _preBirthProvisioning.value.guardianReceipt
+        )
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                preBirthProvisioningCoordinator.provisionGuardian(
+                    preview.ceremonyRequest(
+                        guardianId = guardianId,
+                        keyEpochId = keyEpochId,
+                        confirmedPublicKeyRef = confirmedPublicKeyRef,
+                        independentConfirmationAcknowledged =
+                            independentConfirmationAcknowledged,
+                        userPresenceConfirmed = userPresenceConfirmed
+                    )
+                )
+            }.fold(
+                onSuccess = { snapshot ->
+                    guardianPublicKeyPreview = null
+                    applyProvisioningSnapshot(snapshot)
+                },
+                onFailure = { error ->
+                    _preBirthProvisioning.value = GenesisUltraPreBirthProvisioningUiState(
+                        guardianPublicKeyRef = preview.publicKeyRef,
+                        bodyReceipt = _preBirthProvisioning.value.bodyReceipt,
+                        guardianReceipt = _preBirthProvisioning.value.guardianReceipt,
+                        errorMessage = error.message?.take(220) ?: error::class.java.simpleName
+                    )
+                }
+            )
+        }
+    }
+
+    internal fun clearGuardianPublicKeyPreview() {
+        if (_preBirthProvisioning.value.busy) return
+        guardianPublicKeyPreview = null
+        _preBirthProvisioning.value = _preBirthProvisioning.value.copy(
+            guardianPublicKeyRef = null,
+            errorMessage = null
+        )
+    }
+
     internal fun previewSignedSeed(uri: Uri, companionName: String) {
         if (
             _signedSeedPreview.value.importing ||
+            _preBirthProvisioning.value.busy ||
             _hostBirthConsent.value.busy ||
             _atomicBirthAuthorization.value.verifying ||
             _atomicBirthExecution.value.executing ||
@@ -164,6 +320,7 @@ class GenesisUltraOnboardingViewModel(
     ) {
         if (
             _hostBirthConsent.value.busy ||
+            _preBirthProvisioning.value.busy ||
             _atomicBirthAuthorization.value.verifying ||
             _atomicBirthExecution.value.executing ||
             _atomicBirthExecution.value.birthCommitted
@@ -237,6 +394,7 @@ class GenesisUltraOnboardingViewModel(
             _atomicBirthAuthorization.value.verifying ||
             _atomicBirthAuthorization.value.authorizedInMemory ||
             authorizedBirth != null ||
+            _preBirthProvisioning.value.busy ||
             _hostBirthConsent.value.busy ||
             _signedSeedPreview.value.importing ||
             _atomicBirthExecution.value.executing ||
@@ -308,6 +466,7 @@ class GenesisUltraOnboardingViewModel(
         if (
             !_atomicBirthExecution.value.retryAllowed ||
             _atomicBirthExecution.value.executing ||
+            _preBirthProvisioning.value.busy ||
             _hostBirthConsent.value.busy ||
             _atomicBirthAuthorization.value.verifying
         ) return
@@ -376,6 +535,7 @@ class GenesisUltraOnboardingViewModel(
     internal fun revokeHostConsent() {
         if (
             _hostBirthConsent.value.busy ||
+            _preBirthProvisioning.value.busy ||
             _atomicBirthAuthorization.value.verifying ||
             _atomicBirthExecution.value.executing ||
             _atomicBirthExecution.value.birthCommitted
@@ -419,6 +579,7 @@ class GenesisUltraOnboardingViewModel(
 
     internal fun clearSignedSeedPreview() {
         if (
+            _preBirthProvisioning.value.busy ||
             _hostBirthConsent.value.hasPersistedConsent ||
             _atomicBirthExecution.value.executing ||
             _atomicBirthExecution.value.birthCommitted
@@ -432,6 +593,7 @@ class GenesisUltraOnboardingViewModel(
     override fun onCleared() {
         authorizedBirth = null
         candidateSession = null
+        guardianPublicKeyPreview = null
         super.onCleared()
     }
 
@@ -439,10 +601,15 @@ class GenesisUltraOnboardingViewModel(
         _state.value = GenesisUltraOnboardingUiStateMapper.loading()
         _hostBirthConsent.value = GenesisUltraHostBirthConsentUiState(checking = true)
 
-        _state.value = runCatching { preparationCoordinator.inspect() }
+        runCatching { preBirthProvisioningCoordinator.inspect() }
             .fold(
-                onSuccess = GenesisUltraOnboardingUiStateMapper::from,
-                onFailure = GenesisUltraOnboardingUiStateMapper::failure
+                onSuccess = ::applyProvisioningSnapshot,
+                onFailure = { error ->
+                    _state.value = GenesisUltraOnboardingUiStateMapper.failure(error)
+                    _preBirthProvisioning.value = GenesisUltraPreBirthProvisioningUiState(
+                        errorMessage = error.message?.take(220) ?: error::class.java.simpleName
+                    )
+                }
             )
 
         _hostBirthConsent.value = runCatching {
@@ -467,6 +634,13 @@ class GenesisUltraOnboardingViewModel(
                 onSuccess = GenesisUltraOnboardingUiStateMapper::from,
                 onFailure = GenesisUltraOnboardingUiStateMapper::failure
             )
+    }
+
+    private fun applyProvisioningSnapshot(
+        snapshot: GenesisUltraPreBirthProvisioningSnapshot
+    ) {
+        _state.value = GenesisUltraOnboardingUiStateMapper.from(snapshot.assessment)
+        _preBirthProvisioning.value = GenesisUltraPreBirthProvisioningUiState.from(snapshot)
     }
 
     private fun discardPreBirthSessionAfterCommit() {
