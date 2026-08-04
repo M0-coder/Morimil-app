@@ -178,8 +178,8 @@ class GenesisUltraPreBirthProvisioningCoordinatorTest {
                 GenesisUltraBirthPreparationClassifier.assess(
                     GenesisUltraBirthPreparationFacts(
                         persistedBirthState = GenesisUltraPersistedBirthState.ABSENT,
-                        bodyIdentityRootState = bodyState,
-                        guardianTrustAnchorState = guardianState,
+                        bodyIdentityRootState = this@Fixture.bodyState,
+                        guardianTrustAnchorState = this@Fixture.guardianState,
                         legacyLocalIdentityCount = legacyLocalIdentityCount,
                         legacyGenesisCoreCount = 0,
                         canonicalMemoryEventCount = 0
@@ -192,7 +192,7 @@ class GenesisUltraPreBirthProvisioningCoordinatorTest {
                 bodyRoot
             },
             loadBodyRoot = {
-                check(bodyState == GenesisUltraBodyIdentityRootState.READY)
+                check(this@Fixture.bodyState == GenesisUltraBodyIdentityRootState.READY)
                 bodyRoot
             },
             provisionGuardianAnchor = { request ->
@@ -202,7 +202,7 @@ class GenesisUltraPreBirthProvisioningCoordinatorTest {
                 guardianAnchor
             },
             loadGuardianAnchor = {
-                check(guardianState == GenesisUltraGuardianTrustAnchorState.READY)
+                check(this@Fixture.guardianState == GenesisUltraGuardianTrustAnchorState.READY)
                 guardianAnchor
             }
         )
