@@ -2,7 +2,8 @@
 
 # Genesis Ultra birth preparation boundary
 
-Status: Phase 3.1 implemented as an inspection-only boundary.
+Status: inspection boundary remains read-only; explicit mutations are owned by
+the separate pre-birth provisioning ceremony.
 
 ## Purpose
 
@@ -26,6 +27,12 @@ The coordinator reads:
 - isolated Genesis Ultra canonical-memory event count.
 
 It does not provision or mutate any of these stores.
+
+Production onboarding resolves `BODY_IDENTITY_REQUIRED` and
+`GUARDIAN_TRUST_REQUIRED` only through
+`GenesisUltraPreBirthProvisioningCoordinator`. That facade reuses this
+inspection result as a precondition and re-inspects after mutation. It does not
+add provisioning behavior to this classifier.
 
 ## Statuses
 

@@ -16,6 +16,7 @@ import com.morimil.app.data.genesis.ultra.GenesisUltraBirthCandidateConstruction
 import com.morimil.app.data.genesis.ultra.GenesisUltraBirthPreparationCoordinator
 import com.morimil.app.data.genesis.ultra.GenesisUltraCommittedConsentRetirementCoordinator
 import com.morimil.app.data.genesis.ultra.GenesisUltraHostBirthConsentRecoveryCoordinator
+import com.morimil.app.data.genesis.ultra.GenesisUltraPreBirthProvisioningCoordinator
 import com.morimil.app.data.local.MemoryOrganDatabase
 import com.morimil.app.data.local.MemoryOrganDatabaseEncryption
 import com.morimil.app.data.local.MorimilDatabase
@@ -80,6 +81,16 @@ class MorimilAppContainer(context: Context) {
             }
         )
     }
+
+    /** Explicit local-presence facade for Body creation and Guardian pinning only. */
+    internal val genesisUltraPreBirthProvisioningCoordinator:
+        GenesisUltraPreBirthProvisioningCoordinator by lazy {
+            GenesisUltraPreBirthProvisioningCoordinator.production(
+                preparationCoordinator = genesisUltraBirthPreparationCoordinator,
+                bodyIdentityRootStore = genesisUltraBodyIdentityRootStore,
+                guardianTrustAnchorStore = genesisUltraGuardianTrustAnchorStore
+            )
+        }
 
     /** Builds a signed in-memory candidate only; it cannot persist or authorize birth. */
     internal val genesisUltraBirthCandidateConstructionCoordinator:

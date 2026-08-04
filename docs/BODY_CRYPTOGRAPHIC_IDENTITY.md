@@ -75,6 +75,17 @@ Reglas:
 - si se pierde la clave de Android Keystore, no se genera otra identidad silenciosamente;
 - una clave nueva después de desinstalar la aplicación representa un cuerpo nuevo, no continuidad automática.
 
+## Ceremonia productiva
+
+La UI de onboarding expone una acción presencial explícita solo cuando el
+clasificador durable devuelve `BODY_IDENTITY_REQUIRED`. La acción pasa por
+`GenesisUltraPreBirthProvisioningCoordinator`, vuelve a inspeccionar el estado
+antes y después de llamar a `provisionBeforeBirth()` y muestra únicamente un
+recibo público reconstruible.
+
+No existe aprovisionamiento automático durante startup. Ningún `refresh`, Seed,
+modelo o ruta legacy puede crear la raíz.
+
 ## Unión posterior con la Instance
 
 La raíz se genera sin `instanceId`. Cuando el futuro coordinador construya un candidato de nacimiento, solicitará:

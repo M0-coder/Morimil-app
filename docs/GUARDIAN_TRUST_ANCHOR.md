@@ -2,7 +2,8 @@
 
 # Genesis Ultra Guardian trust anchor
 
-Status: storage and verification boundary implemented; production anchor not provisioned.
+Status: storage, verification, and explicit production provisioning ceremony implemented;
+the real Guardian key remains a deployment input.
 
 ## Role boundary
 
@@ -47,7 +48,11 @@ out-of-band confirmed Guardian fingerprint
 
 The implementation recomputes the fingerprint from the supplied key. A copied, mistyped or substituted fingerprint is rejected before any local key material is created.
 
-The future onboarding UI must show the full fingerprint and require confirmation obtained through a channel independent of the Seed package. Merely displaying a fingerprint extracted from that package is not independent confirmation.
+The onboarding UI shows the full fingerprint calculated from a user-selected
+32-byte RAW Ed25519 public-key file and requires the same fingerprint to be
+confirmed through a channel independent of that file and the Seed package.
+Merely copying the displayed fingerprint or extracting one from the Seed is not
+independent confirmation.
 
 ## Pin-once behavior
 
@@ -129,16 +134,26 @@ Managed Android tests on API 30 and API 35 cover:
 - absence of trust-on-first-use during load;
 - absence of the RAW public key in the outer preferences record.
 
+## Production ceremony
+
+`GenesisUltraPreBirthProvisioningCoordinator` permits the pin only while the
+durable classifier returns `GUARDIAN_TRUST_REQUIRED`. The request requires both
+an independent-confirmation acknowledgement and local user presence. A
+reconstructable receipt exposes only the Guardian tuple, anchor digest, pin
+time, and receipt digest; raw key bytes never enter Compose UI state.
+
 ## Not completed by this phase
 
 This phase does not:
 
 - include or provision a production Guardian public key;
-- define the user-facing fingerprint confirmation screen;
 - rotate, revoke or recover a Guardian epoch;
 - build a Genesis Ultra birth candidate;
 - activate onboarding or birth;
 - confer ownership on the Guardian;
 - activate deliberative or metacognitive engines.
 
-The production fingerprint and its independent confirmation ceremony remain deployment inputs. Birth must stay closed until the Body root, Guardian anchor and verified Seed are composed atomically by the real Genesis Ultra coordinator.
+The production Guardian public key and independently transported fingerprint
+remain deployment inputs. Birth stays closed until the Body root, Guardian
+anchor, and verified Seed are composed by the Genesis Ultra candidate and
+atomic-execution boundaries.
