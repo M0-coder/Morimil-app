@@ -188,7 +188,7 @@ class GenesisUltraPreBirthProvisioningCoordinatorTest {
             },
             provisionBodyRoot = {
                 bodyProvisionCalls += 1
-                bodyState = GenesisUltraBodyIdentityRootState.READY
+                this@Fixture.bodyState = GenesisUltraBodyIdentityRootState.READY
                 bodyRoot
             },
             loadBodyRoot = {
@@ -198,7 +198,7 @@ class GenesisUltraPreBirthProvisioningCoordinatorTest {
             provisionGuardianAnchor = { request ->
                 guardianProvisionCalls += 1
                 check(request.confirmedPublicKeyRef == guardianAnchor.publicKeyRef)
-                guardianState = GenesisUltraGuardianTrustAnchorState.READY
+                this@Fixture.guardianState = GenesisUltraGuardianTrustAnchorState.READY
                 guardianAnchor
             },
             loadGuardianAnchor = {
