@@ -120,23 +120,18 @@ def _require_root_counters(
 
 
 def _normalize_source_counters(
-    counters: dict[str, Counter],
-    source: str,
+    counters: Mapping[str, Counter],
 ) -> dict[str, Counter]:
-    """Normalize legitimate per-source omissions without weakening root checks.
+    """Represent legitimate source-level omissions as explicit zero counters.
 
-    JaCoCo omits BRANCH for a source file with no branch opportunities. That is
-    represented as 0/0. INSTRUCTION and LINE remain mandatory and non-empty.
+    JaCoCo may omit BRANCH for files without decisions and may omit all measured
+    counters for declarations such as DAO interfaces that contain no executable
+    bytecode. The global report counters remain strictly required and non-empty.
     """
 
     normalized = dict(counters)
-    normalized.setdefault("BRANCH", Counter())
-    for counter_type in ("INSTRUCTION", "LINE"):
-        counter = normalized.get(counter_type)
-        if counter is None or counter.total <= 0:
-            raise InstrumentedCoverageError(
-                f"Missing or empty {counter_type} counter in {source}."
-            )
+    for counter_type in MEASURED_COUNTER_TYPES:
+        normalized.setdefault(counter_type, Counter())
     return normalized
 
 
@@ -195,7 +190,7 @@ def parse_report(
                     f"Duplicate source file in report: {logical_path}."
                 )
             parsed = _parse_counter_elements(source_file, logical_path)
-            sources[logical_path] = _normalize_source_counters(parsed, logical_path)
+            sources[logical_path] = _normalize_source_counters(parsed)
 
     if not sources:
         raise InstrumentedCoverageError("Coverage report contains no source files.")
