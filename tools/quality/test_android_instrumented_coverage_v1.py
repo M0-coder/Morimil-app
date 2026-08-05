@@ -48,6 +48,16 @@ def write_provenance(root: Path, destination: Path, device: str = "pixel2Api30")
     return log
 
 
+def fixture_paths(root: Path, report_text: str = REPORT) -> tuple[Path, Path, Path]:
+    report = root / "report.xml"
+    execution = root / "mislabelled" / "pixel2Api35" / "coverage.ec"
+    report.write_text(report_text, encoding="utf-8")
+    execution.parent.mkdir(parents=True, exist_ok=True)
+    execution.write_bytes(b"jacoco-fixture")
+    provenance = write_provenance(root, execution)
+    return report, execution, provenance
+
+
 class AndroidInstrumentedCoverageV1Test(unittest.TestCase):
     def test_selects_task_by_exact_managed_device_description(self) -> None:
         text = """
@@ -74,13 +84,7 @@ createManagedDeviceDebugAndroidTestCoverageReport - Creates JaCoCo test coverage
     def test_build_summary_binds_device_execution_and_pull_log(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            report = root / "report.xml"
-            execution = root / "mislabelled" / "pixel2Api35" / "coverage.ec"
-            report.write_text(REPORT, encoding="utf-8")
-            execution.parent.mkdir(parents=True)
-            execution.write_bytes(b"jacoco-fixture")
-            provenance = write_provenance(root, execution)
-
+            report, execution, provenance = fixture_paths(root)
             source = "com/morimil/app/security/SecretVault.kt"
             summary = build_summary(
                 "pixel2Api30",
@@ -98,6 +102,25 @@ createManagedDeviceDebugAndroidTestCoverageReport - Creates JaCoCo test coverage
             markdown = render_markdown(summary)
             self.assertIn("80.0000%", markdown)
             self.assertIn("False", markdown)
+
+    def test_source_without_branch_opportunities_is_normalized_to_zero(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source_branch = '      <counter type="BRANCH" missed="1" covered="3"/>\n'
+            report_text = REPORT.replace(source_branch, "", 1)
+            report, execution, provenance = fixture_paths(root, report_text)
+            source = "com/morimil/app/security/SecretVault.kt"
+            summary = build_summary(
+                "pixel2Api30",
+                report,
+                execution,
+                provenance,
+                [source],
+            )
+            branch = summary["tracked_sources"][source]["BRANCH"]
+            self.assertEqual(0, branch["covered"])
+            self.assertEqual(0, branch["total"])
+            self.assertEqual(0.0, branch["percent"])
 
     def test_summary_rejects_missing_or_wrong_execution_data(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
