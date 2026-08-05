@@ -101,6 +101,51 @@ jobs:
             --console=plain \
             :app:createDebugUnitTestCoverageReport
 
+      - name: Validate coverage baseline reports
+        run: |
+          set -euo pipefail
+          test -s build/quality/python-coverage.xml
+          test -s build/quality/python-coverage.json
+          test -s app/build/reports/coverage/test/debug/report.xml
+          python - <<'PY'
+          import json
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+
+          python_report = json.loads(
+              Path("build/quality/python-coverage.json").read_text(encoding="utf-8")
+          )
+          python_totals = python_report["totals"]
+          assert python_totals["num_statements"] > 0
+          assert python_totals["covered_lines"] > 0
+          assert python_totals["num_branches"] > 0
+
+          jacoco_root = ET.parse(
+              "app/build/reports/coverage/test/debug/report.xml"
+          ).getroot()
+          jacoco = {
+              item.attrib["type"]: {
+                  "covered": int(item.attrib["covered"]),
+                  "missed": int(item.attrib["missed"]),
+              }
+              for item in jacoco_root.findall("counter")
+          }
+          for counter in ("INSTRUCTION", "BRANCH", "LINE"):
+              assert counter in jacoco
+              assert jacoco[counter]["covered"] + jacoco[counter]["missed"] > 0
+
+          print(
+              "PYTHON_COVERAGE="
+              f"{python_totals['percent_covered_display']}% "
+              f"LINE={python_totals['percent_statements_covered_display']}% "
+              f"BRANCH={python_totals['percent_branches_covered_display']}%"
+          )
+          for counter in ("INSTRUCTION", "BRANCH", "LINE"):
+              covered = jacoco[counter]["covered"]
+              total = covered + jacoco[counter]["missed"]
+              print(f"ANDROID_{counter}_COVERAGE={covered}/{total}={covered / total:.4%}")
+          PY
+
       - name: Build debug APK
         run: ./gradlew :app:assembleDebug
 
