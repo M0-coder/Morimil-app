@@ -2,8 +2,10 @@
 """Validate one canonical AGP managed-device AndroidTest coverage report.
 
 Compatibility tests may run on several devices. Coverage publication is bound to
-one explicitly named device and one explicitly selected execution-data file so a
-multi-device output collision cannot masquerade as an aggregate report.
+one explicitly named device, one execution-data file, and the successful ADB pull
+log that proves where that device's coverage file was written. This is necessary
+because AGP 8.6.1 can label the output directory with a different managed-device
+name.
 """
 
 from __future__ import annotations
@@ -12,6 +14,7 @@ import argparse
 import hashlib
 import json
 import re
+import shlex
 import sys
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
@@ -197,10 +200,54 @@ def file_record(path: Path) -> dict[str, int | str]:
     }
 
 
+def parse_pull_provenance(
+    device_id: str,
+    provenance_log: Path,
+    execution_data_path: Path,
+) -> dict[str, object]:
+    record = file_record(provenance_log)
+    if device_id not in provenance_log.parts:
+        raise InstrumentedCoverageError(
+            "ADB pull provenance path is not scoped to the canonical device."
+        )
+    text = provenance_log.read_text(encoding="utf-8")
+    if "EXIT CODE: 0" not in text:
+        raise InstrumentedCoverageError("ADB coverage pull did not record exit code 0.")
+    executing = [line for line in text.splitlines() if line.startswith("EXECUTING: ")]
+    if len(executing) != 1:
+        raise InstrumentedCoverageError(
+            "ADB pull provenance must contain exactly one EXECUTING line."
+        )
+    try:
+        tokens = shlex.split(executing[0][len("EXECUTING: ") :])
+        pull_index = tokens.index("pull")
+        remote_source = tokens[pull_index + 1]
+        destination = Path(tokens[pull_index + 2])
+    except (ValueError, IndexError) as error:
+        raise InstrumentedCoverageError(
+            "ADB pull provenance command is malformed."
+        ) from error
+    if destination.resolve() != execution_data_path.resolve():
+        raise InstrumentedCoverageError(
+            "ADB pull destination does not match the selected execution-data file."
+        )
+    record.update(
+        {
+            "canonical_device_id": device_id,
+            "remote_source": remote_source,
+            "destination": destination.as_posix(),
+            "destination_label_matches_device": device_id in destination.parts,
+            "exit_code": 0,
+        }
+    )
+    return record
+
+
 def build_summary(
     device_id: str,
     report_path: Path,
     execution_data_path: Path,
+    provenance_log: Path,
     tracked_sources: Iterable[str] = (),
 ) -> dict[str, object]:
     if DEVICE_ID.fullmatch(device_id) is None:
@@ -212,6 +259,7 @@ def build_summary(
 
     root_counters, session, sources = parse_report(report_path)
     execution_data = file_record(execution_data_path)
+    provenance = parse_pull_provenance(device_id, provenance_log, execution_data_path)
     report = file_record(report_path)
     report["counters"] = {
         counter_type: root_counters[counter_type].to_dict()
@@ -241,6 +289,7 @@ def build_summary(
         "canonical_device_id": device_id,
         "report": report,
         "execution_data": execution_data,
+        "adb_pull_provenance": provenance,
         "source_inventory": {
             "total": len(sources),
             "zero_line_coverage": len(zero_line_sources),
@@ -251,13 +300,15 @@ def build_summary(
 
 def render_markdown(summary: dict[str, object]) -> str:
     report = summary["report"]
+    execution_data = summary["execution_data"]
+    provenance = summary["adb_pull_provenance"]
+    tracked_sources = summary["tracked_sources"]
     assert isinstance(report, dict)
+    assert isinstance(execution_data, dict)
+    assert isinstance(provenance, dict)
+    assert isinstance(tracked_sources, dict)
     counters = report["counters"]
     assert isinstance(counters, dict)
-    execution_data = summary["execution_data"]
-    assert isinstance(execution_data, dict)
-    tracked_sources = summary["tracked_sources"]
-    assert isinstance(tracked_sources, dict)
 
     lines = [
         "# Android instrumented coverage baseline",
@@ -269,6 +320,8 @@ def render_markdown(summary: dict[str, object]) -> str:
         f"Report SHA-256: `{report['sha256']}`",
         f"Execution data: `{execution_data['path']}`",
         f"Execution-data SHA-256: `{execution_data['sha256']}`",
+        f"ADB provenance: `{provenance['path']}`",
+        f"AGP destination label matches device: `{provenance['destination_label_matches_device']}`",
         "",
         "| Counter | Covered | Total | Coverage |",
         "|---|---:|---:|---:|",
@@ -321,6 +374,7 @@ def command_summarize(args: argparse.Namespace) -> int:
         device_id=args.device_id,
         report_path=args.report,
         execution_data_path=args.execution_data,
+        provenance_log=args.provenance_log,
         tracked_sources=args.tracked_source,
     )
     write_text(
@@ -330,7 +384,9 @@ def command_summarize(args: argparse.Namespace) -> int:
     write_text(args.markdown_output, render_markdown(summary))
 
     report = summary["report"]
+    provenance = summary["adb_pull_provenance"]
     assert isinstance(report, dict)
+    assert isinstance(provenance, dict)
     counters = report["counters"]
     assert isinstance(counters, dict)
     metrics = []
@@ -348,7 +404,8 @@ def command_summarize(args: argparse.Namespace) -> int:
     print(
         "ANDROID_INSTRUMENTED_COVERAGE_EVIDENCE="
         f"REPORT_SHA256={report['sha256']} "
-        f"EXECUTION_SHA256={summary['execution_data']['sha256']}"
+        f"EXECUTION_SHA256={summary['execution_data']['sha256']} "
+        f"DESTINATION_LABEL_MATCH={provenance['destination_label_matches_device']}"
     )
     return 0
 
@@ -366,6 +423,7 @@ def build_parser() -> argparse.ArgumentParser:
     summarize.add_argument("--device-id", required=True)
     summarize.add_argument("--report", type=Path, required=True)
     summarize.add_argument("--execution-data", type=Path, required=True)
+    summarize.add_argument("--provenance-log", type=Path, required=True)
     summarize.add_argument("--tracked-source", action="append", default=[])
     summarize.add_argument("--json-output", type=Path, required=True)
     summarize.add_argument("--markdown-output", type=Path, required=True)
