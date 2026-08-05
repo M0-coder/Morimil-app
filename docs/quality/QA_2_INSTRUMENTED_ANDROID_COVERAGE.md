@@ -6,36 +6,42 @@
 
 QA-0 and QA-1 measure JVM unit-test execution. They do not measure code executed by `androidTest` on Android devices.
 
-QA-2 adds a separate, auditable baseline for the existing Gradle Managed Device suite on API 30 and API 35. This prevents a JVM-only zero-coverage result from being misrepresented as proof that a component has no tests.
+QA-2 adds a separate, auditable AndroidTest baseline and prevents JVM-only zero coverage from being presented as proof that a component has no tests.
 
-This phase is measurement-only. It introduces no percentage threshold, mutation threshold, runtime behavior change, release operation, Body operation, Guardian operation, Seed import, Genesis execution, activation, or birth declaration.
+This phase is measurement-only. It introduces no percentage threshold, mutation threshold, runtime behavior change, production release, Body operation, Guardian operation, Seed import, Genesis execution, activation, or birth declaration.
 
 ## Isolation boundary
 
-AndroidTest coverage is enabled only through:
+Coverage is enabled only through:
 
 ```text
 tools/quality/android-instrumented-coverage.init.gradle
 ```
 
-The init script sets `debug.enableAndroidTestCoverage = true` for the CI invocation. The normal module build configuration is not changed, and release variants are not instrumented.
+The init script sets `debug.enableAndroidTestCoverage = true` for isolated CI invocations. The normal module build configuration is unchanged, and release variants are not instrumented.
 
-## Device matrix
+## Compatibility matrix and canonical measurement
 
-The existing managed-device matrix remains authoritative:
+The full instrumentation suite must continue to pass on:
 
 ```text
 pixel2Api30 — Pixel 2, API 30, aosp-atd
 pixel2Api35 — Pixel 2, API 35, aosp
 ```
 
-The same instrumentation suite must pass on both devices before a report is accepted.
+Coverage publication is deliberately bound to one separately executed canonical device:
+
+```text
+pixel2Api30
+```
+
+The API 35 run remains a mandatory compatibility check. Its execution is not silently combined with the API 30 counters.
+
+This separation is required because the first exploratory multi-device coverage run exposed an AGP output collision: API 30 execution data was written beneath a path labelled for API 35, while the generated XML contained a single API 30 session. That exploratory artifact is invalid as combined-device evidence.
 
 ## Task discovery
 
-AGP task names are implementation details and can change between plugin versions. QA-2 therefore does not hard-code a guessed managed-device coverage task name.
-
-The collector parses `:app:tasks --all` and requires exactly one task with the AGP description:
+QA-2 parses `:app:tasks --all` and requires exactly one task with the AGP description:
 
 ```text
 Creates JaCoCo test coverage report from data gathered on the Gradle managed device.
@@ -43,18 +49,32 @@ Creates JaCoCo test coverage report from data gathered on the Gradle managed dev
 
 Missing or ambiguous task discovery fails closed.
 
+## Canonical execution protocol
+
+CI performs these operations in order:
+
+1. run the ordinary API 30/API 35 compatibility matrix without coverage publication;
+2. remove only prior generated coverage outputs;
+3. rerun `pixel2Api30DebugAndroidTest` with debug AndroidTest instrumentation enabled;
+4. require the canonical execution file at the exact API 30 output path;
+5. invoke the discovered managed-device report task while excluding the API 35 test dependency;
+6. require one XML report with exactly one JaCoCo session;
+7. bind the XML, execution file and device ID in one machine-readable record.
+
 ## Evidence requirements
 
-The collector requires all of the following:
+The collector requires:
 
-1. the API 30 and API 35 managed-device tests succeed;
-2. the selected AGP report task succeeds;
-3. at least one non-empty `.ec` or `.exec` JaCoCo execution-data file exists;
-4. exactly one instrumented JaCoCo XML report is discoverable;
-5. the XML contains non-empty `INSTRUCTION`, `BRANCH`, and `LINE` root counters;
-6. every accepted raw file is recorded by relative path, byte size, and SHA-256.
+- a valid canonical device identifier;
+- one explicit non-empty `.ec` or `.exec` file;
+- one explicit non-empty JaCoCo XML report;
+- exactly one JaCoCo session with monotonic timestamps;
+- non-empty `INSTRUCTION`, `BRANCH`, and `LINE` root counters;
+- a non-empty source inventory;
+- every tracked critical source to be present in the report;
+- byte size and SHA-256 for the XML and execution data.
 
-The machine-readable schema is:
+The schema is:
 
 ```text
 morimil.android.instrumented.coverage.v1
@@ -68,15 +88,13 @@ build/quality/android-instrumented-coverage.json
 build/quality/android-instrumented-coverage.md
 ```
 
-The raw AGP report and execution data remain authoritative and are preserved in the workflow artifact.
+The raw report and execution data remain authoritative and are preserved in the workflow artifact.
 
 ## Interpretation boundary
 
-QA-2 reports instrumentation coverage independently from QA-1 JVM coverage.
+QA-2 reports API 30 instrumentation coverage independently from QA-1 JVM coverage. The percentages are not added because doing so would double-count source lines exercised by both suites.
 
-It does not add the percentages together. A future combined view may be proposed only after a reproducible mapping is established that avoids double-counting the same source lines across JVM and device reports.
-
-A source can therefore be classified as:
+A source may be classified as:
 
 ```text
 JVM_COVERED
@@ -85,15 +103,19 @@ COVERED_BY_BOTH
 NOT_OBSERVED_BY_CURRENT_SUITES
 ```
 
-The final category means only that the current measured suites did not execute the source. It is not an automatic defect or severity classification.
+The last category is a measurement result, not an automatic severity classification.
+
+The raw AndroidTest report still includes generated code. A later authored-source device view may apply the already reviewed QA-1 whole-file exclusion policy, but QA-2 does not silently alter the raw denominator.
 
 ## Acceptance criteria
 
 QA-2 is technically complete only when:
 
-- the exact PR head passes all required repository workflows;
-- the managed-device coverage task is selected deterministically;
-- raw execution data and one XML report are preserved;
-- counters are reproduced from the downloaded artifact;
-- the evidence document records the exact head, workflow run, artifact digest, device matrix, metrics, and limitations;
+- the exact final PR head passes all required workflows;
+- API 30 and API 35 compatibility tests pass;
+- the canonical API 30 execution is rerun independently;
+- the report task is selected deterministically;
+- the XML is bound to exactly one session and one explicit API 30 execution file;
+- counters and critical-source attribution are reproduced from the downloaded artifact;
+- the evidence document records the exact head, run, artifact digest, metrics, anomaly resolution and limitations;
 - the PR remains unmerged until explicit authorization.
