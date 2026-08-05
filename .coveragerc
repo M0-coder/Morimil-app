@@ -1,0 +1,17 @@
+[run]
+branch = True
+source =
+    tools
+relative_files = True
+
+[report]
+precision = 2
+show_missing = True
+skip_empty = True
+
+[xml]
+output = build/quality/python-coverage.xml
+
+[json]
+output = build/quality/python-coverage.json
+pretty_print = True
