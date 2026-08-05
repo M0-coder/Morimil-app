@@ -3,6 +3,11 @@ branch = True
 source =
     tools
 relative_files = True
+omit =
+    tools/android-arm64/test_*.py
+    tools/benchmarks/test_*.py
+    tools/governance/test_*.py
+    tools/model-artifacts/test_*.py
 
 [report]
 precision = 2
