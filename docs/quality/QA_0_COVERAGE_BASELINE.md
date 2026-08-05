@@ -20,13 +20,16 @@ The report task is:
 :app:createDebugUnitTestCoverageReport
 ```
 
-Expected report root:
+Expected report root and machine-readable report:
 
 ```text
 app/build/reports/coverage/test/debug/
+app/build/reports/coverage/test/debug/report.xml
 ```
 
 The init script is intentionally isolated from normal debug and release builds. It does not alter application source, release signing, Body, Guardian, Seed, Genesis, database state, or runtime activation.
+
+The first Android baseline is intentionally raw. It includes the class inventory emitted by the Android Gradle Plugin, including generated classes. No Android threshold may be introduced until generated code and authored code have been separated and the exclusions have been reviewed.
 
 ## Python coverage
 
@@ -39,12 +42,24 @@ build/quality/python-coverage.xml
 build/quality/python-coverage.json
 ```
 
-The initial measured suites are:
+The measured suites are:
 
 - `tools/governance/test_*.py`
 - `tools/model-artifacts/test_*.py`
 - `tools/benchmarks/test_*.py`
 - `tools/android-arm64/test_current_trimotor_physical_evidence_v0.py`
+
+The tests execute normally, but their own `test_*.py` source files are excluded from the published coverage denominator. The Python report therefore measures the operational tool code exercised by those tests rather than rewarding the test implementation for executing itself.
+
+## Report integrity
+
+CI must fail if any required report is absent, empty, malformed, or contains no measurable statements or counters. The validation step parses:
+
+- Python JSON totals;
+- Android JaCoCo XML counters;
+- `INSTRUCTION`, `BRANCH`, and `LINE` Android counters.
+
+The workflow logs the measured percentages and retains the complete reports as an artifact.
 
 ## Baseline policy
 
@@ -61,7 +76,9 @@ Thresholds may be introduced only after the generated reports have been inspecte
 ## Acceptance criteria
 
 1. Existing unit and Python tests remain green.
-2. Android coverage HTML/XML data is produced by the Android Gradle Plugin task.
-3. Python XML and JSON coverage reports are non-empty.
-4. Reports are retained as CI artifacts.
-5. No release, signing, Genesis, Body, Guardian, Seed, or birth workflow is executed or modified.
+2. Android coverage HTML and XML data are produced by the Android Gradle Plugin task.
+3. Python XML and JSON coverage reports are non-empty and parse successfully.
+4. Python test source is absent from the published denominator.
+5. Required Android counters exist and have non-zero totals.
+6. Reports are retained as CI artifacts.
+7. No release, signing, Genesis, Body, Guardian, Seed, or birth workflow is executed or modified.
