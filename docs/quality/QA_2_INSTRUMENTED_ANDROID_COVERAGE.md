@@ -22,22 +22,33 @@ The init script sets `debug.enableAndroidTestCoverage = true` for isolated CI in
 
 ## Compatibility matrix and canonical measurement
 
-The full instrumentation suite must continue to pass on:
+The full instrumentation suite must pass on:
 
 ```text
 pixel2Api30 — Pixel 2, API 30, aosp-atd
 pixel2Api35 — Pixel 2, API 35, aosp
 ```
 
-Coverage publication is deliberately bound to one separately executed canonical device:
+Coverage publication is bound to one separately executed canonical device:
 
 ```text
 pixel2Api30
 ```
 
-The API 35 run remains a mandatory compatibility check. Its execution is not silently combined with the API 30 counters.
+API 35 remains a mandatory compatibility check. Its execution is not silently combined with API 30 counters.
 
-This separation is required because the first exploratory multi-device coverage run exposed an AGP output collision: API 30 execution data was written beneath a path labelled for API 35, while the generated XML contained a single API 30 session. That exploratory artifact is invalid as combined-device evidence.
+## AGP output-label anomaly
+
+Exploratory runs established that AGP 8.6.1 can write API 30 coverage data beneath a directory named `pixel2Api35`, even when API 30 is the only coverage-instrumented device. The directory label is therefore not accepted as device provenance.
+
+The authoritative provenance is the successful ADB pull log stored beneath the API 30 test-result tree. It records:
+
+- the canonical device-scoped testlog path;
+- the remote `coverage.ec` source;
+- the exact local destination selected by AGP;
+- `EXIT CODE: 0`.
+
+The collector requires the destination parsed from that log to resolve to the exact `.ec` file being hashed and measured. A mismatched device path, destination or exit code fails closed. Whether the AGP destination label matches the canonical device is recorded explicitly.
 
 ## Task discovery
 
@@ -56,10 +67,12 @@ CI performs these operations in order:
 1. run the ordinary API 30/API 35 compatibility matrix without coverage publication;
 2. remove only prior generated coverage outputs;
 3. rerun `pixel2Api30DebugAndroidTest` with debug AndroidTest instrumentation enabled;
-4. require the canonical execution file at the exact API 30 output path;
-5. invoke the discovered managed-device report task while excluding the API 35 test dependency;
-6. require one XML report with exactly one JaCoCo session;
-7. bind the XML, execution file and device ID in one machine-readable record.
+4. require exactly one non-empty `.ec` under the managed-device coverage output tree;
+5. require exactly one successful API 30 ADB coverage-pull log;
+6. bind the pull destination to the selected `.ec` file;
+7. invoke the discovered report task while excluding the API 35 test dependency;
+8. require one XML report with exactly one JaCoCo session;
+9. bind XML, execution data, pull provenance and device ID in one record.
 
 ## Evidence requirements
 
@@ -67,12 +80,13 @@ The collector requires:
 
 - a valid canonical device identifier;
 - one explicit non-empty `.ec` or `.exec` file;
+- one explicit successful device-scoped ADB pull log;
 - one explicit non-empty JaCoCo XML report;
 - exactly one JaCoCo session with monotonic timestamps;
 - non-empty `INSTRUCTION`, `BRANCH`, and `LINE` root counters;
 - a non-empty source inventory;
-- every tracked critical source to be present in the report;
-- byte size and SHA-256 for the XML and execution data.
+- every tracked critical source to be present;
+- byte size and SHA-256 for XML, execution data and provenance log.
 
 The schema is:
 
@@ -80,7 +94,7 @@ The schema is:
 morimil.android.instrumented.coverage.v1
 ```
 
-Generated outputs:
+Generated summaries:
 
 ```text
 build/quality/android-instrumented-coverage-task.txt
@@ -88,11 +102,11 @@ build/quality/android-instrumented-coverage.json
 build/quality/android-instrumented-coverage.md
 ```
 
-The raw report and execution data remain authoritative and are preserved in the workflow artifact.
+The raw report, execution data and ADB log remain authoritative and are preserved in the workflow artifact.
 
 ## Interpretation boundary
 
-QA-2 reports API 30 instrumentation coverage independently from QA-1 JVM coverage. The percentages are not added because doing so would double-count source lines exercised by both suites.
+QA-2 reports API 30 instrumentation coverage independently from QA-1 JVM coverage. Percentages are not added because doing so would double-count source lines exercised by both suites.
 
 A source may be classified as:
 
@@ -105,7 +119,7 @@ NOT_OBSERVED_BY_CURRENT_SUITES
 
 The last category is a measurement result, not an automatic severity classification.
 
-The raw AndroidTest report still includes generated code. A later authored-source device view may apply the already reviewed QA-1 whole-file exclusion policy, but QA-2 does not silently alter the raw denominator.
+The raw AndroidTest report still includes generated code. A later authored-source device view may apply the reviewed QA-1 whole-file exclusion policy, but QA-2 does not silently alter the raw denominator.
 
 ## Acceptance criteria
 
@@ -115,7 +129,8 @@ QA-2 is technically complete only when:
 - API 30 and API 35 compatibility tests pass;
 - the canonical API 30 execution is rerun independently;
 - the report task is selected deterministically;
-- the XML is bound to exactly one session and one explicit API 30 execution file;
-- counters and critical-source attribution are reproduced from the downloaded artifact;
-- the evidence document records the exact head, run, artifact digest, metrics, anomaly resolution and limitations;
+- one `.ec` is bound to one successful API 30 pull log;
+- the XML contains one session and reproducible counters;
+- critical-source attribution is reproduced from the downloaded artifact;
+- evidence records the exact head, run, artifact digest, metrics, anomaly and limitations;
 - the PR remains unmerged until explicit authorization.
