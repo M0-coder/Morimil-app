@@ -165,9 +165,21 @@ jobs:
             :app:pixel2Api30DebugAndroidTest > canonical-api30-coverage.log 2>&1
           tail -n 300 canonical-api30-coverage.log
 
-          canonical_ec="app/build/outputs/managed_device_code_coverage/debug/pixel2Api30/coverage.ec"
+          mapfile -t canonical_ec_files < <(
+            find app/build/outputs/managed_device_code_coverage \
+              -type f -name coverage.ec -print | sort
+          )
+          [[ "${#canonical_ec_files[@]}" -eq 1 ]]
+          canonical_ec="${canonical_ec_files[0]}"
           test -s "$canonical_ec"
-          cp "$canonical_ec" build/quality/pixel2Api30-coverage.ec
+
+          mapfile -t provenance_logs < <(
+            find app/build/outputs/androidTest-results/managedDevice/debug/pixel2Api30/testlog \
+              -type f -name 'adb.*.pull.coverage.ec.ok.txt' -print | sort
+          )
+          [[ "${#provenance_logs[@]}" -eq 1 ]]
+          provenance_log="${provenance_logs[0]}"
+          test -s "$provenance_log"
 
           ./gradlew --no-daemon --stacktrace --console=plain \
             --init-script tools/quality/android-instrumented-coverage.init.gradle \
@@ -194,12 +206,12 @@ jobs:
 
           canonical_xml="app/build/reports/coverage/androidTest/debug/managedDevice/report.xml"
           test -s "$canonical_xml"
-          cp "$canonical_xml" build/quality/pixel2Api30-report.xml
 
           python3 tools/quality/android_instrumented_coverage_v1.py summarize \
             --device-id pixel2Api30 \
-            --report build/quality/pixel2Api30-report.xml \
-            --execution-data build/quality/pixel2Api30-coverage.ec \
+            --report "$canonical_xml" \
+            --execution-data "$canonical_ec" \
+            --provenance-log "$provenance_log" \
             --tracked-source com/morimil/app/security/SecretVault.kt \
             --tracked-source com/morimil/app/data/local/MorimilDatabaseEncryption.kt \
             --tracked-source com/morimil/app/data/genesis/GenesisManifestVerifier.kt \
@@ -233,8 +245,6 @@ jobs:
             build/quality/android-instrumented-coverage-task.txt
             build/quality/android-instrumented-coverage.json
             build/quality/android-instrumented-coverage.md
-            build/quality/pixel2Api30-coverage.ec
-            build/quality/pixel2Api30-report.xml
             app/schemas/**
             app/build/reports/**
             app/build/test-results/**
