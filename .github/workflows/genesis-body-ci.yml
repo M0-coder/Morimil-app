@@ -137,12 +137,11 @@ jobs:
             sudo chmod 666 /dev/kvm
           fi
 
-      - name: Run managed Android tests on API 30 and API 35 with coverage
+      - name: Run managed Android compatibility tests on API 30 and API 35
         shell: bash
         run: |
           set +e
           ./gradlew --continue --no-daemon --stacktrace --console=plain \
-            --init-script tools/quality/android-instrumented-coverage.init.gradle \
             -Pandroid.testoptions.manageddevices.emulator.gpu=swiftshader_indirect \
             :app:pixel2Api30DebugAndroidTest \
             :app:pixel2Api35DebugAndroidTest > managed-device.log 2>&1
@@ -150,11 +149,25 @@ jobs:
           tail -n 400 managed-device.log
           exit "$status"
 
-      - name: Generate and verify managed-device coverage report
+      - name: Generate canonical API 30 managed-device coverage
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p build/quality
+          rm -rf \
+            app/build/intermediates/managed_device_code_coverage \
+            app/build/outputs/managed_device_code_coverage \
+            app/build/reports/coverage/androidTest/debug/managedDevice
+
+          ./gradlew --no-daemon --stacktrace --console=plain --max-workers=1 \
+            --init-script tools/quality/android-instrumented-coverage.init.gradle \
+            -Pandroid.testoptions.manageddevices.emulator.gpu=swiftshader_indirect \
+            :app:pixel2Api30DebugAndroidTest > canonical-api30-coverage.log 2>&1
+          tail -n 300 canonical-api30-coverage.log
+
+          canonical_ec="app/build/outputs/managed_device_code_coverage/debug/pixel2Api30/coverage.ec"
+          test -s "$canonical_ec"
+          cp "$canonical_ec" build/quality/pixel2Api30-coverage.ec
 
           ./gradlew --no-daemon --stacktrace --console=plain \
             --init-script tools/quality/android-instrumented-coverage.init.gradle \
@@ -172,14 +185,26 @@ jobs:
             qualified_task=":app:$coverage_task"
           fi
 
-          ./gradlew --no-daemon --stacktrace --console=plain \
+          ./gradlew --no-daemon --stacktrace --console=plain --max-workers=1 \
             --init-script tools/quality/android-instrumented-coverage.init.gradle \
             -Pandroid.testoptions.manageddevices.emulator.gpu=swiftshader_indirect \
+            -x :app:pixel2Api35DebugAndroidTest \
             "$qualified_task" > instrumented-coverage-report.log 2>&1
           tail -n 250 instrumented-coverage-report.log
 
+          canonical_xml="app/build/reports/coverage/androidTest/debug/managedDevice/report.xml"
+          test -s "$canonical_xml"
+          cp "$canonical_xml" build/quality/pixel2Api30-report.xml
+
           python3 tools/quality/android_instrumented_coverage_v1.py summarize \
-            --build-root app/build \
+            --device-id pixel2Api30 \
+            --report build/quality/pixel2Api30-report.xml \
+            --execution-data build/quality/pixel2Api30-coverage.ec \
+            --tracked-source com/morimil/app/security/SecretVault.kt \
+            --tracked-source com/morimil/app/data/local/MorimilDatabaseEncryption.kt \
+            --tracked-source com/morimil/app/data/genesis/GenesisManifestVerifier.kt \
+            --tracked-source com/morimil/app/data/genesis/ultra/GenesisUltraAndroidBodyMemoryKeyStore.kt \
+            --tracked-source com/morimil/app/data/genesis/ultra/GenesisUltraSignedSeedPreviewCoordinator.kt \
             --json-output build/quality/android-instrumented-coverage.json \
             --markdown-output build/quality/android-instrumented-coverage.md
 
@@ -199,6 +224,7 @@ jobs:
             release-build.log
             release-signature.log
             managed-device.log
+            canonical-api30-coverage.log
             instrumented-coverage-tasks.log
             instrumented-coverage-report.log
             sdk-licenses.log
@@ -207,6 +233,8 @@ jobs:
             build/quality/android-instrumented-coverage-task.txt
             build/quality/android-instrumented-coverage.json
             build/quality/android-instrumented-coverage.md
+            build/quality/pixel2Api30-coverage.ec
+            build/quality/pixel2Api30-report.xml
             app/schemas/**
             app/build/reports/**
             app/build/test-results/**
