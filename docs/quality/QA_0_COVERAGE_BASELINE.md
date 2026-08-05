@@ -1,3 +1,5 @@
+# Document status: CURRENT
+
 # QA-0 — Coverage baseline
 
 ## Purpose
