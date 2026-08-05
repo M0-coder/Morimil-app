@@ -1,15 +1,9 @@
 #!/usr/bin/env python3
-"""Discover and summarize AGP managed-device AndroidTest coverage evidence.
+"""Validate one canonical AGP managed-device AndroidTest coverage report.
 
-The tool has two deliberately separate operations:
-
-* ``select-task`` chooses the single Gradle task whose description identifies
-  the AGP managed-device JaCoCo report task. It does not guess a version-specific
-  task name.
-* ``summarize`` inventories non-empty JaCoCo execution data and requires one
-  unambiguous instrumented-test XML report before publishing counters.
-
-The raw files remain authoritative and are not modified.
+Compatibility tests may run on several devices. Coverage publication is bound to
+one explicitly named device and one explicitly selected execution-data file so a
+multi-device output collision cannot masquerade as an aggregate report.
 """
 
 from __future__ import annotations
@@ -22,7 +16,7 @@ import sys
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Mapping
 
 SCHEMA_VERSION = "morimil.android.instrumented.coverage.v1"
 MANAGED_DEVICE_REPORT_DESCRIPTION = (
@@ -30,6 +24,7 @@ MANAGED_DEVICE_REPORT_DESCRIPTION = (
 )
 MEASURED_COUNTER_TYPES = ("INSTRUCTION", "BRANCH", "LINE")
 TASK_LINE = re.compile(r"^\s*([A-Za-z0-9_.:-]+)\s+-\s+(.+?)\s*$")
+DEVICE_ID = re.compile(r"^[A-Za-z0-9_.-]{1,80}$")
 
 
 class InstrumentedCoverageError(RuntimeError):
@@ -81,17 +76,18 @@ def _local_name(tag: str) -> str:
     return tag.rsplit("}", 1)[-1]
 
 
-def _counter_map(root: ET.Element, source: Path) -> dict[str, Counter]:
+def _parse_counter_elements(
+    elements: Iterable[ET.Element],
+    source: str,
+) -> dict[str, Counter]:
     counters: dict[str, Counter] = {}
-    for element in root:
+    for element in elements:
         if _local_name(element.tag) != "counter":
             continue
         counter_type = element.attrib.get("type")
-        if counter_type is None:
-            raise InstrumentedCoverageError(f"Counter without type in {source}.")
-        if counter_type in counters:
+        if counter_type is None or counter_type in counters:
             raise InstrumentedCoverageError(
-                f"Duplicate root counter {counter_type} in {source}."
+                f"Missing or duplicate counter type in {source}."
             )
         try:
             missed = int(element.attrib["missed"])
@@ -105,42 +101,82 @@ def _counter_map(root: ET.Element, source: Path) -> dict[str, Counter]:
                 f"Negative {counter_type} counter in {source}."
             )
         counters[counter_type] = Counter(missed=missed, covered=covered)
+    return counters
 
+
+def _require_measured_counters(
+    counters: Mapping[str, Counter],
+    source: str,
+) -> None:
     for counter_type in MEASURED_COUNTER_TYPES:
         counter = counters.get(counter_type)
         if counter is None or counter.total <= 0:
             raise InstrumentedCoverageError(
                 f"Missing or empty {counter_type} counter in {source}."
             )
-    return counters
 
 
-def _looks_instrumented(path: Path) -> bool:
-    normalized = path.as_posix().lower()
-    return (
-        "androidtest" in normalized
-        or "manageddevice" in normalized
-        or "managed_device" in normalized
-    )
+def parse_report(
+    report_path: Path,
+) -> tuple[dict[str, Counter], dict[str, object], dict[str, dict[str, Counter]]]:
+    if not report_path.is_file() or report_path.stat().st_size <= 0:
+        raise InstrumentedCoverageError(
+            f"Coverage report is missing or empty: {report_path}."
+        )
+    try:
+        root = ET.parse(report_path).getroot()
+    except ET.ParseError as error:
+        raise InstrumentedCoverageError(
+            f"Malformed instrumented coverage XML: {report_path}."
+        ) from error
+    if _local_name(root.tag) != "report":
+        raise InstrumentedCoverageError(
+            f"Coverage XML root is not report: {report_path}."
+        )
 
+    sessions = [element for element in root if _local_name(element.tag) == "sessioninfo"]
+    if len(sessions) != 1:
+        raise InstrumentedCoverageError(
+            f"Expected exactly one canonical-device JaCoCo session; found {len(sessions)}."
+        )
+    session = sessions[0]
+    try:
+        session_record: dict[str, object] = {
+            "id": session.attrib["id"],
+            "start_epoch_ms": int(session.attrib["start"]),
+            "dump_epoch_ms": int(session.attrib["dump"]),
+        }
+    except (KeyError, ValueError) as error:
+        raise InstrumentedCoverageError("Invalid JaCoCo session metadata.") from error
+    if session_record["dump_epoch_ms"] < session_record["start_epoch_ms"]:
+        raise InstrumentedCoverageError("JaCoCo session dump precedes its start.")
 
-def discover_instrumented_reports(build_root: Path) -> list[tuple[Path, dict[str, Counter]]]:
-    reports: list[tuple[Path, dict[str, Counter]]] = []
-    for path in sorted(build_root.rglob("*.xml")):
-        relative = path.relative_to(build_root)
-        normalized = relative.as_posix().lower()
-        if "coverage" not in normalized or not _looks_instrumented(relative):
+    root_counters = _parse_counter_elements(root, str(report_path))
+    _require_measured_counters(root_counters, str(report_path))
+
+    sources: dict[str, dict[str, Counter]] = {}
+    for package in root:
+        if _local_name(package.tag) != "package":
             continue
-        try:
-            root = ET.parse(path).getroot()
-        except ET.ParseError as error:
-            raise InstrumentedCoverageError(
-                f"Malformed instrumented coverage XML: {relative}."
-            ) from error
-        if _local_name(root.tag) != "report":
-            continue
-        reports.append((relative, _counter_map(root, relative)))
-    return reports
+        package_name = package.attrib.get("name", "")
+        for source_file in package:
+            if _local_name(source_file.tag) != "sourcefile":
+                continue
+            name = source_file.attrib.get("name")
+            if not name:
+                raise InstrumentedCoverageError("Source file without a name in report.")
+            logical_path = f"{package_name}/{name}" if package_name else name
+            if logical_path in sources:
+                raise InstrumentedCoverageError(
+                    f"Duplicate source file in report: {logical_path}."
+                )
+            counters = _parse_counter_elements(source_file, logical_path)
+            _require_measured_counters(counters, logical_path)
+            sources[logical_path] = counters
+
+    if not sources:
+        raise InstrumentedCoverageError("Coverage report contains no source files.")
+    return root_counters, session_record, sources
 
 
 def sha256(path: Path) -> str:
@@ -151,56 +187,65 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def discover_execution_data(build_root: Path) -> list[dict[str, int | str]]:
-    records: list[dict[str, int | str]] = []
-    for path in sorted(build_root.rglob("*")):
-        if not path.is_file() or path.suffix.lower() not in {".ec", ".exec"}:
-            continue
-        if path.stat().st_size <= 0:
+def file_record(path: Path) -> dict[str, int | str]:
+    if not path.is_file() or path.stat().st_size <= 0:
+        raise InstrumentedCoverageError(f"Evidence file is missing or empty: {path}.")
+    return {
+        "path": path.as_posix(),
+        "bytes": path.stat().st_size,
+        "sha256": sha256(path),
+    }
+
+
+def build_summary(
+    device_id: str,
+    report_path: Path,
+    execution_data_path: Path,
+    tracked_sources: Iterable[str] = (),
+) -> dict[str, object]:
+    if DEVICE_ID.fullmatch(device_id) is None:
+        raise InstrumentedCoverageError(f"Invalid canonical device id: {device_id}.")
+    if execution_data_path.suffix.lower() not in {".ec", ".exec"}:
+        raise InstrumentedCoverageError(
+            "Canonical execution data must use .ec or .exec."
+        )
+
+    root_counters, session, sources = parse_report(report_path)
+    execution_data = file_record(execution_data_path)
+    report = file_record(report_path)
+    report["counters"] = {
+        counter_type: root_counters[counter_type].to_dict()
+        for counter_type in MEASURED_COUNTER_TYPES
+    }
+    report["session"] = session
+
+    tracked: dict[str, object] = {}
+    for source in sorted(set(tracked_sources)):
+        counters = sources.get(source)
+        if counters is None:
             raise InstrumentedCoverageError(
-                f"Empty JaCoCo execution data: {path.relative_to(build_root)}."
+                f"Tracked source is absent from coverage report: {source}."
             )
-        records.append(
-            {
-                "path": path.relative_to(build_root).as_posix(),
-                "bytes": path.stat().st_size,
-                "sha256": sha256(path),
-            }
-        )
-    if not records:
-        raise InstrumentedCoverageError(
-            "No non-empty .ec or .exec instrumented coverage data was found."
-        )
-    return records
+        tracked[source] = {
+            counter_type: counters[counter_type].to_dict()
+            for counter_type in MEASURED_COUNTER_TYPES
+        }
 
-
-def build_summary(build_root: Path) -> dict[str, object]:
-    if not build_root.is_dir():
-        raise InstrumentedCoverageError(f"Build root does not exist: {build_root}.")
-
-    reports = discover_instrumented_reports(build_root)
-    if len(reports) != 1:
-        paths = [path.as_posix() for path, _ in reports]
-        raise InstrumentedCoverageError(
-            "Expected exactly one instrumented JaCoCo XML report; "
-            f"found {paths}."
-        )
-
-    report_path, counters = reports[0]
-    execution_data = discover_execution_data(build_root)
+    zero_line_sources = sorted(
+        source
+        for source, counters in sources.items()
+        if counters["LINE"].covered == 0
+    )
     return {
         "schema": SCHEMA_VERSION,
-        "build_root": build_root.as_posix(),
-        "report": {
-            "path": report_path.as_posix(),
-            "bytes": (build_root / report_path).stat().st_size,
-            "sha256": sha256(build_root / report_path),
-            "counters": {
-                counter_type: counters[counter_type].to_dict()
-                for counter_type in MEASURED_COUNTER_TYPES
-            },
-        },
+        "canonical_device_id": device_id,
+        "report": report,
         "execution_data": execution_data,
+        "source_inventory": {
+            "total": len(sources),
+            "zero_line_coverage": len(zero_line_sources),
+        },
+        "tracked_sources": tracked,
     }
 
 
@@ -210,15 +255,20 @@ def render_markdown(summary: dict[str, object]) -> str:
     counters = report["counters"]
     assert isinstance(counters, dict)
     execution_data = summary["execution_data"]
-    assert isinstance(execution_data, list)
+    assert isinstance(execution_data, dict)
+    tracked_sources = summary["tracked_sources"]
+    assert isinstance(tracked_sources, dict)
 
     lines = [
         "# Android instrumented coverage baseline",
         "",
         f"Schema: `{summary['schema']}`",
+        f"Canonical device: `{summary['canonical_device_id']}`",
         "",
         f"Report: `{report['path']}`",
         f"Report SHA-256: `{report['sha256']}`",
+        f"Execution data: `{execution_data['path']}`",
+        f"Execution-data SHA-256: `{execution_data['sha256']}`",
         "",
         "| Counter | Covered | Total | Coverage |",
         "|---|---:|---:|---:|",
@@ -231,20 +281,24 @@ def render_markdown(summary: dict[str, object]) -> str:
             f"{counter['percent']:.4f}% |"
         )
 
-    lines.extend(
-        [
-            "",
-            f"Execution-data files: `{len(execution_data)}`",
-            "",
-            "| Path | Bytes | SHA-256 |",
-            "|---|---:|---|",
-        ]
-    )
-    for record in execution_data:
-        assert isinstance(record, dict)
-        lines.append(
-            f"| `{record['path']}` | {record['bytes']} | `{record['sha256']}` |"
+    if tracked_sources:
+        lines.extend(
+            [
+                "",
+                "## Tracked sources",
+                "",
+                "| Source | Covered lines | Total lines | Line coverage |",
+                "|---|---:|---:|---:|",
+            ]
         )
+        for source, raw_counters in tracked_sources.items():
+            assert isinstance(raw_counters, dict)
+            line = raw_counters["LINE"]
+            assert isinstance(line, dict)
+            lines.append(
+                f"| `{source}` | {line['covered']} | {line['total']} | "
+                f"{line['percent']:.4f}% |"
+            )
     lines.append("")
     return "\n".join(lines)
 
@@ -263,7 +317,12 @@ def command_select_task(args: argparse.Namespace) -> int:
 
 
 def command_summarize(args: argparse.Namespace) -> int:
-    summary = build_summary(args.build_root)
+    summary = build_summary(
+        device_id=args.device_id,
+        report_path=args.report,
+        execution_data_path=args.execution_data,
+        tracked_sources=args.tracked_source,
+    )
     write_text(
         args.json_output,
         json.dumps(summary, indent=2, sort_keys=True) + "\n",
@@ -274,9 +333,6 @@ def command_summarize(args: argparse.Namespace) -> int:
     assert isinstance(report, dict)
     counters = report["counters"]
     assert isinstance(counters, dict)
-    execution_data = summary["execution_data"]
-    assert isinstance(execution_data, list)
-
     metrics = []
     for counter_type in MEASURED_COUNTER_TYPES:
         counter = counters[counter_type]
@@ -285,10 +341,14 @@ def command_summarize(args: argparse.Namespace) -> int:
             f"{counter_type}={counter['covered']}/{counter['total']}="
             f"{counter['percent']:.4f}%"
         )
+    print(
+        f"ANDROID_INSTRUMENTED_COVERAGE_DEVICE={summary['canonical_device_id']}"
+    )
     print("ANDROID_INSTRUMENTED_COVERAGE=" + " ".join(metrics))
     print(
-        "ANDROID_INSTRUMENTED_COVERAGE_INVENTORY="
-        f"REPORT={report['path']} EXECUTION_FILES={len(execution_data)}"
+        "ANDROID_INSTRUMENTED_COVERAGE_EVIDENCE="
+        f"REPORT_SHA256={report['sha256']} "
+        f"EXECUTION_SHA256={summary['execution_data']['sha256']}"
     )
     return 0
 
@@ -303,7 +363,10 @@ def build_parser() -> argparse.ArgumentParser:
     select_task.set_defaults(handler=command_select_task)
 
     summarize = subparsers.add_parser("summarize")
-    summarize.add_argument("--build-root", type=Path, required=True)
+    summarize.add_argument("--device-id", required=True)
+    summarize.add_argument("--report", type=Path, required=True)
+    summarize.add_argument("--execution-data", type=Path, required=True)
+    summarize.add_argument("--tracked-source", action="append", default=[])
     summarize.add_argument("--json-output", type=Path, required=True)
     summarize.add_argument("--markdown-output", type=Path, required=True)
     summarize.set_defaults(handler=command_summarize)
