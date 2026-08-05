@@ -137,7 +137,7 @@ jobs:
             sudo chmod 666 /dev/kvm
           fi
 
-      - name: Run managed Android tests on API 30 and API 35
+      - name: Run managed Android compatibility tests on API 30 and API 35
         shell: bash
         run: |
           set +e
@@ -148,6 +148,81 @@ jobs:
           status=$?
           tail -n 400 managed-device.log
           exit "$status"
+
+      - name: Generate canonical API 30 managed-device coverage
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/quality
+          rm -rf \
+            app/build/intermediates/managed_device_code_coverage \
+            app/build/outputs/managed_device_code_coverage \
+            app/build/reports/coverage/androidTest/debug/managedDevice
+
+          ./gradlew --no-daemon --stacktrace --console=plain --max-workers=1 \
+            --init-script tools/quality/android-instrumented-coverage.init.gradle \
+            -Pandroid.testoptions.manageddevices.emulator.gpu=swiftshader_indirect \
+            :app:pixel2Api30DebugAndroidTest > canonical-api30-coverage.log 2>&1
+          tail -n 300 canonical-api30-coverage.log
+
+          mapfile -t canonical_ec_files < <(
+            find app/build/outputs/managed_device_code_coverage \
+              -type f -name coverage.ec -print | sort
+          )
+          [[ "${#canonical_ec_files[@]}" -eq 1 ]]
+          canonical_ec="${canonical_ec_files[0]}"
+          test -s "$canonical_ec"
+
+          mapfile -t provenance_logs < <(
+            find app/build/outputs/androidTest-results/managedDevice/debug/pixel2Api30/testlog \
+              -type f -name 'adb.*.pull.coverage.ec.ok.txt' -print | sort
+          )
+          [[ "${#provenance_logs[@]}" -eq 1 ]]
+          provenance_log="${provenance_logs[0]}"
+          test -s "$provenance_log"
+
+          ./gradlew --no-daemon --stacktrace --console=plain \
+            --init-script tools/quality/android-instrumented-coverage.init.gradle \
+            :app:tasks --all > instrumented-coverage-tasks.log 2>&1
+
+          python3 tools/quality/android_instrumented_coverage_v1.py select-task \
+            --tasks-file instrumented-coverage-tasks.log \
+            --output build/quality/android-instrumented-coverage-task.txt
+
+          coverage_task="$(tr -d '\r\n' < build/quality/android-instrumented-coverage-task.txt)"
+          [[ "$coverage_task" =~ ^[A-Za-z0-9_.:-]+$ ]]
+          if [[ "$coverage_task" == :* ]]; then
+            qualified_task="$coverage_task"
+          else
+            qualified_task=":app:$coverage_task"
+          fi
+
+          ./gradlew --no-daemon --stacktrace --console=plain --max-workers=1 \
+            --init-script tools/quality/android-instrumented-coverage.init.gradle \
+            -Pandroid.testoptions.manageddevices.emulator.gpu=swiftshader_indirect \
+            -x :app:pixel2Api35DebugAndroidTest \
+            "$qualified_task" > instrumented-coverage-report.log 2>&1
+          tail -n 250 instrumented-coverage-report.log
+
+          canonical_xml="app/build/reports/coverage/androidTest/debug/managedDevice/report.xml"
+          test -s "$canonical_xml"
+
+          python3 tools/quality/android_instrumented_coverage_v1.py summarize \
+            --device-id pixel2Api30 \
+            --report "$canonical_xml" \
+            --execution-data "$canonical_ec" \
+            --provenance-log "$provenance_log" \
+            --tracked-source com/morimil/app/security/SecretVault.kt \
+            --tracked-source com/morimil/app/data/local/MorimilDatabaseEncryption.kt \
+            --tracked-source com/morimil/app/data/genesis/GenesisManifestVerifier.kt \
+            --tracked-source com/morimil/app/data/genesis/ultra/GenesisUltraAndroidBodyMemoryKeyStore.kt \
+            --tracked-source com/morimil/app/data/genesis/ultra/GenesisUltraSignedSeedPreviewCoordinator.kt \
+            --json-output build/quality/android-instrumented-coverage.json \
+            --markdown-output build/quality/android-instrumented-coverage.md
+
+          test -s build/quality/android-instrumented-coverage.json
+          test -s build/quality/android-instrumented-coverage.md
+          python3 -m json.tool build/quality/android-instrumented-coverage.json > /dev/null
 
       - name: Upload diagnostic reports
         if: always()
@@ -161,12 +236,19 @@ jobs:
             release-build.log
             release-signature.log
             managed-device.log
+            canonical-api30-coverage.log
+            instrumented-coverage-tasks.log
+            instrumented-coverage-report.log
             sdk-licenses.log
             sdk-install.log
             emulator-version.log
+            build/quality/android-instrumented-coverage-task.txt
+            build/quality/android-instrumented-coverage.json
+            build/quality/android-instrumented-coverage.md
             app/schemas/**
             app/build/reports/**
             app/build/test-results/**
             app/build/outputs/androidTest-results/**
+            app/build/outputs/managed_device_code_coverage/**
             app/build/outputs/managed_device_android_test_additional_output/**
             app/build/outputs/apk/debug/**
