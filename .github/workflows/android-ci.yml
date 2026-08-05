@@ -45,15 +45,6 @@ jobs:
             python tools/benchmarks/test_validate_trimotor_v02_physical_benchmark_evidence_v2.py
           } > current-trimotor-evidence-validation.log 2>&1
 
-      - name: Upload trimotor evidence validation diagnostics
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: current-trimotor-evidence-validation
-          path: current-trimotor-evidence-validation.log
-          if-no-files-found: error
-          retention-days: 7
-
       - name: Enforce trimotor evidence validation
         if: steps.validate-frozen-trimotor-evidence.outcome == 'failure'
         run: |
@@ -78,11 +69,95 @@ jobs:
           python tools/android-arm64/test_run_gemma3n_e2b_arm64_deliberative_benchmark_v0.py
           python tools/android-arm64/test_physical_benchmark_adb_v0.py
 
+      - name: Install pinned Python coverage tool
+        run: |
+          python -m pip install \
+            --disable-pip-version-check \
+            --no-input \
+            --no-cache-dir \
+            coverage==7.15.2
+
+      - name: Generate Python coverage baseline
+        run: |
+          mkdir -p build/quality
+          python -m coverage erase
+          python -m coverage run -m unittest discover -s tools/governance -p 'test_*.py'
+          python -m coverage run --append -m unittest discover -s tools/model-artifacts -p 'test_*.py'
+          python -m coverage run --append -m unittest discover -s tools/benchmarks -p 'test_*.py'
+          python -m coverage run --append tools/android-arm64/test_current_trimotor_physical_evidence_v0.py
+          python -m coverage report
+          python -m coverage xml
+          python -m coverage json
+
       - name: Make Gradle executable
         run: chmod +x ./gradlew
 
-      - name: Run unit tests
-        run: ./gradlew testDebugUnitTest
+      - name: Generate Android unit-test coverage baseline
+        run: |
+          ./gradlew \
+            --init-script tools/quality/android-unit-coverage.init.gradle \
+            --no-daemon \
+            --stacktrace \
+            --console=plain \
+            :app:createDebugUnitTestCoverageReport
+
+      - name: Validate coverage baseline reports
+        run: |
+          set -euo pipefail
+          test -s build/quality/python-coverage.xml
+          test -s build/quality/python-coverage.json
+          test -s app/build/reports/coverage/test/debug/report.xml
+          python - <<'PY'
+          import json
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+
+          python_report = json.loads(
+              Path("build/quality/python-coverage.json").read_text(encoding="utf-8")
+          )
+          python_totals = python_report["totals"]
+          assert python_totals["num_statements"] > 0
+          assert python_totals["covered_lines"] > 0
+          assert python_totals["num_branches"] > 0
+
+          jacoco_root = ET.parse(
+              "app/build/reports/coverage/test/debug/report.xml"
+          ).getroot()
+          jacoco = {
+              item.attrib["type"]: {
+                  "covered": int(item.attrib["covered"]),
+                  "missed": int(item.attrib["missed"]),
+              }
+              for item in jacoco_root.findall("counter")
+          }
+          for counter in ("INSTRUCTION", "BRANCH", "LINE"):
+              assert counter in jacoco
+              assert jacoco[counter]["covered"] + jacoco[counter]["missed"] > 0
+
+          print(
+              "PYTHON_COVERAGE="
+              f"{python_totals['percent_covered_display']}% "
+              f"LINE={python_totals['percent_statements_covered_display']}% "
+              f"BRANCH={python_totals['percent_branches_covered_display']}%"
+          )
+          for counter in ("INSTRUCTION", "BRANCH", "LINE"):
+              covered = jacoco[counter]["covered"]
+              total = covered + jacoco[counter]["missed"]
+              print(f"ANDROID_{counter}_COVERAGE={covered}/{total}={covered / total:.4%}")
+          PY
 
       - name: Build debug APK
         run: ./gradlew :app:assembleDebug
+
+      - name: Upload CI diagnostics and quality baselines
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: current-trimotor-evidence-validation
+          path: |
+            current-trimotor-evidence-validation.log
+            build/quality/python-coverage.xml
+            build/quality/python-coverage.json
+            app/build/reports/coverage/test/debug/
+          if-no-files-found: error
+          retention-days: 7
