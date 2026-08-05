@@ -36,8 +36,8 @@ class InstrumentedCoverageError(RuntimeError):
 
 @dataclass(frozen=True)
 class Counter:
-    missed: int
-    covered: int
+    missed: int = 0
+    covered: int = 0
 
     @property
     def total(self) -> int:
@@ -107,7 +107,7 @@ def _parse_counter_elements(
     return counters
 
 
-def _require_measured_counters(
+def _require_root_counters(
     counters: Mapping[str, Counter],
     source: str,
 ) -> None:
@@ -117,6 +117,27 @@ def _require_measured_counters(
             raise InstrumentedCoverageError(
                 f"Missing or empty {counter_type} counter in {source}."
             )
+
+
+def _normalize_source_counters(
+    counters: dict[str, Counter],
+    source: str,
+) -> dict[str, Counter]:
+    """Normalize legitimate per-source omissions without weakening root checks.
+
+    JaCoCo omits BRANCH for a source file with no branch opportunities. That is
+    represented as 0/0. INSTRUCTION and LINE remain mandatory and non-empty.
+    """
+
+    normalized = dict(counters)
+    normalized.setdefault("BRANCH", Counter())
+    for counter_type in ("INSTRUCTION", "LINE"):
+        counter = normalized.get(counter_type)
+        if counter is None or counter.total <= 0:
+            raise InstrumentedCoverageError(
+                f"Missing or empty {counter_type} counter in {source}."
+            )
+    return normalized
 
 
 def parse_report(
@@ -155,7 +176,7 @@ def parse_report(
         raise InstrumentedCoverageError("JaCoCo session dump precedes its start.")
 
     root_counters = _parse_counter_elements(root, str(report_path))
-    _require_measured_counters(root_counters, str(report_path))
+    _require_root_counters(root_counters, str(report_path))
 
     sources: dict[str, dict[str, Counter]] = {}
     for package in root:
@@ -173,9 +194,8 @@ def parse_report(
                 raise InstrumentedCoverageError(
                     f"Duplicate source file in report: {logical_path}."
                 )
-            counters = _parse_counter_elements(source_file, logical_path)
-            _require_measured_counters(counters, logical_path)
-            sources[logical_path] = counters
+            parsed = _parse_counter_elements(source_file, logical_path)
+            sources[logical_path] = _normalize_source_counters(parsed, logical_path)
 
     if not sources:
         raise InstrumentedCoverageError("Coverage report contains no source files.")
@@ -385,8 +405,10 @@ def command_summarize(args: argparse.Namespace) -> int:
 
     report = summary["report"]
     provenance = summary["adb_pull_provenance"]
+    execution_data = summary["execution_data"]
     assert isinstance(report, dict)
     assert isinstance(provenance, dict)
+    assert isinstance(execution_data, dict)
     counters = report["counters"]
     assert isinstance(counters, dict)
     metrics = []
@@ -404,7 +426,7 @@ def command_summarize(args: argparse.Namespace) -> int:
     print(
         "ANDROID_INSTRUMENTED_COVERAGE_EVIDENCE="
         f"REPORT_SHA256={report['sha256']} "
-        f"EXECUTION_SHA256={summary['execution_data']['sha256']} "
+        f"EXECUTION_SHA256={execution_data['sha256']} "
         f"DESTINATION_LABEL_MATCH={provenance['destination_label_matches_device']}"
     )
     return 0
