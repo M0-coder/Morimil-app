@@ -38,7 +38,7 @@ REPORT = """<?xml version="1.0" encoding="UTF-8"?>
 
 def write_provenance(root: Path, destination: Path, device: str = "pixel2Api30") -> Path:
     log = root / "outputs" / "androidTest-results" / device / "testlog" / "adb.pull.ok.txt"
-    log.parent.mkdir(parents=True)
+    log.parent.mkdir(parents=True, exist_ok=True)
     log.write_text(
         "EXECUTING: /sdk/adb -s emulator-5554 pull "
         f"/data/local/tmp/coverage.ec {destination}\n"
