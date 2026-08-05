@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -9,9 +10,9 @@ MODULE_PATH = Path(__file__).with_name("android_instrumented_coverage_v1.py")
 SPEC = importlib.util.spec_from_file_location("android_instrumented_coverage_v1", MODULE_PATH)
 assert SPEC is not None and SPEC.loader is not None
 MODULE = importlib.util.module_from_spec(SPEC)
+sys.modules[SPEC.name] = MODULE
 SPEC.loader.exec_module(MODULE)
 
-Counter = MODULE.Counter
 InstrumentedCoverageError = MODULE.InstrumentedCoverageError
 build_summary = MODULE.build_summary
 render_markdown = MODULE.render_markdown
