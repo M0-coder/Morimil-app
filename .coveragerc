@@ -8,6 +8,7 @@ omit =
     tools/benchmarks/test_*.py
     tools/governance/test_*.py
     tools/model-artifacts/test_*.py
+    tools/quality/test_*.py
 
 [report]
 precision = 2
