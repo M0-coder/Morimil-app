@@ -1,0 +1,7 @@
+gradle.beforeProject { project ->
+    project.pluginManager.withPlugin("com.android.application") {
+        def android = project.extensions.getByName("android")
+        def debug = android.buildTypes.getByName("debug")
+        debug.enableUnitTestCoverage = true
+    }
+}
