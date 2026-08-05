@@ -122,6 +122,27 @@ createManagedDeviceDebugAndroidTestCoverageReport - Creates JaCoCo test coverage
             self.assertEqual(0, branch["total"])
             self.assertEqual(0.0, branch["percent"])
 
+    def test_non_executable_source_entry_is_normalized_to_zero(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            declaration = '    <sourcefile name="DeclarationOnly.kt"/>\n'
+            report_text = REPORT.replace("  </package>\n", declaration + "  </package>\n")
+            report, execution, provenance = fixture_paths(root, report_text)
+            source = "com/morimil/app/security/DeclarationOnly.kt"
+            summary = build_summary(
+                "pixel2Api30",
+                report,
+                execution,
+                provenance,
+                [source],
+            )
+            self.assertEqual(2, summary["source_inventory"]["total"])
+            self.assertEqual(1, summary["source_inventory"]["zero_line_coverage"])
+            for counter_type in ("INSTRUCTION", "BRANCH", "LINE"):
+                counter = summary["tracked_sources"][source][counter_type]
+                self.assertEqual(0, counter["covered"])
+                self.assertEqual(0, counter["total"])
+
     def test_summary_rejects_missing_or_wrong_execution_data(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
