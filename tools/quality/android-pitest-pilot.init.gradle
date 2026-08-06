@@ -15,7 +15,7 @@ gradle.beforeProject { project ->
     }
 
     project.pluginManager.withPlugin("com.android.application") {
-        project.pluginManager.apply("pl.droidsonroids.pitest")
+        project.pluginManager.apply(pl.droidsonroids.gradle.pitest.PitestPlugin)
 
         def pitest = project.extensions.getByName("pitest")
         pitest.pitestVersion = "1.22.1"
