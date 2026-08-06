@@ -49,16 +49,20 @@ No evidence was found that justifies declaring a critical runtime defect. Three 
 
 ## Implementation under validation
 
-The implementation adds one JVM test class and no production source changes:
+The implementation adds one JVM test class, changes the closed PIT test-class set, and makes no production source changes:
 
 ```text
 TEST_CLASS=GenesisManifestCanonicalizationBoundaryTest
 TESTS_ADDED=3
+PIT_TARGET_CLASSES=com.morimil.app.data.genesis.GenesisManifestVerifierCore*
+PIT_TARGET_TEST_1=com.morimil.app.data.genesis.GenesisManifestVerifierCoreTest
+PIT_TARGET_TEST_2=com.morimil.app.data.genesis.GenesisManifestCanonicalizationBoundaryTest
+PIT_TEST_WILDCARD=FALSE
 PRODUCTION_SOURCE_CHANGED=FALSE
 BUNDLED_GENESIS_ASSETS_CHANGED=FALSE
 APPROVED_GENESIS_HASH_CHANGED=FALSE
 DATABASE_CHANGED=FALSE
-WORKFLOW_CHANGED=FALSE
+GITHUB_WORKFLOW_CHANGED=FALSE
 DEPENDENCY_CHANGED=FALSE
 ```
 
@@ -69,6 +73,45 @@ The tests exercise:
 3. `U+001F UNIT SEPARATOR` below the control boundary.
 
 Expected canonical record bytes are constructed independently from the production private canonicalizer. The tests call `GenesisManifestVerifierCore.verify()` normally and do not use reflection.
+
+## Rejected first candidate head
+
+```text
+REJECTED_CANDIDATE_HEAD=1d4fdfc9bf1df9b35181be3d4ec3717bbdee66d3
+ANDROID_CI_RUN=31100612617
+ANDROID_CI_RUN_NUMBER=597
+ANDROID_CI_RESULT=SUCCESS
+CODEQL_RESULT=SUCCESS
+SBOM_RESULT=SUCCESS
+REFERENCE_CHECKS_RESULT=CANCELLED_AFTER_HEAD_MOVED
+GENESIS_BODY_PREPARATION_RESULT=CANCELLED_AFTER_HEAD_MOVED
+ARTIFACT_ID=8967416623
+ARTIFACT_BYTES=3404228
+ARTIFACT_SHA256=d03be568f03691bde6c5ea350c43ba489d5f588262f9c1dfa8af1fee6867994e
+ARTIFACT_DIGEST_MATCH=TRUE
+ARTIFACT_FILES=1528
+MUTATIONS_XML_BYTES=47048
+MUTATIONS_XML_SHA256=c3d7acbf43a09a54991a0da9016d3070558813d0ef9f1f995315ae56eb490b1b
+```
+
+The candidate compiled and the normal unit-test task passed, but the PIT init script still targeted only `GenesisManifestVerifierCoreTest`. The new boundary test class was therefore absent from the mutation execution.
+
+The raw report remained semantically identical to QA-4:
+
+```text
+MUTANTS_GENERATED=63
+KILLED=40
+SURVIVED=12
+NO_COVERAGE=11
+TARGETED_BEHAVIORAL_MUTANTS_KILLED=0/3
+CANDIDATE_ACCEPTED=FALSE
+```
+
+This result is not treated as a QA-5 pass. A green workflow is insufficient when the intended tests were not executed by the mutation engine.
+
+## Corrective action
+
+The init script now retains the exact mutable production prefix and names both authorized test classes explicitly in `--targetTests`. No wildcard or additional production class is admitted.
 
 ## Evidence still required
 
