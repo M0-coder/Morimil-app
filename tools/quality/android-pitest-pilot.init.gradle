@@ -14,22 +14,30 @@ gradle.beforeProject { project ->
         return
     }
 
-    project.pluginManager.apply(pl.droidsonroids.gradle.pitest.PitestPlugin)
+    def pitestApplied = new java.util.concurrent.atomic.AtomicBoolean(false)
+    project.configurations.whenObjectAdded { configuration ->
+        if (
+            configuration.name == "testImplementation" &&
+                pitestApplied.compareAndSet(false, true)
+        ) {
+            project.pluginManager.apply(pl.droidsonroids.gradle.pitest.PitestPlugin)
 
-    def pitest = project.extensions.getByName("pitest")
-    pitest.pitestVersion = "1.22.1"
-    pitest.targetClasses = [
-        "com.morimil.app.data.genesis.GenesisManifestVerifierCore*"
-    ]
-    pitest.targetTests = [
-        "com.morimil.app.data.genesis.GenesisManifestVerifierCoreTest"
-    ]
-    pitest.mutators = ["DEFAULTS"]
-    pitest.outputFormats = ["XML", "HTML"]
-    pitest.timestampedReports = false
-    pitest.threads = 1
-    pitest.mutationThreshold = 0
-    pitest.coverageThreshold = 0
-    pitest.failWhenNoMutations = true
-    pitest.verbose = false
+            def pitest = project.extensions.getByName("pitest")
+            pitest.pitestVersion = "1.22.1"
+            pitest.targetClasses = [
+                "com.morimil.app.data.genesis.GenesisManifestVerifierCore*"
+            ]
+            pitest.targetTests = [
+                "com.morimil.app.data.genesis.GenesisManifestVerifierCoreTest"
+            ]
+            pitest.mutators = ["DEFAULTS"]
+            pitest.outputFormats = ["XML", "HTML"]
+            pitest.timestampedReports = false
+            pitest.threads = 1
+            pitest.mutationThreshold = 0
+            pitest.coverageThreshold = 0
+            pitest.failWhenNoMutations = true
+            pitest.verbose = false
+        }
+    }
 }
