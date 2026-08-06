@@ -1,0 +1,210 @@
+import groovy.json.JsonOutput
+import java.security.MessageDigest
+import org.gradle.api.artifacts.component.ModuleComponentIdentifier
+
+def qa6Sha256 = { File file ->
+    def digest = MessageDigest.getInstance("SHA-256")
+    file.withInputStream { input ->
+        byte[] buffer = new byte[8192]
+        int read
+        while ((read = input.read(buffer)) >= 0) {
+            if (read > 0) {
+                digest.update(buffer, 0, read)
+            }
+        }
+    }
+    digest.digest().collect { String.format("%02x", it & 0xff) }.join("")
+}
+
+def qa6ResolvableConfigurations = { project ->
+    project.configurations
+        .findAll { configuration -> configuration.canBeResolved }
+        .sort { left, right -> left.name <=> right.name }
+}
+
+gradle.projectsEvaluated {
+    def root = gradle.rootProject
+    def app = root.findProject(":app")
+    if (app == null) {
+        throw new GradleException("QA-6 requires the :app project.")
+    }
+
+    root.tasks.register("qa6ResolveAll") { task ->
+        task.group = "verification"
+        task.description =
+            "Resolves every resolvable configuration to enforce QA-6 lock and verification state."
+        task.notCompatibleWithConfigurationCache(
+            "QA-6 enumerates configurations at execution time."
+        )
+        task.doLast {
+            def resolved = []
+            root.allprojects.sort { left, right -> left.path <=> right.path }.each { project ->
+                qa6ResolvableConfigurations(project).each { configuration ->
+                    configuration.incoming.files.files
+                    resolved << "${project.path}:${configuration.name}"
+                }
+            }
+            if (resolved.isEmpty()) {
+                throw new GradleException("QA-6 resolved zero configurations.")
+            }
+            task.logger.lifecycle("QA6_RESOLVED_CONFIGURATIONS=${resolved.size()}")
+        }
+    }
+
+    root.tasks.register("qa6ResolveAndLockAll") { task ->
+        task.group = "verification"
+        task.description =
+            "Bootstraps QA-6 dependency locks by resolving every resolvable configuration."
+        task.notCompatibleWithConfigurationCache(
+            "QA-6 enumerates configurations at execution time."
+        )
+        task.doFirst {
+            if (!gradle.startParameter.writeDependencyLocks) {
+                throw new GradleException(
+                    "qa6ResolveAndLockAll must be invoked with --write-locks."
+                )
+            }
+        }
+        task.doLast {
+            def resolved = []
+            root.allprojects.sort { left, right -> left.path <=> right.path }.each { project ->
+                qa6ResolvableConfigurations(project).each { configuration ->
+                    configuration.incoming.files.files
+                    resolved << "${project.path}:${configuration.name}"
+                }
+            }
+            if (resolved.isEmpty()) {
+                throw new GradleException("QA-6 resolved zero configurations.")
+            }
+            task.logger.lifecycle("QA6_LOCKED_CONFIGURATIONS=${resolved.size()}")
+        }
+    }
+
+    app.tasks.register("qa6ResolvedDependencyInventory") { task ->
+        task.group = "verification"
+        task.description =
+            "Writes a deterministic inventory of every resolved :app component and artifact."
+        task.notCompatibleWithConfigurationCache(
+            "QA-6 serializes the live resolution result at execution time."
+        )
+
+        def outputProvider = app.layout.buildDirectory.file(
+            "quality/qa6/gradle-resolved-inventory.json"
+        )
+        task.outputs.file(outputProvider)
+
+        task.doLast {
+            def configurationRecords = []
+            def globalComponents = [:]
+            def globalArtifacts = [:]
+
+            qa6ResolvableConfigurations(app).each { configuration ->
+                def componentRecords = configuration.incoming.resolutionResult.allComponents
+                    .findAll { component ->
+                        component.id instanceof ModuleComponentIdentifier
+                    }
+                    .collect { component ->
+                        def id = component.id as ModuleComponentIdentifier
+                        [
+                            group: id.group,
+                            name: id.module,
+                            version: id.version,
+                            coordinate: "${id.group}:${id.module}:${id.version}"
+                        ]
+                    }
+                    .sort { left, right -> left.coordinate <=> right.coordinate }
+
+                componentRecords.each { component ->
+                    globalComponents[component.coordinate] = component
+                }
+
+                def artifactRecords = configuration.resolvedConfiguration.resolvedArtifacts
+                    .collect { artifact ->
+                        def module = artifact.moduleVersion.id
+                        def file = artifact.file
+                        def classifier = artifact.classifier ?: ""
+                        def extension = artifact.extension ?: file.name.tokenize(".").last()
+                        def key = [
+                            module.group,
+                            module.name,
+                            module.version,
+                            classifier,
+                            extension,
+                            file.name,
+                            qa6Sha256(file)
+                        ].join("|")
+                        [
+                            group: module.group,
+                            name: module.name,
+                            version: module.version,
+                            coordinate: "${module.group}:${module.name}:${module.version}",
+                            classifier: classifier,
+                            extension: extension,
+                            type: artifact.type ?: extension,
+                            fileName: file.name,
+                            size: file.length(),
+                            sha256: qa6Sha256(file),
+                            key: key
+                        ]
+                    }
+                    .sort { left, right -> left.key <=> right.key }
+
+                artifactRecords.each { artifact ->
+                    globalArtifacts[artifact.key] = artifact.findAll { key, value -> key != "key" }
+                }
+
+                configurationRecords << [
+                    name: configuration.name,
+                    components: componentRecords,
+                    artifacts: artifactRecords.collect { record ->
+                        record.findAll { key, value -> key != "key" }
+                    }
+                ]
+            }
+
+            def outputFile = outputProvider.get().asFile
+            outputFile.parentFile.mkdirs()
+            def payload = [
+                schema: "morimil.qa6.gradle-resolved-inventory.v1",
+                gradleVersion: gradle.gradleVersion,
+                projectPath: app.path,
+                configurationCount: configurationRecords.size(),
+                configurations: configurationRecords,
+                uniqueComponents: globalComponents.values().toList()
+                    .sort { left, right -> left.coordinate <=> right.coordinate },
+                uniqueArtifacts: globalArtifacts.values().toList()
+                    .sort { left, right ->
+                        def leftKey = [
+                            left.coordinate,
+                            left.classifier,
+                            left.extension,
+                            left.fileName,
+                            left.sha256
+                        ].join("|")
+                        def rightKey = [
+                            right.coordinate,
+                            right.classifier,
+                            right.extension,
+                            right.fileName,
+                            right.sha256
+                        ].join("|")
+                        leftKey <=> rightKey
+                    }
+            ]
+            outputFile.setText(
+                JsonOutput.prettyPrint(JsonOutput.toJson(payload)) + System.lineSeparator(),
+                "UTF-8"
+            )
+            if (payload.uniqueComponents.isEmpty()) {
+                throw new GradleException("QA-6 resolved component inventory is empty.")
+            }
+            if (payload.uniqueArtifacts.isEmpty()) {
+                throw new GradleException("QA-6 resolved artifact inventory is empty.")
+            }
+            task.logger.lifecycle(
+                "QA6_UNIQUE_COMPONENTS=${payload.uniqueComponents.size()} " +
+                    "QA6_UNIQUE_ARTIFACTS=${payload.uniqueArtifacts.size()}"
+            )
+        }
+    }
+}
