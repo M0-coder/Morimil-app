@@ -39,9 +39,18 @@
   "required_apk_prefixes": [
     "classes"
   ],
+  "runtime_configurations": [
+    "debugRuntimeClasspath",
+    "releaseRuntimeClasspath",
+    "releaseUnsignedRuntimeClasspath"
+  ],
   "schema": "morimil.qa6.supply_chain_policy.v1",
   "severity_policy": {
     "baseline_mode": "report",
-    "strict_mode": "fail_unadjudicated_critical"
+    "strict_mode": "fail_unadjudicated_critical_and_runtime_high",
+    "strict_runtime_block_levels": [
+      "CRITICAL",
+      "HIGH"
+    ]
   }
 }
