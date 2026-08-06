@@ -16,16 +16,64 @@ data class GenesisInstalledBundle(
     val installPath: String
 )
 
-class GenesisManifestVerifier(private val context: Context) {
+internal interface GenesisAssetSource {
+    fun readText(path: String): String
 
+    fun readBytes(path: String): ByteArray
+
+    fun listFiles(path: String): List<String>
+}
+
+private class AndroidGenesisAssetSource(context: Context) : GenesisAssetSource {
+    private val assets = context.assets
+
+    override fun readText(path: String): String {
+        return assets.open(path).bufferedReader().use { it.readText() }
+    }
+
+    override fun readBytes(path: String): ByteArray {
+        return assets.open(path).use { it.readBytes() }
+    }
+
+    override fun listFiles(path: String): List<String> {
+        val children = assets.list(path)?.toList().orEmpty()
+        if (children.isEmpty()) return listOf(path)
+        return children.flatMap { child -> listFiles("$path/$child") }
+    }
+}
+
+class GenesisManifestVerifier(context: Context) {
+    private val core = GenesisManifestVerifierCore(
+        assets = AndroidGenesisAssetSource(context),
+        approvedGenesisCoreHash = APPROVED_GENESIS_CORE_HASH,
+        approvedFileCount = APPROVED_FILE_COUNT
+    )
+
+    fun verify(): GenesisManifestVerification = core.verify()
+
+    companion object {
+        const val APPROVED_GENESIS_CORE_HASH =
+            "sha256:fb0e37ef719b2cb2607944b7738a7e8e1abdb0e437e9c5bce84117d6df597f5f"
+
+        internal const val APPROVED_FILE_COUNT = 17
+        internal const val GENESIS_ROOT = "genesis"
+        internal const val MANIFEST_ASSET = "$GENESIS_ROOT/genesis_manifest.json"
+    }
+}
+
+internal class GenesisManifestVerifierCore(
+    private val assets: GenesisAssetSource,
+    private val approvedGenesisCoreHash: String,
+    private val approvedFileCount: Int
+) {
     fun verify(): GenesisManifestVerification {
-        val manifestText = readAsset(MANIFEST_ASSET)
+        val manifestText = assets.readText(GenesisManifestVerifier.MANIFEST_ASSET)
         val manifest = JSONObject(manifestText)
 
         require(manifest.getString("schema_version") == "morimil.genesis_manifest.v1") {
             "Invalid Genesis manifest schema."
         }
-        require(manifest.getString("genesis_core_hash") == APPROVED_GENESIS_CORE_HASH) {
+        require(manifest.getString("genesis_core_hash") == approvedGenesisCoreHash) {
             "Genesis manifest hash is not the approved mobile seed."
         }
         require(manifest.getJSONObject("mobile_installation").getBoolean("startup_verification_required")) {
@@ -33,8 +81,8 @@ class GenesisManifestVerifier(private val context: Context) {
         }
 
         val files = manifest.getJSONArray("files")
-        require(files.length() == APPROVED_FILE_COUNT) {
-            "Genesis manifest must declare exactly $APPROVED_FILE_COUNT seed files."
+        require(files.length() == approvedFileCount) {
+            "Genesis manifest must declare exactly $approvedFileCount seed files."
         }
 
         val declaredPaths = mutableSetOf<String>()
@@ -45,7 +93,7 @@ class GenesisManifestVerifier(private val context: Context) {
             require(file.getBoolean("required")) { "Genesis file must be required: $path" }
             require(declaredPaths.add(path)) { "Duplicate Genesis manifest path: $path" }
 
-            val bytes = readAssetBytes("$GENESIS_ROOT/$path")
+            val bytes = assets.readBytes("${GenesisManifestVerifier.GENESIS_ROOT}/$path")
             val actual = sha256(bytes)
             val expected = file.getString("sha256")
             require(actual == expected) { "Genesis asset hash mismatch: $path" }
@@ -58,8 +106,8 @@ class GenesisManifestVerifier(private val context: Context) {
             )
         }.sortedBy { it.path }
 
-        val actualPaths = listAssetFiles(GENESIS_ROOT)
-            .map { it.removePrefix("$GENESIS_ROOT/") }
+        val actualPaths = assets.listFiles(GenesisManifestVerifier.GENESIS_ROOT)
+            .map { it.removePrefix("${GenesisManifestVerifier.GENESIS_ROOT}/") }
             .filter { it != "genesis_manifest.json" }
             .toSet()
         require(actualPaths == declaredPaths) {
@@ -68,7 +116,10 @@ class GenesisManifestVerifier(private val context: Context) {
             "Genesis bundle file set mismatch. missing=$missing unexpected=$unexpected"
         }
 
-        val computedCoreHash = sha256(stableStringify(fileRecords.map { it.toCanonicalJson() }).toByteArray(Charsets.UTF_8))
+        val computedCoreHash = sha256(
+            stableStringify(fileRecords.map { it.toCanonicalJson() })
+                .toByteArray(Charsets.UTF_8)
+        )
         require(computedCoreHash == manifest.getString("genesis_core_hash")) {
             "Genesis core hash does not match declared file set."
         }
@@ -78,20 +129,6 @@ class GenesisManifestVerifier(private val context: Context) {
             genesisCoreHash = computedCoreHash,
             fileCount = files.length()
         )
-    }
-
-    private fun readAsset(path: String): String {
-        return context.assets.open(path).bufferedReader().use { it.readText() }
-    }
-
-    private fun readAssetBytes(path: String): ByteArray {
-        return context.assets.open(path).use { it.readBytes() }
-    }
-
-    private fun listAssetFiles(path: String): List<String> {
-        val children = context.assets.list(path)?.toList().orEmpty()
-        if (children.isEmpty()) return listOf(path)
-        return children.flatMap { child -> listAssetFiles("$path/$child") }
     }
 
     private fun requireValidBundlePath(path: String) {
@@ -110,7 +147,9 @@ class GenesisManifestVerifier(private val context: Context) {
             null -> "null"
             is String -> quoteJsonString(value)
             is Number, is Boolean -> value.toString()
-            is List<*> -> value.joinToString(prefix = "[", postfix = "]", separator = ",") { stableStringify(it) }
+            is List<*> -> value.joinToString(prefix = "[", postfix = "]", separator = ",") {
+                stableStringify(it)
+            }
             is Map<*, *> -> value.keys
                 .filterIsInstance<String>()
                 .sorted()
@@ -118,7 +157,9 @@ class GenesisManifestVerifier(private val context: Context) {
                     "${quoteJsonString(key)}:${stableStringify(value[key])}"
                 }
             is JSONArray -> List(value.length()) { index -> value.get(index) }.let(::stableStringify)
-            is JSONObject -> value.keys().asSequence().toList().associateWith { key -> value.get(key) }.let(::stableStringify)
+            is JSONObject -> value.keys().asSequence().toList()
+                .associateWith { key -> value.get(key) }
+                .let(::stableStringify)
             else -> quoteJsonString(value.toString())
         }
     }
@@ -163,12 +204,5 @@ class GenesisManifestVerifier(private val context: Context) {
                 "sha256" to sha256
             )
         }
-    }
-
-    companion object {
-        const val APPROVED_GENESIS_CORE_HASH = "sha256:fb0e37ef719b2cb2607944b7738a7e8e1abdb0e437e9c5bce84117d6df597f5f"
-        private const val APPROVED_FILE_COUNT = 17
-        private const val GENESIS_ROOT = "genesis"
-        private const val MANIFEST_ASSET = "$GENESIS_ROOT/genesis_manifest.json"
     }
 }
