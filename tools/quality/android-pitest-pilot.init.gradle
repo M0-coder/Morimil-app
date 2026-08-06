@@ -30,7 +30,7 @@ gradle.beforeProject { project ->
     project.tasks.register("pitestDebug", JavaExec) { task ->
         task.group = "verification"
         task.description =
-            "Runs the bounded QA-4 PIT command-line mutation pilot for debug JVM tests."
+            "Runs the bounded QA-4/QA-5 PIT command-line mutation pilot for debug JVM tests."
         task.dependsOn(unitTestTasks)
         task.mainClass.set(
             "org.pitest.mutationtest.commandline.MutationCoverageReport"
@@ -41,7 +41,7 @@ gradle.beforeProject { project ->
             def matchingTestTasks = unitTestTasks.toList()
             if (matchingTestTasks.size() != 1) {
                 throw new GradleException(
-                    "QA-4 expected exactly one testDebugUnitTest task, found " +
+                    "QA-4/QA-5 expected exactly one testDebugUnitTest task, found " +
                         matchingTestTasks.collect { item -> item.path }
                 )
             }
@@ -67,7 +67,7 @@ gradle.beforeProject { project ->
                 .join(",")
             if (mutablePaths.isEmpty()) {
                 throw new GradleException(
-                    "QA-4 PIT mutable production classpath is empty."
+                    "QA-4/QA-5 PIT mutable production classpath is empty."
                 )
             }
 
@@ -76,7 +76,8 @@ gradle.beforeProject { project ->
                 "--targetClasses",
                 "com.morimil.app.data.genesis.GenesisManifestVerifierCore*",
                 "--targetTests",
-                "com.morimil.app.data.genesis.GenesisManifestVerifierCoreTest",
+                "com.morimil.app.data.genesis.GenesisManifestVerifierCoreTest," +
+                    "com.morimil.app.data.genesis.GenesisManifestCanonicalizationBoundaryTest",
                 "--sourceDirs",
                 project.file("src/main/java").absolutePath,
                 "--mutableCodePaths", mutablePaths,
