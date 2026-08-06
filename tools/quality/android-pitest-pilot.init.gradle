@@ -1,43 +1,93 @@
 initscript {
     repositories {
-        gradlePluginPortal()
-        google()
         mavenCentral()
     }
     dependencies {
-        classpath "pl.droidsonroids.gradle:gradle-pitest-plugin:0.2.27"
+        classpath "org.pitest:pitest-command-line:1.22.1"
+        classpath "org.pitest:pitest:1.22.1"
+        classpath "org.pitest:pitest-entry:1.22.1"
+        classpath "org.pitest:pitest-html-report:1.22.1"
     }
 }
+
+def pitestToolClasspath = initscript.configurations.classpath
 
 gradle.beforeProject { project ->
     if (project.path != ":app") {
         return
     }
 
-    def pitestApplied = new java.util.concurrent.atomic.AtomicBoolean(false)
-    project.configurations.whenObjectAdded { configuration ->
-        if (
-            configuration.name == "testImplementation" &&
-                pitestApplied.compareAndSet(false, true)
-        ) {
-            project.pluginManager.apply(pl.droidsonroids.gradle.pitest.PitestPlugin)
+    project.afterEvaluate {
+        def productionClasses = project.files(
+            project.layout.buildDirectory.dir("tmp/kotlin-classes/debug"),
+            project.layout.buildDirectory.dir(
+                "intermediates/javac/debug/compileDebugJavaWithJavac/classes"
+            )
+        )
+        def testClasses = project.files(
+            project.layout.buildDirectory.dir("tmp/kotlin-classes/debugUnitTest"),
+            project.layout.buildDirectory.dir(
+                "intermediates/javac/debugUnitTest/compileDebugUnitTestJavaWithJavac/classes"
+            )
+        )
+        def testRuntime = project.configurations.getByName(
+            "debugUnitTestRuntimeClasspath"
+        )
 
-            def pitest = project.extensions.getByName("pitest")
-            pitest.pitestVersion = "1.22.1"
-            pitest.targetClasses = [
-                "com.morimil.app.data.genesis.GenesisManifestVerifierCore*"
-            ]
-            pitest.targetTests = [
-                "com.morimil.app.data.genesis.GenesisManifestVerifierCoreTest"
-            ]
-            pitest.mutators = ["DEFAULTS"]
-            pitest.outputFormats = ["XML", "HTML"]
-            pitest.timestampedReports = false
-            pitest.threads = 1
-            pitest.mutationThreshold = 0
-            pitest.coverageThreshold = 0
-            pitest.failWhenNoMutations = true
-            pitest.verbose = false
+        project.tasks.register("pitestDebug", JavaExec) { task ->
+            task.group = "verification"
+            task.description =
+                "Runs the bounded QA-4 PIT command-line mutation pilot for debug JVM tests."
+            task.dependsOn(project.tasks.named("testDebugUnitTest"))
+            task.mainClass.set(
+                "org.pitest.mutationtest.commandline.MutationCoverageReport"
+            )
+            task.classpath = project.files(
+                pitestToolClasspath,
+                productionClasses,
+                testClasses,
+                testRuntime
+            )
+            task.workingDir = project.rootDir
+
+            task.doFirst {
+                def reportDir = project.layout.buildDirectory
+                    .dir("reports/pitest/debug")
+                    .get()
+                    .asFile
+                reportDir.deleteRecursively()
+                reportDir.mkdirs()
+
+                def mutablePaths = productionClasses.files
+                    .findAll { file -> file.exists() }
+                    .collect { file -> file.absolutePath }
+                    .sort()
+                    .join(",")
+                if (mutablePaths.isEmpty()) {
+                    throw new GradleException(
+                        "QA-4 PIT mutable production classpath is empty."
+                    )
+                }
+
+                task.args = [
+                    "--reportDir", reportDir.absolutePath,
+                    "--targetClasses",
+                    "com.morimil.app.data.genesis.GenesisManifestVerifierCore*",
+                    "--targetTests",
+                    "com.morimil.app.data.genesis.GenesisManifestVerifierCoreTest",
+                    "--sourceDirs",
+                    project.file("src/main/java").absolutePath,
+                    "--mutableCodePaths", mutablePaths,
+                    "--outputFormats", "XML,HTML",
+                    "--threads", "1",
+                    "--mutators", "DEFAULTS",
+                    "--timestampedReports", "false",
+                    "--failWhenNoMutations", "true",
+                    "--mutationThreshold", "0",
+                    "--coverageThreshold", "0",
+                    "--verbose", "false"
+                ]
+            }
         }
     }
 }
