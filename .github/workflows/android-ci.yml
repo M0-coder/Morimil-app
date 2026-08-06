@@ -178,7 +178,8 @@ jobs:
           python tools/quality/android_mutation_report_v1.py \
             --report app/build/reports/pitest/debug/mutations.xml \
             --expected-class com.morimil.app.data.genesis.GenesisManifestVerifierCore \
-            --expected-source GenesisManifestVerifier.kt \
+            --primary-source GenesisManifestVerifier.kt \
+            --allowed-inline-source Comparisons.kt \
             --json-output build/quality/android-mutation-pilot.json \
             --markdown-output build/quality/android-mutation-pilot.md
           test -s build/quality/android-mutation-pilot.json
