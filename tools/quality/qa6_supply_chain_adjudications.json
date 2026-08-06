@@ -1,6 +1,13 @@
 {
-  "acceptedLicenseNoAssertionCoordinates": [],
   "acceptedVulnerabilityIds": [],
-  "notes": "Baseline file. Any acceptance requires evidence and a separate reviewed change.",
+  "licenseEvidenceOverrides": [
+    {
+      "coordinate": "net.zetetic:sqlcipher-android:4.15.0",
+      "licenseExpression": "LicenseRef-SQLCipher-Community-BSD-Style",
+      "note": "deps.dev returned NOASSERTION; the official SQLCipher Community Edition license page identifies a BSD-style license and attribution obligations.",
+      "source": "https://www.zetetic.net/sqlcipher/license/"
+    }
+  ],
+  "notes": "No vulnerability is accepted. License evidence overrides record external evidence without changing the machine-derived deps.dev result.",
   "schema": "morimil.qa6.supply_chain_adjudications.v1"
 }
