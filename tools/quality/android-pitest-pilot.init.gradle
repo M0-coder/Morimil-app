@@ -1,0 +1,94 @@
+initscript {
+    repositories {
+        mavenCentral()
+    }
+    dependencies {
+        classpath "org.pitest:pitest-command-line:1.22.1"
+        classpath "org.pitest:pitest:1.22.1"
+        classpath "org.pitest:pitest-entry:1.22.1"
+        classpath "org.pitest:pitest-html-report:1.22.1"
+    }
+}
+
+def pitestToolClasspath = initscript.configurations.classpath
+
+gradle.beforeProject { project ->
+    if (project.path != ":app") {
+        return
+    }
+
+    def productionClasses = project.files(
+        project.layout.buildDirectory.dir("tmp/kotlin-classes/debug"),
+        project.layout.buildDirectory.dir(
+            "intermediates/javac/debug/compileDebugJavaWithJavac/classes"
+        )
+    )
+    def unitTestTasks = project.tasks.matching { candidate ->
+        candidate.name == "testDebugUnitTest"
+    }
+
+    project.tasks.register("pitestDebug", JavaExec) { task ->
+        task.group = "verification"
+        task.description =
+            "Runs the bounded QA-4 PIT command-line mutation pilot for debug JVM tests."
+        task.dependsOn(unitTestTasks)
+        task.mainClass.set(
+            "org.pitest.mutationtest.commandline.MutationCoverageReport"
+        )
+        task.workingDir = project.rootDir
+
+        task.doFirst {
+            def matchingTestTasks = unitTestTasks.toList()
+            if (matchingTestTasks.size() != 1) {
+                throw new GradleException(
+                    "QA-4 expected exactly one testDebugUnitTest task, found " +
+                        matchingTestTasks.collect { item -> item.path }
+                )
+            }
+            def testTask = matchingTestTasks.first()
+            task.classpath = project.files(
+                pitestToolClasspath,
+                productionClasses,
+                testTask.testClassesDirs,
+                testTask.classpath
+            )
+
+            def reportDir = project.layout.buildDirectory
+                .dir("reports/pitest/debug")
+                .get()
+                .asFile
+            project.delete(reportDir)
+            reportDir.mkdirs()
+
+            def mutablePaths = productionClasses.files
+                .findAll { file -> file.exists() }
+                .collect { file -> file.absolutePath }
+                .sort()
+                .join(",")
+            if (mutablePaths.isEmpty()) {
+                throw new GradleException(
+                    "QA-4 PIT mutable production classpath is empty."
+                )
+            }
+
+            task.args = [
+                "--reportDir", reportDir.absolutePath,
+                "--targetClasses",
+                "com.morimil.app.data.genesis.GenesisManifestVerifierCore*",
+                "--targetTests",
+                "com.morimil.app.data.genesis.GenesisManifestVerifierCoreTest",
+                "--sourceDirs",
+                project.file("src/main/java").absolutePath,
+                "--mutableCodePaths", mutablePaths,
+                "--outputFormats", "XML,HTML",
+                "--threads", "1",
+                "--mutators", "DEFAULTS",
+                "--timestampedReports", "false",
+                "--failWhenNoMutations", "true",
+                "--mutationThreshold", "0",
+                "--coverageThreshold", "0",
+                "--verbose", "false"
+            ]
+        }
+    }
+}
