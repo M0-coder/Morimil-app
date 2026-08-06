@@ -57,7 +57,7 @@ gradle.beforeProject { project ->
                 .dir("reports/pitest/debug")
                 .get()
                 .asFile
-            reportDir.deleteRecursively()
+            project.delete(reportDir)
             reportDir.mkdirs()
 
             def mutablePaths = productionClasses.files
