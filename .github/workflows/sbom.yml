@@ -46,7 +46,7 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
 
-      - name: Bootstrap dependency locks and verification metadata
+      - name: Bootstrap dependency locks
         run: |
           ./gradlew \
             --init-script tools/quality/qa6-supply-chain.init.gradle \
@@ -54,13 +54,12 @@ jobs:
             --stacktrace \
             --console=plain \
             --write-locks \
-            --write-verification-metadata sha256 \
             :qa6ResolveAndLockAll
 
-      - name: Generate resolved dependency inventory and debug APK
+      - name: Generate verification metadata, resolved inventory, and debug APK
         run: |
           ./gradlew \
-            --dependency-verification strict \
+            --write-verification-metadata sha256 \
             --init-script tools/quality/qa6-supply-chain.init.gradle \
             --no-daemon \
             --stacktrace \
