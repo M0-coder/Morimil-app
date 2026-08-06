@@ -9,8 +9,9 @@ on:
       - main
   workflow_dispatch:
 
+# Temporary QA-6 bootstrap permission. The final exact-head workflow returns to contents: read.
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: sbom-${{ github.workflow }}-${{ github.ref }}
@@ -19,12 +20,15 @@ concurrency:
 jobs:
   generate:
     name: Generate resolved supply-chain evidence
+    if: github.event_name == 'pull_request' && github.event.pull_request.number == 168 && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 60
 
     steps:
-      - name: Checkout repository
+      - name: Checkout exact PR head for one-time state commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Select hosted JDK 17 and verify tool runtimes
         run: |
@@ -41,7 +45,7 @@ jobs:
           PY
 
       - name: Test QA-6 supply-chain tooling
-        run: PYTHONPATH=tools/quality python3 -m unittest tools.quality.test_qa6_supply_chain_report_v1
+        run: PYTHONPATH=tools/quality python3 -m unittest tools.quality.test_qa6_supply_chain_report_v1 tools.quality.test_qa6_supply_chain_scope_v1
 
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
@@ -86,25 +90,32 @@ jobs:
           upload-artifact: false
           upload-release-assets: false
 
-      - name: Validate final QA-6 evidence inventory
+      - name: Cross-check locks, checksums, runtime scope, licenses, and APK identity
+        run: |
+          python3 tools/quality/qa6_supply_chain_scope_v1.py \
+            --inventory app/build/quality/qa6/gradle-resolved-inventory.json \
+            --lockfile app/gradle.lockfile \
+            --verification-metadata gradle/verification-metadata.xml \
+            --vulnerabilities build/quality/qa6/vulnerabilities.json \
+            --licenses build/quality/qa6/licenses.json \
+            --syft build/quality/qa6/apk-syft.spdx.json \
+            --apk-inventory build/quality/qa6/apk-inventory.json \
+            --policy tools/quality/qa6_supply_chain_policy.json \
+            --adjudications tools/quality/qa6_supply_chain_adjudications.json \
+            --output build/quality/qa6/scope-summary.json
+
+      - name: Validate exact audited bootstrap hashes
         run: |
           set -euo pipefail
-          test -s app/gradle.lockfile
-          test -s gradle/verification-metadata.xml
-          test -s app/build/quality/qa6/gradle-resolved-inventory.json
-          test -s build/quality/qa6/apk-inventory.json
-          test -s build/quality/qa6/licenses.json
-          test -s build/quality/qa6/vulnerabilities.json
-          test -s build/quality/qa6/resolved-components.spdx.json
-          test -s build/quality/qa6/apk-syft.spdx.json
-          test -s build/quality/qa6/summary.json
-          python3 -m json.tool app/build/quality/qa6/gradle-resolved-inventory.json > /dev/null
-          python3 -m json.tool build/quality/qa6/summary.json > /dev/null
+          test "$(sha256sum app/gradle.lockfile | cut -d' ' -f1)" = "49d418a5e5ab8b0f11d29a1b41cb0f40551f70fec7e89661513a701946f44e4e"
+          test "$(sha256sum gradle/verification-metadata.xml | cut -d' ' -f1)" = "c21442729b2e7b78d957763545888945e789016cc380eacd4c08415959c2a792"
+          test -s build/quality/qa6/scope-summary.json
+          python3 -m json.tool build/quality/qa6/scope-summary.json > /dev/null
 
-      - name: Upload QA-6 supply-chain artifact
+      - name: Upload audited QA-6 bootstrap artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: morimil-qa6-supply-chain-${{ github.sha }}
+          name: morimil-qa6-bootstrap-${{ github.event.pull_request.head.sha }}
           path: |
             app/gradle.lockfile
             gradle/verification-metadata.xml
@@ -112,3 +123,18 @@ jobs:
             build/quality/qa6/
           if-no-files-found: error
           retention-days: 30
+
+      - name: Commit only the audited native Gradle state
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- app/gradle.lockfile gradle/verification-metadata.xml
+          changed="$(git diff --cached --name-only)"
+          if [ -z "${changed}" ]; then
+            echo "Audited Gradle state is already versioned."
+            exit 0
+          fi
+          test "${changed}" = $'app/gradle.lockfile\ngradle/verification-metadata.xml'
+          git commit -m "[QA-6] Version audited Gradle supply-chain state"
+          git push origin "HEAD:${{ github.event.pull_request.head.ref }}"
