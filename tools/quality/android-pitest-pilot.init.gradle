@@ -24,33 +24,27 @@ gradle.beforeProject { project ->
                 "intermediates/javac/debug/compileDebugJavaWithJavac/classes"
             )
         )
-        def testClasses = project.files(
-            project.layout.buildDirectory.dir("tmp/kotlin-classes/debugUnitTest"),
-            project.layout.buildDirectory.dir(
-                "intermediates/javac/debugUnitTest/compileDebugUnitTestJavaWithJavac/classes"
-            )
-        )
-        def testRuntime = project.configurations.getByName(
-            "debugUnitTestRuntimeClasspath"
-        )
+        def testTaskProvider = project.tasks.named("testDebugUnitTest")
 
         project.tasks.register("pitestDebug", JavaExec) { task ->
             task.group = "verification"
             task.description =
                 "Runs the bounded QA-4 PIT command-line mutation pilot for debug JVM tests."
-            task.dependsOn(project.tasks.named("testDebugUnitTest"))
+            task.dependsOn(testTaskProvider)
             task.mainClass.set(
                 "org.pitest.mutationtest.commandline.MutationCoverageReport"
-            )
-            task.classpath = project.files(
-                pitestToolClasspath,
-                productionClasses,
-                testClasses,
-                testRuntime
             )
             task.workingDir = project.rootDir
 
             task.doFirst {
+                def testTask = testTaskProvider.get()
+                task.classpath = project.files(
+                    pitestToolClasspath,
+                    productionClasses,
+                    testTask.testClassesDirs,
+                    testTask.classpath
+                )
+
                 def reportDir = project.layout.buildDirectory
                     .dir("reports/pitest/debug")
                     .get()
