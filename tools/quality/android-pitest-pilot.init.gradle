@@ -14,24 +14,22 @@ gradle.beforeProject { project ->
         return
     }
 
-    project.pluginManager.withPlugin("com.android.application") {
-        project.pluginManager.apply(pl.droidsonroids.gradle.pitest.PitestPlugin)
+    project.pluginManager.apply(pl.droidsonroids.gradle.pitest.PitestPlugin)
 
-        def pitest = project.extensions.getByName("pitest")
-        pitest.pitestVersion = "1.22.1"
-        pitest.targetClasses = [
-            "com.morimil.app.data.genesis.GenesisManifestVerifierCore*"
-        ]
-        pitest.targetTests = [
-            "com.morimil.app.data.genesis.GenesisManifestVerifierCoreTest"
-        ]
-        pitest.mutators = ["DEFAULTS"]
-        pitest.outputFormats = ["XML", "HTML"]
-        pitest.timestampedReports = false
-        pitest.threads = 1
-        pitest.mutationThreshold = 0
-        pitest.coverageThreshold = 0
-        pitest.failWhenNoMutations = true
-        pitest.verbose = false
-    }
+    def pitest = project.extensions.getByName("pitest")
+    pitest.pitestVersion = "1.22.1"
+    pitest.targetClasses = [
+        "com.morimil.app.data.genesis.GenesisManifestVerifierCore*"
+    ]
+    pitest.targetTests = [
+        "com.morimil.app.data.genesis.GenesisManifestVerifierCoreTest"
+    ]
+    pitest.mutators = ["DEFAULTS"]
+    pitest.outputFormats = ["XML", "HTML"]
+    pitest.timestampedReports = false
+    pitest.threads = 1
+    pitest.mutationThreshold = 0
+    pitest.coverageThreshold = 0
+    pitest.failWhenNoMutations = true
+    pitest.verbose = false
 }
