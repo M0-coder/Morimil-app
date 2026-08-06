@@ -54,12 +54,32 @@ QA-5 adds three JVM tests through the normal `GenesisManifestVerifierCore.verify
 
 The tests derive the expected canonical record bytes independently and bind the approved core hash to those bytes. They do not invoke private methods through reflection.
 
+## Explicit PIT test boundary
+
+The QA-4 init script originally targeted only:
+
+```text
+com.morimil.app.data.genesis.GenesisManifestVerifierCoreTest
+```
+
+The first QA-5 candidate head proved that adding a separate JVM test class was insufficient: the Gradle unit-test task passed, but PIT did not examine the new class and the mutation inventory remained unchanged.
+
+QA-5 therefore changes only the explicit `--targetTests` value to include both closed test classes:
+
+```text
+com.morimil.app.data.genesis.GenesisManifestVerifierCoreTest
+com.morimil.app.data.genesis.GenesisManifestCanonicalizationBoundaryTest
+```
+
+No wildcard is used. The mutable production-class boundary remains exactly `GenesisManifestVerifierCore*`.
+
 ## Scope
 
 Authorized repository changes are limited to:
 
 ```text
 app/src/test/java/com/morimil/app/data/genesis/GenesisManifestCanonicalizationBoundaryTest.kt
+tools/quality/android-pitest-pilot.init.gradle
 docs/quality/QA_5_MUTANT_ADJUDICATION_TESTS.md
 docs/quality/evidence/QA_5_MUTANT_ADJUDICATION_EVIDENCE_2026-08-06.md
 ```
@@ -71,7 +91,8 @@ QA-5 does not modify:
 - the approved Genesis core hash or approved file count;
 - bundled Genesis assets or manifest contents;
 - Room schemas, DAOs, identity, memory, writer, or continuity authority;
-- release signing or packaging;
+- GitHub workflow files;
+- dependencies, release signing, or packaging;
 - Body, Guardian, Seed, Genesis state, activation, or birth state.
 
 ## Required verification
@@ -82,6 +103,7 @@ The exact final PR head must demonstrate:
 JVM_BASELINE_TESTS=PASS
 QA5_BOUNDARY_TESTS=3/3_PASS
 PIT_TARGET_CLASS_PREFIX=UNCHANGED
+PIT_TARGET_TESTS=EXACT_TWO_CLASS_SET
 PIT_SOURCE_ATTRIBUTION_SCOPE=UNCHANGED
 THREE_BEHAVIORAL_MUTANTS=KILLED
 QUALITY_TOOL_TESTS=PASS
@@ -112,7 +134,7 @@ QA-5 is technically complete only when:
 1. the three new tests pass on the exact head;
 2. repeated PIT proves the three targeted mutations are killed;
 3. the remaining undetected mutants are preserved with explicit adjudication rather than hidden;
-4. mutation class and source-attribution boundaries remain fail-closed;
+4. mutation class, test and source-attribution boundaries remain fail-closed;
 5. the downloaded CI artifact is independently checked against its published digest and raw report;
 6. all required workflows pass on the same final head;
 7. the PR remains unmerged pending separate explicit authorization.
