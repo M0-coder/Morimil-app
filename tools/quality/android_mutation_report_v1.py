@@ -7,9 +7,9 @@ import argparse
 import hashlib
 import json
 import xml.etree.ElementTree as ET
-from collections import Counter
+from collections import Counter, defaultdict
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
 KNOWN_STATUSES = {
     "KILLED",
@@ -41,13 +41,24 @@ def _percentage(numerator: int, denominator: int) -> float | None:
     return numerator * 100.0 / denominator
 
 
+def _sorted_counter(counter: Counter[str]) -> dict[str, int]:
+    return {key: counter[key] for key in sorted(counter)}
+
+
 def analyze_report(
     report_path: Path,
     expected_class_prefix: str,
-    expected_source_file: str,
+    primary_source_file: str,
+    allowed_inline_source_files: Iterable[str] = (),
 ) -> dict[str, Any]:
     if not report_path.is_file() or report_path.stat().st_size == 0:
         raise MutationReportError(f"Mutation report is missing or empty: {report_path}")
+
+    approved_sources = {primary_source_file, *allowed_inline_source_files}
+    if not primary_source_file.strip():
+        raise MutationReportError("Primary source file must not be blank.")
+    if any(not source.strip() for source in approved_sources):
+        raise MutationReportError("Approved source file names must not be blank.")
 
     try:
         root = ET.parse(report_path).getroot()
@@ -67,9 +78,15 @@ def analyze_report(
     mutators: Counter[str] = Counter()
     mutated_classes: set[str] = set()
     source_files: set[str] = set()
-    mutated_lines: set[int] = set()
+    mutation_locations: set[tuple[str, int]] = set()
     detected_count = 0
     killing_test_count = 0
+
+    source_counts: Counter[str] = Counter()
+    source_statuses: dict[str, Counter[str]] = defaultdict(Counter)
+    source_classes: dict[str, Counter[str]] = defaultdict(Counter)
+    source_methods: dict[str, Counter[str]] = defaultdict(Counter)
+    source_lines: dict[str, set[int]] = defaultdict(set)
 
     for index, mutation in enumerate(mutations, start=1):
         status = mutation.attrib.get("status", "").strip().upper()
@@ -86,6 +103,7 @@ def analyze_report(
 
         mutated_class = _required_text(mutation, "mutatedClass", index)
         source_file = _required_text(mutation, "sourceFile", index)
+        mutated_method = _required_text(mutation, "mutatedMethod", index)
         line_text = _required_text(mutation, "lineNumber", index)
         mutator = _required_text(mutation, "mutator", index)
 
@@ -108,9 +126,9 @@ def analyze_report(
                 "Mutation report escaped the approved class boundary: "
                 f"{mutated_class!r}."
             )
-        if source_file != expected_source_file:
+        if source_file not in approved_sources:
             raise MutationReportError(
-                "Mutation report escaped the approved source boundary: "
+                "Mutation report escaped the approved source-attribution boundary: "
                 f"{source_file!r}."
             )
 
@@ -118,17 +136,43 @@ def analyze_report(
         mutators[mutator] += 1
         mutated_classes.add(mutated_class)
         source_files.add(source_file)
-        mutated_lines.add(line_number)
+        mutation_locations.add((source_file, line_number))
+        source_counts[source_file] += 1
+        source_statuses[source_file][status] += 1
+        source_classes[source_file][mutated_class] += 1
+        source_methods[source_file][mutated_method] += 1
+        source_lines[source_file].add(line_number)
         if detected_text == "true":
             detected_count += 1
         if (mutation.findtext("killingTest") or "").strip():
             killing_test_count += 1
+
+    if primary_source_file not in source_files:
+        raise MutationReportError(
+            "Mutation report did not contain the required primary source attribution: "
+            f"{primary_source_file!r}."
+        )
 
     generated = len(mutations)
     killed = statuses["KILLED"]
     survived = statuses["SURVIVED"]
     no_coverage = statuses["NO_COVERAGE"]
     covered_mutants = killed + survived
+
+    source_attributions = {
+        source: {
+            "role": "primary" if source == primary_source_file else "reviewed_inline",
+            "mutants": source_counts[source],
+            "statuses": {
+                status: source_statuses[source][status]
+                for status in sorted(KNOWN_STATUSES)
+            },
+            "classes": _sorted_counter(source_classes[source]),
+            "methods": _sorted_counter(source_methods[source]),
+            "lines": sorted(source_lines[source]),
+        }
+        for source in sorted(source_files)
+    }
 
     return {
         "schema": "morimil.qa4.android_mutation_pilot.v1",
@@ -140,10 +184,15 @@ def analyze_report(
         },
         "scope": {
             "expected_class_prefix": expected_class_prefix,
-            "expected_source_file": expected_source_file,
+            "primary_source_file": primary_source_file,
+            "allowed_inline_source_files": sorted(
+                approved_sources - {primary_source_file}
+            ),
+            "approved_source_files": sorted(approved_sources),
             "observed_classes": sorted(mutated_classes),
             "observed_source_files": sorted(source_files),
-            "unique_mutated_lines": len(mutated_lines),
+            "unique_mutation_locations": len(mutation_locations),
+            "source_attributions": source_attributions,
         },
         "totals": {
             "generated": generated,
@@ -163,8 +212,9 @@ def analyze_report(
         },
         "mutators": dict(sorted(mutators.items())),
         "interpretation_limits": [
-            "The Android PIT Gradle integration is experimental.",
+            "PIT is executed directly against JVM bytecode through an isolated Gradle task.",
             "Open-source PIT does not provide full semantic Kotlin mutation support.",
+            "Kotlin inline bytecode may retain an approved standard-library source attribution.",
             "The result is a bytecode-level pilot and is not a global quality gate.",
             "No mutation, coverage, or test-strength threshold is enforced.",
         ],
@@ -186,22 +236,39 @@ def render_markdown(summary: dict[str, Any]) -> str:
         "",
         f"- Mode: `{summary['mode']}`",
         f"- Target class prefix: `{scope['expected_class_prefix']}`",
-        f"- Target source file: `{scope['expected_source_file']}`",
+        f"- Primary source file: `{scope['primary_source_file']}`",
+        "- Approved source attributions: "
+        + ", ".join(f"`{item}`" for item in scope["approved_source_files"]),
         f"- Observed classes: `{len(scope['observed_classes'])}`",
-        f"- Unique mutated source lines: `{scope['unique_mutated_lines']}`",
+        f"- Unique mutation locations: `{scope['unique_mutation_locations']}`",
         "",
-        "## Results",
+        "## Source attribution",
         "",
-        f"- Generated mutants: `{totals['generated']}`",
-        f"- Detected mutants: `{totals['detected']}`",
-        f"- Undetected mutants: `{totals['undetected']}`",
-        f"- Mutation score: `{display(totals['mutation_score_percent'])}`",
-        f"- Test strength: `{display(totals['test_strength_percent'])}`",
-        f"- Mutation line-coverage proxy: `{display(totals['line_coverage_proxy_percent'])}`",
-        "",
-        "| PIT status | Count |",
-        "|---|---:|",
+        "| Source | Role | Mutants | Classes | Lines |",
+        "|---|---|---:|---:|---:|",
     ]
+    for source, details in scope["source_attributions"].items():
+        lines.append(
+            f"| `{source}` | `{details['role']}` | {details['mutants']} | "
+            f"{len(details['classes'])} | {len(details['lines'])} |"
+        )
+
+    lines.extend(
+        [
+            "",
+            "## Results",
+            "",
+            f"- Generated mutants: `{totals['generated']}`",
+            f"- Detected mutants: `{totals['detected']}`",
+            f"- Undetected mutants: `{totals['undetected']}`",
+            f"- Mutation score: `{display(totals['mutation_score_percent'])}`",
+            f"- Test strength: `{display(totals['test_strength_percent'])}`",
+            f"- Mutation line-coverage proxy: `{display(totals['line_coverage_proxy_percent'])}`",
+            "",
+            "| PIT status | Count |",
+            "|---|---:|",
+        ]
+    )
     lines.extend(f"| `{status}` | {count} |" for status, count in statuses.items())
     lines.extend(
         [
@@ -221,7 +288,13 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--report", type=Path, required=True)
     parser.add_argument("--expected-class", required=True)
-    parser.add_argument("--expected-source", required=True)
+    parser.add_argument("--primary-source", required=True)
+    parser.add_argument(
+        "--allowed-inline-source",
+        action="append",
+        default=[],
+        help="Reviewed Kotlin inline source attribution; may be repeated.",
+    )
     parser.add_argument("--json-output", type=Path, required=True)
     parser.add_argument("--markdown-output", type=Path, required=True)
     return parser.parse_args()
@@ -233,7 +306,8 @@ def main() -> int:
         summary = analyze_report(
             report_path=args.report,
             expected_class_prefix=args.expected_class,
-            expected_source_file=args.expected_source,
+            primary_source_file=args.primary_source,
+            allowed_inline_source_files=args.allowed_inline_source,
         )
     except MutationReportError as exc:
         raise SystemExit(f"QA-4 mutation report validation failed: {exc}") from exc
