@@ -19,13 +19,21 @@ MERGE_AUTHORIZED=FALSE
 
 ## Isolation
 
-The mutation plugin is loaded only through:
+PIT is executed only through:
 
 ```text
 tools/quality/android-pitest-pilot.init.gradle
 ```
 
-Normal Gradle builds, debug builds, release builds, IDE synchronization, and the application build scripts do not apply PIT.
+The init script registers an ephemeral `:app:pitestDebug` `JavaExec` task. That task:
+
+1. depends on the authoritative AGP `testDebugUnitTest` task;
+2. derives test classes and runtime classpath from that task at execution time;
+3. limits mutable bytecode to the debug production-class directories;
+4. invokes the pinned PIT command-line engine directly;
+5. writes non-timestamped XML and HTML reports.
+
+No Android PIT Gradle plugin is applied to the project. Normal Gradle builds, debug builds, release builds, IDE synchronization, and the application build scripts do not register or execute PIT.
 
 QA-4 does not modify:
 
@@ -39,8 +47,10 @@ QA-4 does not modify:
 ## Pinned tooling
 
 ```text
-ANDROID_PIT_GRADLE_PLUGIN=pl.droidsonroids.pitest:0.2.27
-PIT_ENGINE=org.pitest:pitest-command-line:1.22.1
+PIT_COMMAND_LINE=org.pitest:pitest-command-line:1.22.1
+PIT_ENGINE=org.pitest:pitest:1.22.1
+PIT_ENTRY=org.pitest:pitest-entry:1.22.1
+PIT_HTML_REPORT=org.pitest:pitest-html-report:1.22.1
 JVM=17
 THREADS=1
 MUTATORS=DEFAULTS
@@ -48,27 +58,36 @@ OUTPUTS=XML,HTML
 TIMESTAMPED_REPORTS=FALSE
 ```
 
-The Android Gradle PIT integration identifies itself as experimental. Open-source PIT operates on JVM bytecode and does not provide complete semantic Kotlin mutation support. Therefore QA-4 records a bytecode pilot, not an authoritative Kotlin mutation-quality score.
+Open-source PIT operates on JVM bytecode and does not provide complete semantic Kotlin mutation support. Therefore QA-4 records a bytecode pilot, not an authoritative Kotlin mutation-quality score.
 
 ## Approved mutation boundary
 
 ```text
 TARGET_CLASS=com.morimil.app.data.genesis.GenesisManifestVerifierCore*
 TARGET_TEST=com.morimil.app.data.genesis.GenesisManifestVerifierCoreTest
-TARGET_SOURCE=GenesisManifestVerifier.kt
+PRIMARY_SOURCE_ATTRIBUTION=GenesisManifestVerifier.kt
+REVIEWED_INLINE_SOURCE_ATTRIBUTION=Comparisons.kt
 ```
 
 No other application class is authorized for mutation in QA-4.
 
-The report analyzer rejects:
+`Comparisons.kt` is allowed only as an exact source attribution while the mutated class remains inside the approved `GenesisManifestVerifierCore*` prefix. Kotlin inlines the comparator created by `sortedBy`; PIT attributes that generated comparator bytecode to the standard-library source name instead of the authored file.
+
+The approved attribution set is closed. The analyzer:
+
+- requires at least one mutation attributed to `GenesisManifestVerifier.kt`;
+- permits `Comparisons.kt` only as the reviewed inline attribution;
+- records classes, methods, lines, statuses and mutant counts for every attribution;
+- rejects every other source attribution.
+
+The report analyzer also rejects:
 
 - an empty or missing mutation report;
 - malformed XML;
 - unknown PIT statuses;
 - malformed `detected` attributes;
 - mutations outside the approved class prefix;
-- mutations attributed to another source file;
-- missing class, source, line, or mutator metadata.
+- missing class, source, method, line, or mutator metadata.
 
 ## Published metrics
 
@@ -89,7 +108,8 @@ MUTATION_SCORE
 TEST_STRENGTH
 MUTATION_LINE_COVERAGE_PROXY
 MUTATOR_INVENTORY
-MUTATED_LINE_INVENTORY
+MUTATION_LOCATION_INVENTORY
+SOURCE_ATTRIBUTION_INVENTORY
 ```
 
 `mutation_score` is the percentage of generated mutants whose PIT `detected` attribute is true.
@@ -112,7 +132,7 @@ PIT still fails the workflow when:
 - the baseline tests fail under PIT;
 - no mutations are generated;
 - the task cannot complete;
-- the report violates the approved scope or evidence contract.
+- the report violates the approved class, attribution, or evidence contract.
 
 A survived mutant is evidence for test review, not an automatic merge failure in QA-4.
 
@@ -133,7 +153,7 @@ QA-4 is technically complete only after:
 
 1. quality-tool unit tests pass;
 2. `:app:pitestDebug` completes on the exact PR head;
-3. the analyzer proves the mutation scope did not escape;
+3. the analyzer proves the mutation class and source-attribution scope did not escape;
 4. the raw XML and derived JSON are audited from the downloaded artifact;
 5. all five required repository workflows pass on the final evidence head;
 6. the PR remains draft and unmerged until separate explicit authorization.
