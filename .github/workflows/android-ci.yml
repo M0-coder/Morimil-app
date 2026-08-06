@@ -162,6 +162,29 @@ jobs:
               print(f"ANDROID_{counter}_COVERAGE={covered}/{total}={covered / total:.4%}")
           PY
 
+      - name: Generate report-only Android mutation pilot
+        run: |
+          ./gradlew \
+            --init-script tools/quality/android-pitest-pilot.init.gradle \
+            --no-daemon \
+            --stacktrace \
+            --console=plain \
+            :app:pitestDebug
+
+      - name: Validate Android mutation pilot
+        run: |
+          set -euo pipefail
+          test -s app/build/reports/pitest/debug/mutations.xml
+          python tools/quality/android_mutation_report_v1.py \
+            --report app/build/reports/pitest/debug/mutations.xml \
+            --expected-class com.morimil.app.data.genesis.GenesisManifestVerifierCore \
+            --expected-source GenesisManifestVerifier.kt \
+            --json-output build/quality/android-mutation-pilot.json \
+            --markdown-output build/quality/android-mutation-pilot.md
+          test -s build/quality/android-mutation-pilot.json
+          test -s build/quality/android-mutation-pilot.md
+          python -m json.tool build/quality/android-mutation-pilot.json > /dev/null
+
       - name: Build debug APK
         run: ./gradlew :app:assembleDebug
 
@@ -176,6 +199,9 @@ jobs:
             build/quality/python-coverage.json
             build/quality/android-authored-coverage.json
             build/quality/android-authored-coverage.md
+            build/quality/android-mutation-pilot.json
+            build/quality/android-mutation-pilot.md
             app/build/reports/coverage/test/debug/
+            app/build/reports/pitest/debug/
           if-no-files-found: error
           retention-days: 7
