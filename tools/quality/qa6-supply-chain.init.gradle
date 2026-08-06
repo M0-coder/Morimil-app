@@ -22,6 +22,20 @@ def qa6ResolvableConfigurations = { project ->
         .sort { left, right -> left.name <=> right.name }
 }
 
+def qa6ResolveComponentGraph = { configuration ->
+    configuration.incoming.resolutionResult.allComponents.toList()
+}
+
+def qa6ExternalArtifacts = { configuration ->
+    def view = configuration.incoming.artifactView { spec ->
+        spec.lenient(true)
+        spec.componentFilter { componentId ->
+            componentId instanceof ModuleComponentIdentifier
+        }
+    }
+    view.artifacts.artifacts.toList()
+}
+
 gradle.projectsEvaluated {
     def root = gradle.rootProject
     def app = root.findProject(":app")
@@ -32,29 +46,42 @@ gradle.projectsEvaluated {
     root.tasks.register("qa6ResolveAll") { task ->
         task.group = "verification"
         task.description =
-            "Resolves every resolvable configuration to enforce QA-6 lock and verification state."
+            "Resolves every component graph to enforce QA-6 dependency lock state."
         task.notCompatibleWithConfigurationCache(
             "QA-6 enumerates configurations at execution time."
         )
         task.doLast {
             def resolved = []
+            def externalComponents = [] as Set
             root.allprojects.sort { left, right -> left.path <=> right.path }.each { project ->
                 qa6ResolvableConfigurations(project).each { configuration ->
-                    configuration.incoming.files.files
+                    def components = qa6ResolveComponentGraph(configuration)
+                    components.each { component ->
+                        if (component.id instanceof ModuleComponentIdentifier) {
+                            def id = component.id as ModuleComponentIdentifier
+                            externalComponents << "${id.group}:${id.module}:${id.version}"
+                        }
+                    }
                     resolved << "${project.path}:${configuration.name}"
                 }
             }
             if (resolved.isEmpty()) {
                 throw new GradleException("QA-6 resolved zero configurations.")
             }
-            task.logger.lifecycle("QA6_RESOLVED_CONFIGURATIONS=${resolved.size()}")
+            if (externalComponents.isEmpty()) {
+                throw new GradleException("QA-6 resolved zero external components.")
+            }
+            task.logger.lifecycle(
+                "QA6_RESOLVED_CONFIGURATIONS=${resolved.size()} " +
+                    "QA6_EXTERNAL_COMPONENTS=${externalComponents.size()}"
+            )
         }
     }
 
     root.tasks.register("qa6ResolveAndLockAll") { task ->
         task.group = "verification"
         task.description =
-            "Bootstraps QA-6 dependency locks by resolving every resolvable configuration."
+            "Bootstraps QA-6 dependency locks by resolving every component graph."
         task.notCompatibleWithConfigurationCache(
             "QA-6 enumerates configurations at execution time."
         )
@@ -67,23 +94,36 @@ gradle.projectsEvaluated {
         }
         task.doLast {
             def resolved = []
+            def externalComponents = [] as Set
             root.allprojects.sort { left, right -> left.path <=> right.path }.each { project ->
                 qa6ResolvableConfigurations(project).each { configuration ->
-                    configuration.incoming.files.files
+                    def components = qa6ResolveComponentGraph(configuration)
+                    components.each { component ->
+                        if (component.id instanceof ModuleComponentIdentifier) {
+                            def id = component.id as ModuleComponentIdentifier
+                            externalComponents << "${id.group}:${id.module}:${id.version}"
+                        }
+                    }
                     resolved << "${project.path}:${configuration.name}"
                 }
             }
             if (resolved.isEmpty()) {
                 throw new GradleException("QA-6 resolved zero configurations.")
             }
-            task.logger.lifecycle("QA6_LOCKED_CONFIGURATIONS=${resolved.size()}")
+            if (externalComponents.isEmpty()) {
+                throw new GradleException("QA-6 resolved zero external components.")
+            }
+            task.logger.lifecycle(
+                "QA6_LOCKED_CONFIGURATIONS=${resolved.size()} " +
+                    "QA6_LOCKED_EXTERNAL_COMPONENTS=${externalComponents.size()}"
+            )
         }
     }
 
     app.tasks.register("qa6ResolvedDependencyInventory") { task ->
         task.group = "verification"
         task.description =
-            "Writes a deterministic inventory of every resolved :app component and artifact."
+            "Writes a deterministic inventory of resolved external :app components and artifacts."
         task.notCompatibleWithConfigurationCache(
             "QA-6 serializes the live resolution result at execution time."
         )
@@ -99,7 +139,7 @@ gradle.projectsEvaluated {
             def globalArtifacts = [:]
 
             qa6ResolvableConfigurations(app).each { configuration ->
-                def componentRecords = configuration.incoming.resolutionResult.allComponents
+                def componentRecords = qa6ResolveComponentGraph(configuration)
                     .findAll { component ->
                         component.id instanceof ModuleComponentIdentifier
                     }
@@ -118,32 +158,39 @@ gradle.projectsEvaluated {
                     globalComponents[component.coordinate] = component
                 }
 
-                def artifactRecords = configuration.resolvedConfiguration.resolvedArtifacts
+                def artifactRecords = qa6ExternalArtifacts(configuration)
                     .collect { artifact ->
-                        def module = artifact.moduleVersion.id
+                        def id = artifact.id.componentIdentifier
+                        if (!(id instanceof ModuleComponentIdentifier)) {
+                            throw new GradleException(
+                                "QA-6 external artifact view returned non-module component: ${id}"
+                            )
+                        }
+                        def module = id as ModuleComponentIdentifier
                         def file = artifact.file
-                        def classifier = artifact.classifier ?: ""
-                        def extension = artifact.extension ?: file.name.tokenize(".").last()
+                        def extension = file.name.contains(".")
+                            ? file.name.tokenize(".").last()
+                            : "binary"
+                        def hash = qa6Sha256(file)
                         def key = [
                             module.group,
-                            module.name,
+                            module.module,
                             module.version,
-                            classifier,
                             extension,
                             file.name,
-                            qa6Sha256(file)
+                            hash
                         ].join("|")
                         [
                             group: module.group,
-                            name: module.name,
+                            name: module.module,
                             version: module.version,
-                            coordinate: "${module.group}:${module.name}:${module.version}",
-                            classifier: classifier,
+                            coordinate: "${module.group}:${module.module}:${module.version}",
+                            classifier: "",
                             extension: extension,
-                            type: artifact.type ?: extension,
+                            type: extension,
                             fileName: file.name,
                             size: file.length(),
-                            sha256: qa6Sha256(file),
+                            sha256: hash,
                             key: key
                         ]
                     }
