@@ -114,6 +114,8 @@ jobs:
               ("org.junit", "junit-bom", "5.9.3", "junit-bom-5.9.3.module"),
           }
           added = set(after) - set(before)
+          for key in sorted(added):
+              print(f"QA6_ADDED_METADATA={key} CHECKSUMS={after[key]}")
           assert added == expected_added, f"Unexpected metadata additions: {sorted(added)}"
           for key in sorted(expected_added):
               checksums = after[key]
@@ -192,6 +194,7 @@ jobs:
           python3 -m json.tool build/quality/qa6/scope-summary.json > /dev/null
 
       - name: Upload bounded QA-6 metadata-completion artifact
+        if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: morimil-qa6-metadata-completion-${{ github.event.pull_request.head.sha }}
