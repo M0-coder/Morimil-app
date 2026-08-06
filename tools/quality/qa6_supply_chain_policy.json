@@ -1,0 +1,47 @@
+{
+  "expected_runtime_modules": [
+    "androidx.activity:activity-compose",
+    "androidx.compose.material3:material3",
+    "androidx.compose.ui:ui",
+    "androidx.compose.ui:ui-tooling-preview",
+    "androidx.core:core-ktx",
+    "androidx.lifecycle:lifecycle-runtime-compose",
+    "androidx.lifecycle:lifecycle-viewmodel-compose",
+    "androidx.room:room-ktx",
+    "androidx.room:room-runtime",
+    "androidx.sqlite:sqlite",
+    "androidx.webkit:webkit",
+    "androidx.work:work-runtime-ktx",
+    "com.fasterxml.jackson.core:jackson-core",
+    "com.google.ai.edge.litertlm:litertlm-android",
+    "com.google.crypto.tink:tink-android",
+    "com.squareup.okhttp3:okhttp",
+    "net.zetetic:sqlcipher-android"
+  ],
+  "expected_test_modules": [
+    "androidx.room:room-testing",
+    "androidx.test:core",
+    "androidx.test.ext:junit",
+    "androidx.test:runner",
+    "androidx.work:work-testing",
+    "junit:junit",
+    "org.json:json"
+  ],
+  "network_endpoints": {
+    "deps_dev_version": "https://api.deps.dev/v3/systems/MAVEN/packages/{name}/versions/{version}",
+    "osv_query_batch": "https://api.osv.dev/v1/querybatch",
+    "osv_vulnerability": "https://api.osv.dev/v1/vulns/{id}"
+  },
+  "required_apk_entries": [
+    "AndroidManifest.xml",
+    "resources.arsc"
+  ],
+  "required_apk_prefixes": [
+    "classes"
+  ],
+  "schema": "morimil.qa6.supply_chain_policy.v1",
+  "severity_policy": {
+    "baseline_mode": "report",
+    "strict_mode": "fail_unadjudicated_critical"
+  }
+}
