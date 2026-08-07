@@ -25,11 +25,12 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 2
 
       - name: Verify bounded bootstrap parent
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD^)" = "3648eddd910ad5d1d9ea8419c80707105a32fb73"
+          test "$(git rev-parse HEAD^)" = "419fd445c6a8923059daf61880d9762e23a6f35d"
           test "$(git diff --name-only HEAD^ HEAD)" = ".github/workflows/sbom.yml"
           test "$(sha256sum app/gradle.lockfile | cut -d' ' -f1)" = "49d418a5e5ab8b0f11d29a1b41cb0f40551f70fec7e89661513a701946f44e4e"
           test "$(sha256sum gradle/verification-metadata.xml | cut -d' ' -f1)" = "c21442729b2e7b78d957763545888945e789016cc380eacd4c08415959c2a792"
