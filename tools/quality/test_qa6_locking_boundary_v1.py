@@ -28,20 +28,23 @@ class Qa6LockingBoundaryTest(unittest.TestCase):
         self.assertEqual(names, {"jacocoAgent", "jacocoAnt", "androidJacocoAnt"})
         self.assertEqual(text.count("deactivateDependencyLocking()"), 1)
 
-    def test_instrumented_coverage_exception_is_scoped_to_debug_runtime_only(self):
+    def test_instrumented_coverage_exception_is_exactly_runtime_and_jacoco_ant(self):
         text = (ROOT / "tools/quality/android-instrumented-coverage.init.gradle").read_text(
             encoding="utf-8"
         )
         self.assertIn("debug.enableAndroidTestCoverage = true", text)
+        match = re.search(r"configuration\.name in \[(.*?)\]", text)
+        self.assertIsNotNone(match)
+        names = set(re.findall(r'"([^"]+)"', match.group(1)))
+        self.assertEqual(names, {"debugRuntimeClasspath", "androidJacocoAnt"})
         self.assertEqual(text.count("deactivateDependencyLocking()"), 1)
-        self.assertEqual(text.count('configuration.name == "debugRuntimeClasspath"'), 1)
         for forbidden in (
             "releaseRuntimeClasspath",
             "releaseCompileClasspath",
             "releaseUnsignedRuntimeClasspath",
             "debugAndroidTestRuntimeClasspath",
         ):
-            self.assertNotIn(f'configuration.name == "{forbidden}"', text)
+            self.assertNotIn(forbidden, text)
 
 
 if __name__ == "__main__":
