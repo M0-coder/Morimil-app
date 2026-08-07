@@ -1,233 +1,138 @@
 name: SBOM
 
 on:
+  push:
+    branches:
+      - main
   pull_request:
     branches:
       - main
+  workflow_dispatch:
 
 permissions:
-  actions: read
-  contents: write
+  contents: read
 
 concurrency:
   group: sbom-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  pin-audited-state:
-    name: Pin audited QA-6 Gradle state
-    if: github.event.pull_request.number == 168 && github.event.pull_request.head.repo.full_name == github.repository
+  generate:
+    name: Generate resolved supply-chain evidence
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 60
 
     steps:
-      - name: Checkout exact PR head
+      - name: Checkout exact source revision
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          fetch-depth: 2
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
-      - name: Verify bounded bootstrap parent
+      - name: Select hosted JDK 17 and verify tool runtimes
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD^)" = "419fd445c6a8923059daf61880d9762e23a6f35d"
-          test "$(git diff --name-only HEAD^ HEAD)" = ".github/workflows/sbom.yml"
+          test -x "${JAVA_HOME_17_X64}/bin/java"
+          echo "JAVA_HOME=${JAVA_HOME_17_X64}" >> "${GITHUB_ENV}"
+          echo "${JAVA_HOME_17_X64}/bin" >> "${GITHUB_PATH}"
+          "${JAVA_HOME_17_X64}/bin/java" -version
+          python3 - <<'PY'
+          import platform
+          import sys
+          assert sys.version_info >= (3, 11), sys.version
+          print(f"PYTHON={platform.python_version()}")
+          PY
+
+      - name: Test QA-6 supply-chain tooling
+        run: PYTHONPATH=tools/quality python3 -m unittest tools.quality.test_qa6_supply_chain_report_v1 tools.quality.test_qa6_supply_chain_scope_v1
+
+      - name: Make Gradle wrapper executable
+        run: chmod +x ./gradlew
+
+      - name: Validate pinned supply-chain state
+        run: |
+          set -euo pipefail
           test "$(sha256sum app/gradle.lockfile | cut -d' ' -f1)" = "49d418a5e5ab8b0f11d29a1b41cb0f40551f70fec7e89661513a701946f44e4e"
-          test "$(sha256sum gradle/verification-metadata.xml | cut -d' ' -f1)" = "c21442729b2e7b78d957763545888945e789016cc380eacd4c08415959c2a792"
-
-      - name: Download audited metadata artifact
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          mkdir -p build/quality/qa6-audited
-          curl --fail --location --retry 4 --retry-all-errors \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer ${GH_TOKEN}" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/artifacts/8998157575/zip" \
-            -o build/quality/qa6-audited/artifact.zip
-          test "$(sha256sum build/quality/qa6-audited/artifact.zip | cut -d' ' -f1)" = "3eadb16dfb140af8b9ca14fdd1b73c7256aaff1b94a1981135ca166109670ac8"
-          unzip -q build/quality/qa6-audited/artifact.zip -d build/quality/qa6-audited/unpacked
-          test "$(sha256sum build/quality/qa6-audited/unpacked/app/gradle.lockfile | cut -d' ' -f1)" = "49d418a5e5ab8b0f11d29a1b41cb0f40551f70fec7e89661513a701946f44e4e"
-          test "$(sha256sum build/quality/qa6-audited/unpacked/gradle/verification-metadata.xml | cut -d' ' -f1)" = "5f9268f82d5493073db7884c5706f096473ac607e9ebb36ad1e629e5cae75d11"
-
-      - name: Validate exact metadata delta
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          import xml.etree.ElementTree as ET
-          from pathlib import Path
-
-          ns = {"v": "https://schema.gradle.org/dependency-verification"}
-
-          def snapshot(path: Path):
-              root = ET.parse(path).getroot()
-              configuration = root.find("v:configuration", ns)
-              components = root.find("v:components", ns)
-              assert configuration is not None and components is not None
-              entries = {}
-              for component in components:
-                  coordinate = (
-                      component.attrib["group"],
-                      component.attrib["name"],
-                      component.attrib["version"],
-                  )
-                  for artifact in component.findall("v:artifact", ns):
-                      checksums = tuple(sorted(
-                          (
-                              child.tag.rsplit("}", 1)[-1],
-                              child.attrib.get("value"),
-                              child.attrib.get("origin"),
-                          )
-                          for child in artifact
-                      ))
-                      entries[coordinate + (artifact.attrib["name"],)] = checksums
-              return ET.tostring(configuration, encoding="unicode"), entries
-
-          before_config, before = snapshot(Path("gradle/verification-metadata.xml"))
-          after_path = Path("build/quality/qa6-audited/unpacked/gradle/verification-metadata.xml")
-          after_config, after = snapshot(after_path)
-          assert before_config == after_config
-          assert not (set(before) - set(after))
-          assert not {key for key in before if before[key] != after[key]}
-
-          expected = {
-              ("com.fasterxml.jackson", "jackson-base", "2.22.0", "jackson-base-2.22.0.pom"):
-                  "25209eb8dcd5a6b47230b3fc119cf1c03801f6983b9529624b7eff6813f01726",
-              ("com.google.guava", "guava-parent", "33.2.1-jre", "guava-parent-33.2.1-jre.pom"):
-                  "9095f6d8ee3765950207510785830cc2280e781067915fa99cfe1740d4865c14",
-              ("org.jetbrains.kotlinx", "kotlinx-coroutines-bom", "1.8.0", "kotlinx-coroutines-bom-1.8.0.pom"):
-                  "1239e9dbe1397cd5971342956b2511bc3ace7b641842e4372a088dcfa8b9ad55",
-              ("org.junit", "junit-bom", "5.14.3", "junit-bom-5.14.3.module"):
-                  "f25c40bfa52c8b7b425d576a88f310f6432616d62ba5893203fa27dfbc9f025e",
-              ("org.junit", "junit-bom", "5.14.3", "junit-bom-5.14.3.pom"):
-                  "08a02856e487c9357f9b29e38745f8ae805848111e72d15aad0352338f1632e1",
-              ("org.junit", "junit-bom", "5.9.2", "junit-bom-5.9.2.module"):
-                  "ab137ba5a8e32c9b066bf9126a1c76dd5614b724ba5c0b02549772b5e9f4cf1f",
-              ("org.junit", "junit-bom", "5.9.3", "junit-bom-5.9.3.module"):
-                  "b401fd25901e582a524aa5343c4b39e28bc56e24961c1069bf2b4bbfcee46b93",
-          }
-          added = set(after) - set(before)
-          assert added == set(expected), sorted(added)
-          for key, digest in expected.items():
-              assert after[key] == (("sha256", digest, "Generated by Gradle"),), (key, after[key])
-          print("QA6_AUDITED_METADATA_DELTA=PASS")
-          print("QA6_ADDED_METADATA_RECORDS=7")
-          PY
-
-      - name: Pin audited verification metadata and strict locking
-        run: |
-          set -euo pipefail
-          cp build/quality/qa6-audited/unpacked/gradle/verification-metadata.xml gradle/verification-metadata.xml
-          python3 - <<'PY'
-          from pathlib import Path
-          path = Path("build.gradle.kts")
-          text = path.read_text(encoding="utf-8")
-          assert "LockMode.STRICT" not in text
-          assert text.count("        lockAllConfigurations()\n") == 1
-          text = "import org.gradle.api.artifacts.dsl.LockMode\n\n" + text
-          text = text.replace(
-              "        lockAllConfigurations()\n",
-              "        lockAllConfigurations()\n        lockMode = LockMode.STRICT\n",
-              1,
-          )
-          path.write_text(text, encoding="utf-8")
-          PY
           test "$(sha256sum gradle/verification-metadata.xml | cut -d' ' -f1)" = "5f9268f82d5493073db7884c5706f096473ac607e9ebb36ad1e629e5cae75d11"
           grep -F 'lockMode = LockMode.STRICT' build.gradle.kts
 
-      - name: Version audited bootstrap evidence
+      - name: Prove strict locks, verification, resolved inventory, and debug APK
         run: |
-          cat > docs/quality/evidence/QA_6_SUPPLY_CHAIN_EVIDENCE_2026-08-06.md <<'EOF'
-          # Document status: CURRENT
+          ./gradlew \
+            --dependency-verification=strict \
+            --init-script tools/quality/qa6-supply-chain.init.gradle \
+            --no-daemon \
+            --stacktrace \
+            --console=plain \
+            :qa6ResolveAll \
+            :app:qa6ResolvedDependencyInventory \
+            :app:assembleDebug
 
-          # QA-6 — Supply-chain evidence
-
-          ## Evidence identity
-
-          ```text
-          BASE_MAIN=92d15c0269b1d56ce26d4201e2b464c951a6f175
-          BRANCH=qa/qa-6-supply-chain-truth
-          BOOTSTRAP_HEAD=3648eddd910ad5d1d9ea8419c80707105a32fb73
-          MODE=STRICT_FINAL_VALIDATION_PENDING
-          ```
-
-          ## Audited bootstrap state
-
-          ```text
-          BOOTSTRAP_WORKFLOW_RUN_ID=31118724421
-          BOOTSTRAP_JOB_ID=92901852043
-          BOOTSTRAP_ARTIFACT_ID=8998157575
-          BOOTSTRAP_ARTIFACT_SHA256=3eadb16dfb140af8b9ca14fdd1b73c7256aaff1b94a1981135ca166109670ac8
-          APP_GRADLE_LOCKFILE_SHA256=49d418a5e5ab8b0f11d29a1b41cb0f40551f70fec7e89661513a701946f44e4e
-          VERIFICATION_METADATA_BEFORE_SHA256=c21442729b2e7b78d957763545888945e789016cc380eacd4c08415959c2a792
-          VERIFICATION_METADATA_ACCEPTED_SHA256=5f9268f82d5493073db7884c5706f096473ac607e9ebb36ad1e629e5cae75d11
-          VERIFICATION_CONFIGURATION_CHANGED=FALSE
-          VERIFICATION_ARTIFACTS_REMOVED=0
-          VERIFICATION_EXISTING_CHECKSUMS_CHANGED=0
-          VERIFICATION_ARTIFACTS_ADDED=7
-          ```
-
-          The seven added records are parent/BOM metadata required by the resolved
-          Jackson, Guava, Kotlin/coroutines, and JUnit graph. Their coordinates were
-          cross-checked against Maven Central. Publisher-side checksum sidecars were
-          not independently reconstructed by the connector, so this document does
-          not claim a second publisher checksum channel.
-
-          ## Final strict gates
-
-          ```text
-          DEPENDENCY_LOCKING=LockMode.STRICT
-          GRADLE_DEPENDENCY_VERIFICATION=strict
-          LOCKFILE_DRIFT=0
-          VERIFICATION_METADATA_DRIFT=0
-          RESOLVED_GRAPH_INVENTORY=PASS_REQUIRED
-          APK_COMPONENT_INVENTORY=PASS_REQUIRED
-          SBOM_RESOLVED_COMPONENTS=PASS_REQUIRED
-          VULNERABILITY_SCAN_EXECUTED=PASS_REQUIRED
-          UNADJUDICATED_CRITICAL_CVES=0_REQUIRED
-          LICENSE_INVENTORY=PASS_REQUIRED
-          GRADLE_APK_SBOM_CROSSCHECK=PASS_REQUIRED
-          ```
-
-          ## Status
-
-          ```text
-          QA_6_DIAGNOSTICADO=TRUE
-          QA_6_IMPLEMENTADO_EN_RAMA=STRICT_CANDIDATE
-          QA_6_BOOTSTRAP_EXECUTADO=TRUE
-          QA_6_CI_PR_VERDE=FALSE
-          QA_6_TECNICAMENTE_COMPLETO=FALSE
-          PR_DRAFT=TRUE
-          MERGE_AUTHORIZED=FALSE
-          BODY_MODIFIED=FALSE
-          GUARDIAN_MODIFIED=FALSE
-          SEED_IMPORTED=FALSE
-          GENESIS_EXECUTED=FALSE
-          ACTIVATION_EXECUTED=FALSE
-          MORIMIL_OPERATIONAL_BIRTH=NOT_OCCURRED
-          ```
-          EOF
-          sed -i 's/^          //' docs/quality/evidence/QA_6_SUPPLY_CHAIN_EVIDENCE_2026-08-06.md
-
-      - name: Commit only audited QA-6 state
+      - name: Prove pinned state did not drift
         run: |
           set -euo pipefail
-          mapfile -t changed < <(git diff --name-only | sort)
-          printf '%s\n' "${changed[@]}"
-          expected=(
-            "build.gradle.kts"
-            "docs/quality/evidence/QA_6_SUPPLY_CHAIN_EVIDENCE_2026-08-06.md"
-            "gradle/verification-metadata.xml"
-          )
-          test "${#changed[@]}" -eq "${#expected[@]}"
-          for i in "${!expected[@]}"; do
-            test "${changed[$i]}" = "${expected[$i]}"
-          done
-          git diff --exit-code -- app/gradle.lockfile
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add build.gradle.kts docs/quality/evidence/QA_6_SUPPLY_CHAIN_EVIDENCE_2026-08-06.md gradle/verification-metadata.xml
-          git commit -m "[QA-6] Pin audited Gradle supply-chain state [skip ci]"
-          git push origin HEAD:qa/qa-6-supply-chain-truth
+          test "$(sha256sum app/gradle.lockfile | cut -d' ' -f1)" = "49d418a5e5ab8b0f11d29a1b41cb0f40551f70fec7e89661513a701946f44e4e"
+          test "$(sha256sum gradle/verification-metadata.xml | cut -d' ' -f1)" = "5f9268f82d5493073db7884c5706f096473ac607e9ebb36ad1e629e5cae75d11"
+          git diff --exit-code -- app/gradle.lockfile gradle/verification-metadata.xml
+
+      - name: Build strict resolved SBOM, APK inventory, OSV scan, and license inventory
+        run: |
+          python3 tools/quality/qa6_supply_chain_report_v1.py collect \
+            --gradle-inventory app/build/quality/qa6/gradle-resolved-inventory.json \
+            --apk app/build/outputs/apk/debug/app-debug.apk \
+            --policy tools/quality/qa6_supply_chain_policy.json \
+            --adjudications tools/quality/qa6_supply_chain_adjudications.json \
+            --output-dir build/quality/qa6 \
+            --mode strict
+
+      - name: Generate independent Syft APK SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          file: app/build/outputs/apk/debug/app-debug.apk
+          format: spdx-json
+          output-file: build/quality/qa6/apk-syft.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+
+      - name: Cross-check locks, checksums, runtime scope, licenses, and APK identity
+        run: |
+          python3 tools/quality/qa6_supply_chain_scope_v1.py \
+            --inventory app/build/quality/qa6/gradle-resolved-inventory.json \
+            --lockfile app/gradle.lockfile \
+            --verification-metadata gradle/verification-metadata.xml \
+            --vulnerabilities build/quality/qa6/vulnerabilities.json \
+            --licenses build/quality/qa6/licenses.json \
+            --syft build/quality/qa6/apk-syft.spdx.json \
+            --apk-inventory build/quality/qa6/apk-inventory.json \
+            --policy tools/quality/qa6_supply_chain_policy.json \
+            --adjudications tools/quality/qa6_supply_chain_adjudications.json \
+            --output build/quality/qa6/scope-summary.json
+
+      - name: Validate final QA-6 evidence inventory
+        run: |
+          set -euo pipefail
+          test -s app/gradle.lockfile
+          test -s gradle/verification-metadata.xml
+          test -s app/build/quality/qa6/gradle-resolved-inventory.json
+          test -s build/quality/qa6/apk-inventory.json
+          test -s build/quality/qa6/licenses.json
+          test -s build/quality/qa6/vulnerabilities.json
+          test -s build/quality/qa6/resolved-components.spdx.json
+          test -s build/quality/qa6/apk-syft.spdx.json
+          test -s build/quality/qa6/summary.json
+          test -s build/quality/qa6/scope-summary.json
+          python3 -m json.tool app/build/quality/qa6/gradle-resolved-inventory.json > /dev/null
+          python3 -m json.tool build/quality/qa6/summary.json > /dev/null
+          python3 -m json.tool build/quality/qa6/scope-summary.json > /dev/null
+
+      - name: Upload QA-6 evidence artifact
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: morimil-qa6-evidence-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            app/gradle.lockfile
+            gradle/verification-metadata.xml
+            app/build/quality/qa6/gradle-resolved-inventory.json
+            build/quality/qa6/
+          if-no-files-found: error
+          retention-days: 30
