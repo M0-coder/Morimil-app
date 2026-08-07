@@ -29,7 +29,7 @@ jobs:
       - name: Verify bounded parent and toolchain
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD^)" = "dc32d4f32ef3a2391879326437929cb386b9e871"
+          test "$(git rev-parse HEAD^)" = "80a3347cce3800153354176d60fe64b90c7162c2"
           test "$(git diff --name-only HEAD^ HEAD)" = ".github/workflows/sbom.yml"
           test -x "${JAVA_HOME_17_X64}/bin/java"
           echo "JAVA_HOME=${JAVA_HOME_17_X64}" >> "${GITHUB_ENV}"
@@ -37,46 +37,102 @@ jobs:
           "${JAVA_HOME_17_X64}/bin/java" -version
           test "$(sha256sum app/gradle.lockfile | cut -d' ' -f1)" = "49d418a5e5ab8b0f11d29a1b41cb0f40551f70fec7e89661513a701946f44e4e"
           test "$(sha256sum gradle/verification-metadata.xml | cut -d' ' -f1)" = "5f9268f82d5493073db7884c5706f096473ac607e9ebb36ad1e629e5cae75d11"
-          grep -F '# Document status: CURRENT' SECURITY.md
+          grep -Fx '# Document status: CURRENT' SECURITY.md
           grep -F 'deactivateDependencyLocking()' tools/quality/android-unit-coverage.init.gradle
 
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
 
-      - name: Preserve audited before-state
+      - name: Preserve audited before-state and create bounded resolver
         run: |
           set -euo pipefail
           mkdir -p build/quality/qa6-ci-lock
           cp app/gradle.lockfile build/quality/qa6-ci-lock/gradle.lockfile.before
           cp gradle/verification-metadata.xml build/quality/qa6-ci-lock/verification-metadata.before.xml
+          cat > build/quality/qa6-ci-lock/resolve-ci-surfaces.init.gradle <<'EOF'
+          gradle.projectsEvaluated {
+              def root = gradle.rootProject
+              root.tasks.register("qa6ResolveCiLockSurfaces") {
+                  group = "verification"
+                  description = "Resolves bounded CI dependency surfaces without executing tests."
+                  doLast {
+                      def app = root.project(":app")
+                      def names = [
+                          "debugAndroidTestCompileClasspath",
+                          "debugAndroidTestRuntimeClasspath",
+                          "debugRuntimeClasspath",
+                          "debugUnitTestCompileClasspath",
+                          "debugUnitTestRuntimeClasspath",
+                          "jacocoAgent",
+                          "jacocoAnt"
+                      ]
+                      names.each { name ->
+                          def configuration = app.configurations.findByName(name)
+                          if (configuration == null) {
+                              throw new GradleException("QA-6 missing expected configuration: ${name}")
+                          }
+                          if (!configuration.canBeResolved) {
+                              throw new GradleException("QA-6 configuration is not resolvable: ${name}")
+                          }
+                          def files = configuration.files.toList().sort { a, b -> a.name <=> b.name }
+                          println("QA6_RESOLVED_CONFIGURATION=${name};FILES=${files.size()}")
+                          files.each { file ->
+                              if (!file.isFile()) {
+                                  throw new GradleException("QA-6 resolved non-file artifact: ${file}")
+                              }
+                              file.length()
+                          }
+                      }
+                  }
+              }
+          }
+          EOF
 
-      - name: Generate lock and verification state from real CI task graph
+      - name: Generate lock and verification state from real CI surfaces
+        id: generate
         run: |
-          set -euo pipefail
+          set +e
           ./gradlew \
             --dependency-verification=lenient \
             --write-locks \
             --write-verification-metadata sha256 \
             --init-script tools/quality/android-unit-coverage.init.gradle \
+            --init-script build/quality/qa6-ci-lock/resolve-ci-surfaces.init.gradle \
             --no-daemon \
             --stacktrace \
             --console=plain \
-            :app:createDebugUnitTestCoverageReport \
+            :qa6ResolveCiLockSurfaces \
             :app:lintDebug \
             :app:assembleDebugAndroidTest \
             :app:assembleDebug
+          status=$?
+          set -e
+          cp app/gradle.lockfile build/quality/qa6-ci-lock/gradle.lockfile.after
+          cp gradle/verification-metadata.xml build/quality/qa6-ci-lock/verification-metadata.after.xml
+          sha256sum \
+            build/quality/qa6-ci-lock/gradle.lockfile.before \
+            build/quality/qa6-ci-lock/gradle.lockfile.after \
+            build/quality/qa6-ci-lock/verification-metadata.before.xml \
+            build/quality/qa6-ci-lock/verification-metadata.after.xml \
+            > build/quality/qa6-ci-lock/sha256sums.txt
+          git diff -- app/gradle.lockfile > build/quality/qa6-ci-lock/gradle-lockfile.diff
+          git diff -- gradle/verification-metadata.xml > build/quality/qa6-ci-lock/verification-metadata.diff
+          printf 'GRADLE_GENERATION_EXIT=%s\n' "$status" | tee build/quality/qa6-ci-lock/generation-status.txt
+          exit "$status"
 
       - name: Validate bounded generated state
+        if: steps.generate.outcome == 'success'
         run: |
           set -euo pipefail
           kotlin_line="$(grep '^org.jetbrains.kotlin:kotlin-stdlib-common:2.3.10=' app/gradle.lockfile)"
           printf '%s\n' "$kotlin_line"
           printf '%s\n' "$kotlin_line" | grep -F 'debugAndroidTestRuntimeClasspath'
-          if grep -E '(^|,)jacoco(Agent|Ant)(,|$)' app/gradle.lockfile; then
+          if grep -E '(^|[,=])jacoco(Agent|Ant)(,|$)' app/gradle.lockfile; then
             echo 'Ephemeral JaCoCo configuration leaked into dependency lock state' >&2
             exit 1
           fi
           grep -F '<component group="org.jacoco"' gradle/verification-metadata.xml
+          grep -F '<component group="org.ow2.asm" name="asm-bom" version="9.6">' gradle/verification-metadata.xml
           mapfile -t changed < <(git diff --name-only | sort)
           printf 'TRACKED_GENERATED_CHANGES=%s\n' "${changed[*]}"
           expected=("app/gradle.lockfile" "gradle/verification-metadata.xml")
@@ -84,16 +140,6 @@ jobs:
           for i in "${!expected[@]}"; do
             test "${changed[$i]}" = "${expected[$i]}"
           done
-          sha256sum \
-            build/quality/qa6-ci-lock/gradle.lockfile.before \
-            app/gradle.lockfile \
-            build/quality/qa6-ci-lock/verification-metadata.before.xml \
-            gradle/verification-metadata.xml \
-            > build/quality/qa6-ci-lock/sha256sums.txt
-          git diff -- app/gradle.lockfile > build/quality/qa6-ci-lock/gradle-lockfile.diff
-          git diff -- gradle/verification-metadata.xml > build/quality/qa6-ci-lock/verification-metadata.diff
-          cp app/gradle.lockfile build/quality/qa6-ci-lock/gradle.lockfile.after
-          cp gradle/verification-metadata.xml build/quality/qa6-ci-lock/verification-metadata.after.xml
 
       - name: Upload bounded CI lock-completion evidence
         if: always()
