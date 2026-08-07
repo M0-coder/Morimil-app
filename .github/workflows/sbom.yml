@@ -13,8 +13,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  complete-androidtest-lock-state:
-    name: Generate targeted AndroidTest lock evidence
+  reproduce-reference-lock-state:
+    name: Reproduce Reference lock state
     if: github.event.pull_request.number == 168 && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -26,10 +26,10 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 2
 
-      - name: Verify bounded parent and toolchain
+      - name: Verify bounded parent and JDK
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD^)" = "39085c8256287849619faf233ce23aae1d436557"
+          test "$(git rev-parse HEAD^)" = "c8417282f14e4ef550849e7196861d8496454829"
           test "$(git diff --name-only HEAD^ HEAD)" = ".github/workflows/sbom.yml"
           test -x "${JAVA_HOME_17_X64}/bin/java"
           echo "JAVA_HOME=${JAVA_HOME_17_X64}" >> "${GITHUB_ENV}"
@@ -37,16 +37,14 @@ jobs:
           "${JAVA_HOME_17_X64}/bin/java" -version
           test "$(sha256sum app/gradle.lockfile | cut -d' ' -f1)" = "49d418a5e5ab8b0f11d29a1b41cb0f40551f70fec7e89661513a701946f44e4e"
 
-      - name: Make Gradle wrapper executable
-        run: chmod +x ./gradlew
-
       - name: Preserve before-state
         run: |
-          mkdir -p build/quality/qa6-androidtest-lock
-          cp app/gradle.lockfile build/quality/qa6-androidtest-lock/gradle.lockfile.before
+          chmod +x ./gradlew
+          mkdir -p build/quality/qa6-reference-lock
+          cp app/gradle.lockfile build/quality/qa6-reference-lock/gradle.lockfile.before
 
-      - name: Generate target lock state using Gradle dependency report
-        id: generate
+      - name: Run exact Reference Gradle task pair with lock writing
+        id: reproduce
         run: |
           set +e
           ./gradlew \
@@ -55,33 +53,31 @@ jobs:
             --no-daemon \
             --stacktrace \
             --console=plain \
-            :app:dependencies \
-            --configuration debugAndroidTestRuntimeClasspath
+            :app:testDebugUnitTest \
+            :app:lintDebug
           status=$?
           set -e
-          cp app/gradle.lockfile build/quality/qa6-androidtest-lock/gradle.lockfile.after
+          cp app/gradle.lockfile build/quality/qa6-reference-lock/gradle.lockfile.after
           sha256sum \
-            build/quality/qa6-androidtest-lock/gradle.lockfile.before \
-            build/quality/qa6-androidtest-lock/gradle.lockfile.after \
-            > build/quality/qa6-androidtest-lock/sha256sums.txt
-          git diff -- app/gradle.lockfile > build/quality/qa6-androidtest-lock/gradle-lockfile.diff
-          printf 'GRADLE_GENERATION_EXIT=%s\n' "$status" | tee build/quality/qa6-androidtest-lock/generation-status.txt
+            build/quality/qa6-reference-lock/gradle.lockfile.before \
+            build/quality/qa6-reference-lock/gradle.lockfile.after \
+            > build/quality/qa6-reference-lock/sha256sums.txt
+          git diff -- app/gradle.lockfile > build/quality/qa6-reference-lock/gradle-lockfile.diff
+          printf 'REFERENCE_REPRO_EXIT=%s\n' "$status" | tee build/quality/qa6-reference-lock/reproduction-status.txt
           exit "$status"
 
-      - name: Validate targeted lock result
-        if: steps.generate.outcome == 'success'
+      - name: Print generated Kotlin lock mapping
+        if: always()
         run: |
           set -euo pipefail
-          line="$(grep '^org.jetbrains.kotlin:kotlin-stdlib-common:2.3.10=' app/gradle.lockfile)"
-          printf '%s\n' "$line"
-          printf '%s\n' "$line" | grep -F 'debugAndroidTestRuntimeClasspath'
-          test "$(git diff --name-only)" = "app/gradle.lockfile"
+          grep '^org.jetbrains.kotlin:kotlin-stdlib-common:2.3.10=' app/gradle.lockfile || true
+          wc -c build/quality/qa6-reference-lock/gradle-lockfile.diff
 
-      - name: Upload targeted AndroidTest lock evidence
+      - name: Upload Reference lock reproduction evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: morimil-qa6-androidtest-lock-${{ github.event.pull_request.head.sha }}
-          path: build/quality/qa6-androidtest-lock/
+          name: morimil-qa6-reference-lock-${{ github.event.pull_request.head.sha }}
+          path: build/quality/qa6-reference-lock/
           if-no-files-found: error
           retention-days: 30
