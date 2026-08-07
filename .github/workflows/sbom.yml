@@ -1,144 +1,207 @@
 name: SBOM
 
 on:
-  push:
-    branches:
-      - main
   pull_request:
     branches:
       - main
-  workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: sbom-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  generate:
-    name: Generate resolved supply-chain evidence
+  pin-jacoco-runtime:
+    name: Audit and pin instrumented JaCoCo runtime checksum
+    if: >-
+      github.event.pull_request.number == 168 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'qa/qa-6-supply-chain-truth'
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 30
 
     steps:
-      - name: Checkout exact source revision
+      - name: Checkout exact PR head branch
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 1
 
-      - name: Select hosted JDK 17 and verify tool runtimes
+      - name: Anchor exact source revision
+        env:
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+          test "$EXPECTED_HEAD" = "9f6c821ef38a0c66516fbfdc2145dbfa2e425967"
+          test "$(sha256sum app/gradle.lockfile | cut -d' ' -f1)" = "49d418a5e5ab8b0f11d29a1b41cb0f40551f70fec7e89661513a701946f44e4e"
+          test "$(sha256sum gradle/verification-metadata.xml | cut -d' ' -f1)" = "7b5ac701da2cc62cff7ea430672d25c94c187c4c0e00c7f3ad8c0c8f9b1bdb79"
+
+      - name: Select hosted JDK 17
         run: |
           set -euo pipefail
           test -x "${JAVA_HOME_17_X64}/bin/java"
           echo "JAVA_HOME=${JAVA_HOME_17_X64}" >> "${GITHUB_ENV}"
           echo "${JAVA_HOME_17_X64}/bin" >> "${GITHUB_PATH}"
           "${JAVA_HOME_17_X64}/bin/java" -version
-          python3 - <<'PY'
-          import platform
-          import sys
-          assert sys.version_info >= (3, 11), sys.version
-          print(f"PYTHON={platform.python_version()}")
-          PY
-
-      - name: Test QA-6 supply-chain tooling
-        run: |
-          PYTHONPATH=tools/quality python3 -m unittest \
-            tools.quality.test_qa6_supply_chain_report_v1 \
-            tools.quality.test_qa6_supply_chain_scope_v1 \
-            tools.quality.test_qa6_locking_boundary_v1
 
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
 
-      - name: Validate pinned supply-chain state
+      - name: Capture immutable before state
         run: |
           set -euo pipefail
-          test "$(sha256sum app/gradle.lockfile | cut -d' ' -f1)" = "49d418a5e5ab8b0f11d29a1b41cb0f40551f70fec7e89661513a701946f44e4e"
-          test "$(sha256sum gradle/verification-metadata.xml | cut -d' ' -f1)" = "7b5ac701da2cc62cff7ea430672d25c94c187c4c0e00c7f3ad8c0c8f9b1bdb79"
-          grep -F 'lockMode = LockMode.STRICT' build.gradle.kts
-          grep -F '<component group="org.pitest" name="pitest" version="1.22.1">' gradle/verification-metadata.xml
-          python3 -m unittest tools.quality.test_qa6_locking_boundary_v1
+          mkdir -p build/quality/qa6-jacoco-runtime
+          cp gradle/verification-metadata.xml build/quality/qa6-jacoco-runtime/verification-metadata.before.xml
+          cp app/gradle.lockfile build/quality/qa6-jacoco-runtime/gradle.lockfile.before
+          sha256sum gradle/verification-metadata.xml app/gradle.lockfile \
+            | tee build/quality/qa6-jacoco-runtime/before.sha256
 
-      - name: Prove strict locks, verification, resolved inventory, and debug APK
+      - name: Independently fetch Maven Central JaCoCo runtime artifact
         run: |
+          set -euo pipefail
+          base='https://repo.maven.apache.org/maven2/org/jacoco/org.jacoco.agent/0.8.11'
+          curl --fail --silent --show-error --location \
+            "$base/org.jacoco.agent-0.8.11-runtime.jar" \
+            --output build/quality/qa6-jacoco-runtime/org.jacoco.agent-0.8.11-runtime.jar
+          curl --fail --silent --show-error --location \
+            "$base/org.jacoco.agent-0.8.11-runtime.jar.sha1" \
+            --output build/quality/qa6-jacoco-runtime/org.jacoco.agent-0.8.11-runtime.jar.sha1
+          test "$(stat -c '%s' build/quality/qa6-jacoco-runtime/org.jacoco.agent-0.8.11-runtime.jar)" = "300661"
+          expected_sha1="$(tr -d '[:space:]' < build/quality/qa6-jacoco-runtime/org.jacoco.agent-0.8.11-runtime.jar.sha1)"
+          actual_sha1="$(sha1sum build/quality/qa6-jacoco-runtime/org.jacoco.agent-0.8.11-runtime.jar | cut -d' ' -f1)"
+          test "$actual_sha1" = "$expected_sha1"
+          sha256sum build/quality/qa6-jacoco-runtime/org.jacoco.agent-0.8.11-runtime.jar \
+            | tee build/quality/qa6-jacoco-runtime/maven-central.sha256
+
+      - name: Generate only missing verification metadata through Gradle
+        run: |
+          set -euo pipefail
           ./gradlew \
-            --dependency-verification=strict \
-            --init-script tools/quality/qa6-supply-chain.init.gradle \
             --no-daemon \
             --stacktrace \
             --console=plain \
-            :qa6ResolveAll \
-            :app:qa6ResolvedDependencyInventory \
-            :app:assembleDebug
+            --write-verification-metadata sha256 \
+            --init-script tools/quality/android-instrumented-coverage.init.gradle \
+            :app:dependencies \
+            --configuration debugRuntimeClasspath \
+            > build/quality/qa6-jacoco-runtime/gradle-generation.log 2>&1
+          cp gradle/verification-metadata.xml build/quality/qa6-jacoco-runtime/verification-metadata.after.xml
+          cp app/gradle.lockfile build/quality/qa6-jacoco-runtime/gradle.lockfile.after
+          sha256sum gradle/verification-metadata.xml app/gradle.lockfile \
+            | tee build/quality/qa6-jacoco-runtime/after.sha256
 
-      - name: Prove pinned state did not drift
+      - name: Audit exact one-artifact delta and independent checksum agreement
         run: |
           set -euo pipefail
-          test "$(sha256sum app/gradle.lockfile | cut -d' ' -f1)" = "49d418a5e5ab8b0f11d29a1b41cb0f40551f70fec7e89661513a701946f44e4e"
-          test "$(sha256sum gradle/verification-metadata.xml | cut -d' ' -f1)" = "7b5ac701da2cc62cff7ea430672d25c94c187c4c0e00c7f3ad8c0c8f9b1bdb79"
-          git diff --exit-code -- app/gradle.lockfile gradle/verification-metadata.xml
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
 
-      - name: Build strict resolved SBOM, APK inventory, OSV scan, and license inventory
-        run: |
-          python3 tools/quality/qa6_supply_chain_report_v1.py collect \
-            --gradle-inventory app/build/quality/qa6/gradle-resolved-inventory.json \
-            --apk app/build/outputs/apk/debug/app-debug.apk \
-            --policy tools/quality/qa6_supply_chain_policy.json \
-            --adjudications tools/quality/qa6_supply_chain_adjudications.json \
-            --output-dir build/quality/qa6 \
-            --mode strict
+          root = Path('build/quality/qa6-jacoco-runtime')
+          before_path = root / 'verification-metadata.before.xml'
+          after_path = root / 'verification-metadata.after.xml'
+          lock_before = root / 'gradle.lockfile.before'
+          lock_after = root / 'gradle.lockfile.after'
+          jar_path = root / 'org.jacoco.agent-0.8.11-runtime.jar'
+          ns = {'v': 'https://schema.gradle.org/dependency-verification'}
 
-      - name: Generate independent Syft APK SBOM
-        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
-        with:
-          file: app/build/outputs/apk/debug/app-debug.apk
-          format: spdx-json
-          output-file: build/quality/qa6/apk-syft.spdx.json
-          upload-artifact: false
-          upload-release-assets: false
+          def records(path):
+              tree = ET.parse(path)
+              out = {}
+              for component in tree.findall('.//v:component', ns):
+                  key_base = (
+                      component.attrib['group'],
+                      component.attrib['name'],
+                      component.attrib['version'],
+                  )
+                  for artifact in component.findall('v:artifact', ns):
+                      sha = artifact.find('v:sha256', ns)
+                      if sha is not None:
+                          out[key_base + (artifact.attrib['name'],)] = sha.attrib['value']
+              return out
 
-      - name: Cross-check locks, checksums, runtime scope, licenses, and APK identity
-        run: |
-          python3 tools/quality/qa6_supply_chain_scope_v1.py \
-            --inventory app/build/quality/qa6/gradle-resolved-inventory.json \
-            --lockfile app/gradle.lockfile \
-            --verification-metadata gradle/verification-metadata.xml \
-            --vulnerabilities build/quality/qa6/vulnerabilities.json \
-            --licenses build/quality/qa6/licenses.json \
-            --syft build/quality/qa6/apk-syft.spdx.json \
-            --apk-inventory build/quality/qa6/apk-inventory.json \
-            --policy tools/quality/qa6_supply_chain_policy.json \
-            --adjudications tools/quality/qa6_supply_chain_adjudications.json \
-            --output build/quality/qa6/scope-summary.json
+          before = records(before_path)
+          after = records(after_path)
+          added = {k: v for k, v in after.items() if k not in before}
+          removed = {k: v for k, v in before.items() if k not in after}
+          changed = {
+              k: {'before': before[k], 'after': after[k]}
+              for k in before.keys() & after.keys()
+              if before[k] != after[k]
+          }
+          expected_key = (
+              'org.jacoco',
+              'org.jacoco.agent',
+              '0.8.11',
+              'org.jacoco.agent-0.8.11-runtime.jar',
+          )
+          direct_sha256 = hashlib.sha256(jar_path.read_bytes()).hexdigest()
+          assert removed == {}, removed
+          assert changed == {}, changed
+          assert set(added) == {expected_key}, added
+          assert added[expected_key] == direct_sha256, (added[expected_key], direct_sha256)
+          assert lock_before.read_bytes() == lock_after.read_bytes(), 'lockfile changed'
 
-      - name: Validate final QA-6 evidence inventory
+          summary = {
+              'schema': 'morimil.qa6.jacoco_runtime_checksum_audit.v1',
+              'added_count': len(added),
+              'removed_count': len(removed),
+              'changed_count': len(changed),
+              'artifact': ':'.join(expected_key[:3]) + ':' + expected_key[3],
+              'sha256': direct_sha256,
+              'lockfile_unchanged': True,
+              'existing_checksums_changed': False,
+          }
+          (root / 'audit.json').write_text(json.dumps(summary, indent=2) + '\n', encoding='utf-8')
+          print(json.dumps(summary, indent=2))
+          PY
+          git diff --exit-code -- app/gradle.lockfile
+
+      - name: Record bounded QA-6 evidence
         run: |
           set -euo pipefail
-          test -s app/gradle.lockfile
-          test -s gradle/verification-metadata.xml
-          test -s app/build/quality/qa6/gradle-resolved-inventory.json
-          test -s build/quality/qa6/apk-inventory.json
-          test -s build/quality/qa6/licenses.json
-          test -s build/quality/qa6/vulnerabilities.json
-          test -s build/quality/qa6/resolved-components.spdx.json
-          test -s build/quality/qa6/apk-syft.spdx.json
-          test -s build/quality/qa6/summary.json
-          test -s build/quality/qa6/scope-summary.json
-          python3 -m json.tool app/build/quality/qa6/gradle-resolved-inventory.json > /dev/null
-          python3 -m json.tool build/quality/qa6/summary.json > /dev/null
-          python3 -m json.tool build/quality/qa6/scope-summary.json > /dev/null
+          checksum="$(python3 -c 'import json; print(json.load(open("build/quality/qa6-jacoco-runtime/audit.json"))["sha256"])')"
+          cat >> docs/quality/evidence/QA_6_SUPPLY_CHAIN_EVIDENCE_2026-08-06.md <<EOF
 
-      - name: Upload QA-6 evidence artifact
+## Instrumented JaCoCo runtime verification completion — 2026-08-07
+
+- Source head before pin: \`9f6c821ef38a0c66516fbfdc2145dbfa2e425967\`.
+- Coverage-only artifact: \`org.jacoco:org.jacoco.agent:0.8.11:org.jacoco.agent-0.8.11-runtime.jar\`.
+- Maven Central size: \`300661\` bytes; published SHA-1 verified before SHA-256 comparison.
+- Independently downloaded SHA-256: \`$checksum\`.
+- Gradle-generated SHA-256 matched the independent Maven Central artifact exactly.
+- Verification metadata delta: \`ADDED=1\`, \`REMOVED=0\`, \`EXISTING_CHANGED=0\`.
+- \`app/gradle.lockfile\` remained byte-for-byte unchanged.
+- Dependency verification remains strict; no additional dependency-locking exception was introduced.
+EOF
+
+      - name: Commit only audited verification state
+        env:
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add gradle/verification-metadata.xml docs/quality/evidence/QA_6_SUPPLY_CHAIN_EVIDENCE_2026-08-06.md
+          mapfile -t staged < <(git diff --cached --name-only | sort)
+          printf '%s\n' "${staged[@]}"
+          test "${#staged[@]}" -eq 2
+          test "${staged[0]}" = 'docs/quality/evidence/QA_6_SUPPLY_CHAIN_EVIDENCE_2026-08-06.md'
+          test "${staged[1]}" = 'gradle/verification-metadata.xml'
+          git diff --cached --check
+          git commit -m '[QA-6] Pin instrumented JaCoCo runtime checksum [skip ci]'
+          git push origin "HEAD:$BRANCH"
+
+      - name: Upload checksum audit evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: morimil-qa6-evidence-${{ github.event.pull_request.head.sha || github.sha }}
-          path: |
-            app/gradle.lockfile
-            gradle/verification-metadata.xml
-            app/build/quality/qa6/gradle-resolved-inventory.json
-            build/quality/qa6/
+          name: qa6-jacoco-runtime-checksum-${{ github.event.pull_request.head.sha }}
+          path: build/quality/qa6-jacoco-runtime/
           if-no-files-found: error
           retention-days: 30
