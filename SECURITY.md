@@ -1,3 +1,5 @@
+# Document status: CURRENT
+
 # Security Policy
 
 ## Project status
@@ -18,16 +20,14 @@ A useful initial report identifies:
 
 - the exact commit SHA;
 - the affected component or workflow;
-- the observed security boundary;
-- the minimum non-sensitive reproduction description;
-- whether credentials, identity, memory, continuity, Body, Guardian, Seed, Genesis, or signing material may be involved.
+- the observed impact;
+- reproduction conditions that do not expose secrets or sensitive data;
+- whether the issue is present in the debug, release, CI, or tooling surface.
 
-## Handling rules
+Do not claim a vulnerability is fixed until the relevant validation is reproducible on an exact commit.
 
-Security reports are triaged by severity, confidence, reproducibility, affected surface, and evidence. A report is not considered closed until the fix is executed, verified on an exact commit, and its residual risk is recorded.
+## Supply-chain policy
 
-No report authorizes release, Body mutation, Guardian mutation, Seed import, Genesis execution, activation, operational birth, branch deletion, or merge. Those operations require separate explicit authorization.
+The repository treats dependency versions, resolved artifacts, APK contents, known-vulnerability results, license metadata, and CI action pins as auditable supply-chain evidence. Missing or incomplete evidence is not equivalent to a clean result.
 
-## Disclosure
-
-Coordinated disclosure timing is decided case by case after the affected boundary is contained and evidence is preserved. No fixed disclosure deadline is promised at the current pre-alpha stage.
+Dependency or workflow updates must preserve the repository's fail-closed security boundaries. A dependency scan is evidence about the scanned graph only; it does not constitute a statement that Morimil is production-ready or operationally born.
