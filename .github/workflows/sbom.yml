@@ -47,7 +47,8 @@ jobs:
           PYTHONPATH=tools/quality python3 -m unittest \
             tools.quality.test_qa6_supply_chain_report_v1 \
             tools.quality.test_qa6_supply_chain_scope_v1 \
-            tools.quality.test_qa6_locking_boundary_v1
+            tools.quality.test_qa6_locking_boundary_v1 \
+            tools.quality.test_qa6_jacoco_runtime_verification_overlay_v1
 
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
@@ -59,7 +60,9 @@ jobs:
           test "$(sha256sum gradle/verification-metadata.xml | cut -d' ' -f1)" = "7b5ac701da2cc62cff7ea430672d25c94c187c4c0e00c7f3ad8c0c8f9b1bdb79"
           grep -F 'lockMode = LockMode.STRICT' build.gradle.kts
           grep -F '<component group="org.pitest" name="pitest" version="1.22.1">' gradle/verification-metadata.xml
-          python3 -m unittest tools.quality.test_qa6_locking_boundary_v1
+          python3 -m unittest \
+            tools.quality.test_qa6_locking_boundary_v1 \
+            tools.quality.test_qa6_jacoco_runtime_verification_overlay_v1
 
       - name: Prove strict locks, verification, resolved inventory, and debug APK
         run: |
