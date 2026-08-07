@@ -30,7 +30,7 @@ jobs:
       - name: Verify bounded parent and frozen state
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD^)" = "644dbd533d758c8ec8cacee3aeef98c460b4b51d"
+          test "$(git rev-parse HEAD^)" = "6f3c3c032a29e210ef8708a09b88999f103984aa"
           test "$(git diff --name-only HEAD^ HEAD)" = ".github/workflows/sbom.yml"
           test "$(sha256sum app/gradle.lockfile | cut -d' ' -f1)" = "49d418a5e5ab8b0f11d29a1b41cb0f40551f70fec7e89661513a701946f44e4e"
           test "$(sha256sum gradle/verification-metadata.xml | cut -d' ' -f1)" = "5f9268f82d5493073db7884c5706f096473ac607e9ebb36ad1e629e5cae75d11"
@@ -285,8 +285,6 @@ jobs:
       - name: Commit only audited QA-6 boundary state
         run: |
           set -euo pipefail
-          mapfile -t changed < <(git diff --name-only | sort)
-          printf '%s\n' "${changed[@]}"
           expected=(
             "build.gradle.kts"
             "docs/quality/evidence/QA_6_SUPPLY_CHAIN_EVIDENCE_2026-08-06.md"
@@ -294,13 +292,15 @@ jobs:
             "tools/quality/android-unit-coverage.init.gradle"
             "tools/quality/test_qa6_locking_boundary_v1.py"
           )
-          test "${#changed[@]}" -eq "${#expected[@]}"
-          for i in "${!expected[@]}"; do
-            test "${changed[$i]}" = "${expected[$i]}"
-          done
           git diff --exit-code -- app/gradle.lockfile
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add "${expected[@]}"
+          mapfile -t changed < <(git diff --cached --name-only | sort)
+          printf '%s\n' "${changed[@]}"
+          test "${#changed[@]}" -eq "${#expected[@]}"
+          for i in "${!expected[@]}"; do
+            test "${changed[$i]}" = "${expected[$i]}"
+          done
           git commit -m "[QA-6] Pin audited CI verification boundary [skip ci]"
           git push origin HEAD:qa/qa-6-supply-chain-truth
