@@ -154,12 +154,35 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p build/quality
+
+          canonical_metadata_sha="7b5ac701da2cc62cff7ea430672d25c94c187c4c0e00c7f3ad8c0c8f9b1bdb79"
+          effective_metadata_sha="5117d79d5feb0edff805f4b65d6440577f476662586ee42c7fd297eab7368b6d"
+          canonical_lock_sha="49d418a5e5ab8b0f11d29a1b41cb0f40551f70fec7e89661513a701946f44e4e"
+          metadata_backup="$(mktemp)"
+          cp gradle/verification-metadata.xml "$metadata_backup"
+
+          restore_verification_metadata() {
+            cp "$metadata_backup" gradle/verification-metadata.xml
+            rm -f "$metadata_backup"
+          }
+          trap restore_verification_metadata EXIT
+
+          test "$(sha256sum gradle/verification-metadata.xml | cut -d' ' -f1)" = "$canonical_metadata_sha"
+          test "$(sha256sum app/gradle.lockfile | cut -d' ' -f1)" = "$canonical_lock_sha"
+          python3 -m unittest tools.quality.test_qa6_jacoco_runtime_verification_overlay_v1
+          python3 tools/quality/qa6_jacoco_runtime_verification_overlay_v1.py apply \
+            --metadata gradle/verification-metadata.xml \
+            | tee build/quality/qa6-jacoco-runtime-overlay.log
+          test "$(sha256sum gradle/verification-metadata.xml | cut -d' ' -f1)" = "$effective_metadata_sha"
+          test "$(sha256sum app/gradle.lockfile | cut -d' ' -f1)" = "$canonical_lock_sha"
+
           rm -rf \
             app/build/intermediates/managed_device_code_coverage \
             app/build/outputs/managed_device_code_coverage \
             app/build/reports/coverage/androidTest/debug/managedDevice
 
-          ./gradlew --no-daemon --stacktrace --console=plain --max-workers=1 \
+          ./gradlew --dependency-verification=strict \
+            --no-daemon --stacktrace --console=plain --max-workers=1 \
             --init-script tools/quality/android-instrumented-coverage.init.gradle \
             -Pandroid.testoptions.manageddevices.emulator.gpu=swiftshader_indirect \
             :app:pixel2Api30DebugAndroidTest > canonical-api30-coverage.log 2>&1
@@ -181,7 +204,8 @@ jobs:
           provenance_log="${provenance_logs[0]}"
           test -s "$provenance_log"
 
-          ./gradlew --no-daemon --stacktrace --console=plain \
+          ./gradlew --dependency-verification=strict \
+            --no-daemon --stacktrace --console=plain \
             --init-script tools/quality/android-instrumented-coverage.init.gradle \
             :app:tasks --all > instrumented-coverage-tasks.log 2>&1
 
@@ -197,7 +221,8 @@ jobs:
             qualified_task=":app:$coverage_task"
           fi
 
-          ./gradlew --no-daemon --stacktrace --console=plain --max-workers=1 \
+          ./gradlew --dependency-verification=strict \
+            --no-daemon --stacktrace --console=plain --max-workers=1 \
             --init-script tools/quality/android-instrumented-coverage.init.gradle \
             -Pandroid.testoptions.manageddevices.emulator.gpu=swiftshader_indirect \
             -x :app:pixel2Api35DebugAndroidTest \
@@ -224,6 +249,12 @@ jobs:
           test -s build/quality/android-instrumented-coverage.md
           python3 -m json.tool build/quality/android-instrumented-coverage.json > /dev/null
 
+          restore_verification_metadata
+          trap - EXIT
+          test "$(sha256sum gradle/verification-metadata.xml | cut -d' ' -f1)" = "$canonical_metadata_sha"
+          test "$(sha256sum app/gradle.lockfile | cut -d' ' -f1)" = "$canonical_lock_sha"
+          git diff --exit-code -- gradle/verification-metadata.xml app/gradle.lockfile
+
       - name: Upload diagnostic reports
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
@@ -242,6 +273,7 @@ jobs:
             sdk-licenses.log
             sdk-install.log
             emulator-version.log
+            build/quality/qa6-jacoco-runtime-overlay.log
             build/quality/android-instrumented-coverage-task.txt
             build/quality/android-instrumented-coverage.json
             build/quality/android-instrumented-coverage.md
