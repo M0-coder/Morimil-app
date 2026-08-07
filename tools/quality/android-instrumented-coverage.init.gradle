@@ -1,10 +1,10 @@
 gradle.beforeProject { project ->
     if (project.path == ":app") {
         project.configurations.configureEach { configuration ->
-            // Enabling AndroidTest coverage injects the JaCoCo agent into the app's
-            // debug runtime classpath. That coverage-only graph is not the normal
-            // application runtime lock surface; checksum verification remains strict.
-            if (configuration.name == "debugRuntimeClasspath") {
+            // Enabling AndroidTest coverage injects JaCoCo into build-time-only
+            // configurations that are not part of the normal application runtime
+            // lock surface. Dependency checksum verification remains strict.
+            if (configuration.name in ["debugRuntimeClasspath", "androidJacocoAnt"]) {
                 configuration.resolutionStrategy.deactivateDependencyLocking()
             }
         }
