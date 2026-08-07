@@ -36,8 +36,11 @@ remains strict, so new or changed artifacts still require audited SHA-256
 metadata. Production and release classpaths remain under `LockMode.STRICT`.
 
 JaCoCo configurations `jacocoAgent`, `jacocoAnt`, and `androidJacocoAnt` are
-build-time coverage tooling and are likewise excluded from dependency locking
-while remaining under strict dependency verification.
+build-time coverage tooling and are excluded from dependency locking by the
+unit-coverage init script while remaining under strict dependency verification.
+The instrumented-coverage init script has a separate exact boundary for
+`debugRuntimeClasspath` and `androidJacocoAnt`, active only while AndroidTest
+coverage is enabled.
 
 ## Strict SBOM evidence already demonstrated
 
@@ -68,10 +71,11 @@ adjudication. This statement does not promote the application to production.
 ```text
 DEPENDENCY_LOCKING_PRODUCTION_RELEASE=STRICT_REQUIRED
 DEBUG_ANDROIDTEST_RUNTIME_LOCK_EXCEPTION=EXACTLY_ONE_REQUIRED
-JACOCO_LOCK_EXCEPTIONS=EXACTLY_THREE_REQUIRED
-INSTRUMENTED_COVERAGE_DEBUG_RUNTIME_EXCEPTION=INIT_SCRIPT_ONLY_REQUIRED
+UNIT_COVERAGE_JACOCO_LOCK_EXCEPTIONS=EXACTLY_THREE_REQUIRED
+INSTRUMENTED_COVERAGE_LOCK_EXCEPTIONS=EXACTLY_DEBUG_RUNTIME_AND_ANDROID_JACOCO_ANT_REQUIRED
+INSTRUMENTED_COVERAGE_JACOCO_RUNTIME_SHA256_OVERLAY=EXACTLY_ONE_REQUIRED
 GRADLE_DEPENDENCY_VERIFICATION=STRICT_REQUIRED
-VERIFICATION_METADATA_DRIFT=0_REQUIRED
+VERIFICATION_METADATA_DRIFT_OUTSIDE_COVERAGE_STEP=0_REQUIRED
 LOCKFILE_DRIFT=0_REQUIRED
 RESOLVED_GRAPH_INVENTORY=PASS_REQUIRED
 APK_COMPONENT_INVENTORY=PASS_REQUIRED
@@ -132,10 +136,12 @@ exists only while `tools/quality/android-instrumented-coverage.init.gradle` is
 loaded; it is not the normal debug application runtime graph.
 
 The bounded correction therefore deactivates dependency locking for
-`debugRuntimeClasspath` only from that coverage init script. The repository's
-normal `debugRuntimeClasspath`, all release classpaths, and production/release
-resolution remain governed by `LockMode.STRICT`. JaCoCo artifacts remain under
-strict Gradle dependency verification using the audited SHA-256 metadata.
+`debugRuntimeClasspath` only from that coverage init script. A subsequent
+exact-head run demonstrated that AGP also resolves the ephemeral
+`androidJacocoAnt` configuration in the same coverage path, so that
+configuration is included in the same init-script-only boundary. The
+repository's normal `debugRuntimeClasspath`, all release classpaths, and
+production/release resolution remain governed by `LockMode.STRICT`.
 
 ```text
 GENESIS_DIAGNOSTIC_RUN_ID=31196069751
@@ -148,3 +154,48 @@ NORMAL_DEBUG_RUNTIME_LOCKING=UNCHANGED_STRICT
 INSTRUMENTED_COVERAGE_EXCEPTION=INIT_SCRIPT_SCOPED
 DEPENDENCY_VERIFICATION_FOR_JACOCO=STRICT
 ```
+
+## Instrumented JaCoCo runtime checksum adjudication — 2026-08-07
+
+After the locking boundary was corrected, Genesis run `31205493973` passed
+unit tests, lint, APK assembly, release-signing validation, the ephemeral signed
+release, and the normal API 30/API 35 managed-device suites. The canonical API
+30 coverage step then reached strict dependency verification and identified one
+new coverage-only classifier:
+`org.jacoco:org.jacoco.agent:0.8.11:org.jacoco.agent-0.8.11-runtime.jar`.
+
+A temporary CI-only probe on exact head
+`3ddf951bc32aea375b492470cd99a2f1dfaaa572` downloaded that classifier directly
+from Maven Central, required the exact 300661-byte size, downloaded the
+publisher-side `.sha1`, verified that SHA-1 against the downloaded bytes, and
+then computed SHA-256 from those same verified bytes. The probe passed in SBOM
+run `31208985743` and printed the same SHA-256 twice through independent test
+invocations.
+
+```text
+CHECKSUM_PROBE_HEAD=3ddf951bc32aea375b492470cd99a2f1dfaaa572
+CHECKSUM_PROBE_SBOM_RUN_ID=31208985743
+CHECKSUM_PROBE_SBOM_ARTIFACT_ID=9006018950
+CHECKSUM_PROBE_SBOM_ARTIFACT_SHA256=546e0bbeab6a669f936990c59be1353ec7f957290994cd4b85f55d543059ce2b
+CHECKSUM_PROBE_SBOM_ARTIFACT_DIGEST_RECOMPUTED_LOCALLY=MATCH
+JACOCO_RUNTIME_SIZE_BYTES=300661
+MAVEN_CENTRAL_PUBLISHED_SHA1_MATCH=TRUE
+JACOCO_RUNTIME_SHA256=47257ae9f22b93817eea11bc1b1fd31fc8e23049ad5dd483bfde603eaa624d0b
+CANONICAL_VERIFICATION_METADATA_SHA256=7b5ac701da2cc62cff7ea430672d25c94c187c4c0e00c7f3ad8c0c8f9b1bdb79
+COVERAGE_EFFECTIVE_VERIFICATION_METADATA_SHA256=5117d79d5feb0edff805f4b65d6440577f476662586ee42c7fd297eab7368b6d
+COVERAGE_VERIFICATION_ARTIFACTS_ADDED=1
+COVERAGE_VERIFICATION_ARTIFACTS_REMOVED=0
+COVERAGE_EXISTING_CHECKSUMS_CHANGED=0
+APP_GRADLE_LOCKFILE_SHA256=49d418a5e5ab8b0f11d29a1b41cb0f40551f70fec7e89661513a701946f44e4e
+APP_GRADLE_LOCKFILE_DRIFT=0
+```
+
+`tools/quality/qa6_jacoco_runtime_verification_overlay_v1.py` versions that one
+checksum as a deterministic coverage-only verification overlay. It refuses any
+canonical metadata other than the audited `7b5ac701...` base, refuses any delta
+other than the single JaCoCo runtime classifier, requires the complete effective
+metadata hash `5117d79d...`, and changes no existing checksum. The Genesis
+coverage step must restore the canonical XML after the coverage-only Gradle
+invocations and prove zero repository drift. Dependency verification stays
+`STRICT`; the overlay is not a trust bypass and does not add another dependency
+locking exception.
