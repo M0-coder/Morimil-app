@@ -1,0 +1,68 @@
+{
+  "androidAuthored": {
+    "counters": {
+      "BRANCH": {"covered": 4295, "total": 17510},
+      "INSTRUCTION": {"covered": 73709, "total": 227336},
+      "LINE": {"covered": 11813, "total": 28200}
+    },
+    "maxZeroLineCoverageSources": 117
+  },
+  "baseMainSha": "826c85553d4561d777f05c1e2f6897fbf6bf8ab5",
+  "instrumented": {
+    "counters": {
+      "BRANCH": {"covered": 1926, "total": 18312},
+      "INSTRUCTION": {"covered": 56072, "total": 260776},
+      "LINE": {"covered": 10245, "total": 36415}
+    },
+    "maxZeroLineCoverageSources": 211
+  },
+  "kotlinWarnings": {
+    "fingerprints": [
+      {"count": 3, "fingerprint": "file|app/src/main/java/com/morimil/app/ai/OkHttpReasoningConnection.kt|Unnecessary safe call on a non-null receiver of type 'ResponseBody'."},
+      {"count": 1, "fingerprint": "file|app/src/main/java/com/morimil/app/core/memory/MemoryGraphExplorer.kt|Unnecessary safe call on a non-null receiver of type 'String'."},
+      {"count": 1, "fingerprint": "file|app/src/main/java/com/morimil/app/reasoning/ReasoningKernel.kt|'fun resetDisabled(): Unit' is deprecated. Use resetUnverified."},
+      {"count": 1, "fingerprint": "file|app/src/main/java/com/morimil/app/ui/MorimilCanvasScreen.kt|'fun setAllowFileAccessFromFileURLs(p0: Boolean): Unit' is deprecated. Deprecated in Java."},
+      {"count": 1, "fingerprint": "file|app/src/main/java/com/morimil/app/ui/MorimilCanvasScreen.kt|'fun setAllowUniversalAccessFromFileURLs(p0: Boolean): Unit' is deprecated. Deprecated in Java."},
+      {"count": 1, "fingerprint": "file|app/src/main/java/com/morimil/app/ui/MorimilChatCoordinator.kt|Elvis operator (?:) always returns the left operand of non-nullable type 'String'."},
+      {"count": 1, "fingerprint": "file|app/src/main/java/com/morimil/app/ui/NativeBrowserScreen.kt|'fun setAllowFileAccessFromFileURLs(p0: Boolean): Unit' is deprecated. Deprecated in Java."},
+      {"count": 1, "fingerprint": "file|app/src/main/java/com/morimil/app/ui/NativeBrowserScreen.kt|'fun setAllowUniversalAccessFromFileURLs(p0: Boolean): Unit' is deprecated. Deprecated in Java."},
+      {"count": 1, "fingerprint": "file|app/src/test/java/com/morimil/app/reasoning/HybridAuthorityRuntimeIntegrationV0Test.kt|Unnecessary safe call on a non-null receiver of type 'HybridAuthorityDecision'."},
+      {"count": 1, "fingerprint": "file|app/src/test/java/com/morimil/app/reasoning/IntrinsicTriMotorResearchRuntimeV0Test.kt|Unnecessary safe call on a non-null receiver of type 'HybridAuthorityDecision'."}
+    ],
+    "maxTotal": 12
+  },
+  "lint": {
+    "maxErrors": 0,
+    "maxWarnings": 23,
+    "warningFingerprints": [
+      {"count": 1, "fingerprint": "DataExtractionRules|app/src/main/AndroidManifest.xml|The attribute `android:allowBackup` is deprecated from Android 12 and higher and may be removed in future versions. Consider adding the attribute `android:dataExtractionRules` specifying an `@xml` resource which configures cloud backups and device transfers on Android 12 and higher."},
+      {"count": 1, "fingerprint": "GradleDependency|app/build.gradle.kts|androidx.activity:activity-compose"},
+      {"count": 1, "fingerprint": "GradleDependency|app/build.gradle.kts|androidx.core:core-ktx"},
+      {"count": 1, "fingerprint": "GradleDependency|app/build.gradle.kts|androidx.lifecycle:lifecycle-runtime-compose"},
+      {"count": 1, "fingerprint": "GradleDependency|app/build.gradle.kts|androidx.lifecycle:lifecycle-viewmodel-compose"},
+      {"count": 1, "fingerprint": "GradleDependency|app/build.gradle.kts|androidx.room:room-compiler"},
+      {"count": 1, "fingerprint": "GradleDependency|app/build.gradle.kts|androidx.room:room-ktx"},
+      {"count": 1, "fingerprint": "GradleDependency|app/build.gradle.kts|androidx.room:room-runtime"},
+      {"count": 1, "fingerprint": "GradleDependency|app/build.gradle.kts|androidx.room:room-testing"},
+      {"count": 1, "fingerprint": "GradleDependency|app/build.gradle.kts|androidx.sqlite:sqlite"},
+      {"count": 1, "fingerprint": "GradleDependency|app/build.gradle.kts|androidx.test.ext:junit"},
+      {"count": 1, "fingerprint": "GradleDependency|app/build.gradle.kts|androidx.test:core"},
+      {"count": 1, "fingerprint": "GradleDependency|app/build.gradle.kts|androidx.test:runner"},
+      {"count": 1, "fingerprint": "GradleDependency|app/build.gradle.kts|androidx.work:work-runtime-ktx"},
+      {"count": 1, "fingerprint": "GradleDependency|app/build.gradle.kts|androidx.work:work-testing"},
+      {"count": 1, "fingerprint": "GradleDependency|app/build.gradle.kts|com.google.ai.edge.litertlm:litertlm-android"},
+      {"count": 1, "fingerprint": "InsecureBaseConfiguration|app/src/debug/res/xml/network_security_config.xml|Insecure Base Configuration"},
+      {"count": 1, "fingerprint": "MonochromeLauncherIcon|app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml|The application adaptive icon is missing a monochrome tag"},
+      {"count": 1, "fingerprint": "MonochromeLauncherIcon|app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml|The application adaptive roundIcon is missing a monochrome tag"},
+      {"count": 1, "fingerprint": "ObsoleteSdkInt|app/src/main/java/com/morimil/app/runtime/RestCycleNotifier.kt|Unnecessary; SDK_INT is never < 26"},
+      {"count": 1, "fingerprint": "ObsoleteSdkInt|app/src/main/res/mipmap-anydpi-v26|This folder configuration (`v26`) is unnecessary; `minSdkVersion` is 26. Merge all the resources in this folder into `mipmap-anydpi`."},
+      {"count": 1, "fingerprint": "OldTargetApi|app/build.gradle.kts|Not targeting the latest versions of Android; compatibility modes apply. Consider testing and updating this version. Consult the `android.os.Build.VERSION_CODES` javadoc for details."},
+      {"count": 1, "fingerprint": "RequiresFeature|app/src/main/java/com/morimil/app/canvas/MorimilCanvasRuntime.kt|`addWebMessageListener` should only be called if the feature `WEB_MESSAGE_LISTENER` is present; to check call `androidx.webkit.WebViewFeature#isFeatureSupported`"}
+    ]
+  },
+  "python": {
+    "branches": {"covered": 819, "total": 1538},
+    "statements": {"covered": 2485, "total": 3960}
+  },
+  "schema": "morimil.qa7.quality_ratchet_baseline.v1"
+}

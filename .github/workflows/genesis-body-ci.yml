@@ -249,6 +249,12 @@ jobs:
           test -s build/quality/android-instrumented-coverage.md
           python3 -m json.tool build/quality/android-instrumented-coverage.json > /dev/null
 
+          python3 tools/quality/qa7_quality_ratchet_v1.py instrumented \
+            --baseline tools/quality/qa7_quality_ratchet_baseline.json \
+            --instrumented build/quality/android-instrumented-coverage.json \
+            --output build/quality/qa7-instrumented-quality-ratchet.json
+          python3 -m json.tool build/quality/qa7-instrumented-quality-ratchet.json > /dev/null
+
           restore_verification_metadata
           trap - EXIT
           test "$(sha256sum gradle/verification-metadata.xml | cut -d' ' -f1)" = "$canonical_metadata_sha"
@@ -277,6 +283,7 @@ jobs:
             build/quality/android-instrumented-coverage-task.txt
             build/quality/android-instrumented-coverage.json
             build/quality/android-instrumented-coverage.md
+            build/quality/qa7-instrumented-quality-ratchet.json
             app/schemas/**
             app/build/reports/**
             app/build/test-results/**
