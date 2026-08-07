@@ -7,7 +7,7 @@
 - Base: `main@826c85553d4561d777f05c1e2f6897fbf6bf8ab5`
 - Base commit: `[QA-6] Establish resolved supply-chain truth (#168)`
 - QA-7 branch: `qa/qa-7-quality-ratchets`
-- Production source modified by baseline/tooling commits: `FALSE`
+- Production source modified by QA-7: `FALSE`
 
 ## JVM/Python baseline provenance
 
@@ -83,8 +83,46 @@ QA7_QUALITY_RATCHET_INSTRUMENTED=PASS
 
 The unit contract contains explicit tests for equality, improvement, coverage regression, zero-coverage growth, new Kotlin warning fingerprints, lint errors, new lint fingerprints, GradleDependency remote-version normalization, malformed GradleDependency messages, instrumented regression, and schema fail-closed behavior.
 
+## First QA-7 exact-head CI proof
+
+Candidate head: `5fc67a40a8387df3c8303612ed5f2bbce820bcce`.
+
+All five pull-request workflows completed successfully on that same head:
+
+- Android CI: run `31220359325`, run number `638`, `success`
+- SBOM: run `31220359230`, run number `349`, `success`
+- CodeQL: run `31220359204`, run number `351`, `success`
+- Reference Checks: run `31220359221`, run number `462`, `success`
+- Genesis Body Preparation: run `31220359263`, run number `632`, `success`
+
+Android CI QA-7 artifact:
+
+- artifact ID: `9010281741`
+- published digest: `sha256:8ea9e75da241fcc782911e89f2d3307a2e99bb5fc8b32cb73dc62381919c3cd4`
+- independently recomputed ZIP digest: `8ea9e75da241fcc782911e89f2d3307a2e99bb5fc8b32cb73dc62381919c3cd4`
+- digest match: `TRUE`
+- JVM ratchet: `PASS`
+- authored Android counters: unchanged at the baseline
+- authored zero-line files: `117`
+- Kotlin warnings: `12`, new/increased fingerprints: `0`
+- Lint: `0` errors, `23` warnings, `2` information, new/increased warning fingerprints: `0`
+- Python statements: `2661/4203 = 63.3119200571%` (improved)
+- Python branches: `890/1644 = 54.1362530414%` (improved)
+
+Genesis QA-7 artifact:
+
+- artifact ID: `9010520249`
+- published digest: `sha256:98fa981f54b3afb29c8d86e1a8e06c9b8c060fd961cca25f6b9208688c3f1796`
+- independently recomputed ZIP digest: `98fa981f54b3afb29c8d86e1a8e06c9b8c060fd961cca25f6b9208688c3f1796`
+- digest match: `TRUE`
+- instrumented ratchet: `PASS`
+- lines: `10245/36415`
+- branches: `1926/18312`
+- instructions: `56072/260776`
+- zero-line-coverage source files: `211`
+
+This evidence update is intentionally the last repository mutation in QA-7 implementation. Because it creates a new head, QA-7 is not considered `CI_PR_VERDE` until all five workflows reproduce green on that final head. The final head SHA and workflow results are authoritative in GitHub/PR state rather than recursively editing this evidence file again.
+
 ## Boundary
 
 This evidence establishes a non-regression floor only. It does not claim production readiness, complete coverage, complete static-analysis remediation, Body succession, activation, or operational birth.
-
-Final exact-head QA-7 CI run IDs and artifact digests remain `PENDING` until the draft PR executes.
