@@ -13,11 +13,11 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  complete-ci-lock-state:
-    name: Generate bounded CI lock completion evidence
+  complete-androidtest-lock-state:
+    name: Generate targeted AndroidTest lock evidence
     if: github.event.pull_request.number == 168 && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 30
 
     steps:
       - name: Checkout exact PR head
@@ -29,111 +29,59 @@ jobs:
       - name: Verify bounded parent and toolchain
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD^)" = "1b0158a5bcd9b315a4c7681f2456be357d41b5c1"
+          test "$(git rev-parse HEAD^)" = "39085c8256287849619faf233ce23aae1d436557"
           test "$(git diff --name-only HEAD^ HEAD)" = ".github/workflows/sbom.yml"
           test -x "${JAVA_HOME_17_X64}/bin/java"
           echo "JAVA_HOME=${JAVA_HOME_17_X64}" >> "${GITHUB_ENV}"
           echo "${JAVA_HOME_17_X64}/bin" >> "${GITHUB_PATH}"
           "${JAVA_HOME_17_X64}/bin/java" -version
           test "$(sha256sum app/gradle.lockfile | cut -d' ' -f1)" = "49d418a5e5ab8b0f11d29a1b41cb0f40551f70fec7e89661513a701946f44e4e"
-          test "$(sha256sum gradle/verification-metadata.xml | cut -d' ' -f1)" = "5f9268f82d5493073db7884c5706f096473ac607e9ebb36ad1e629e5cae75d11"
-          grep -Fx '# Document status: CURRENT' SECURITY.md
-          grep -F 'deactivateDependencyLocking()' tools/quality/android-unit-coverage.init.gradle
 
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
 
-      - name: Preserve audited before-state and create JaCoCo resolver
+      - name: Preserve before-state
         run: |
-          set -euo pipefail
-          mkdir -p build/quality/qa6-ci-lock
-          cp app/gradle.lockfile build/quality/qa6-ci-lock/gradle.lockfile.before
-          cp gradle/verification-metadata.xml build/quality/qa6-ci-lock/verification-metadata.before.xml
-          cat > build/quality/qa6-ci-lock/resolve-jacoco.init.gradle <<'EOF'
-          gradle.projectsEvaluated {
-              def root = gradle.rootProject
-              root.tasks.register("qa6ResolveJacocoArtifacts") {
-                  group = "verification"
-                  description = "Resolves ephemeral JaCoCo artifacts without placing them in dependency lock state."
-                  doLast {
-                      def app = root.project(":app")
-                      ["jacocoAgent", "jacocoAnt"].each { name ->
-                          def configuration = app.configurations.findByName(name)
-                          if (configuration == null || !configuration.canBeResolved) {
-                              throw new GradleException("QA-6 missing resolvable JaCoCo configuration: ${name}")
-                          }
-                          def files = configuration.files.toList().sort { a, b -> a.name <=> b.name }
-                          println("QA6_RESOLVED_CONFIGURATION=${name};FILES=${files.size()}")
-                          files.each { file ->
-                              if (!file.isFile()) {
-                                  throw new GradleException("QA-6 resolved non-file artifact: ${file}")
-                              }
-                              file.length()
-                          }
-                      }
-                  }
-              }
-          }
-          EOF
+          mkdir -p build/quality/qa6-androidtest-lock
+          cp app/gradle.lockfile build/quality/qa6-androidtest-lock/gradle.lockfile.before
 
-      - name: Generate lock and verification state through real Android tasks
+      - name: Generate target lock state using Gradle dependency report
         id: generate
         run: |
           set +e
           ./gradlew \
             --dependency-verification=lenient \
             --write-locks \
-            --write-verification-metadata sha256 \
-            --init-script tools/quality/android-unit-coverage.init.gradle \
-            --init-script build/quality/qa6-ci-lock/resolve-jacoco.init.gradle \
             --no-daemon \
             --stacktrace \
             --console=plain \
-            :qa6ResolveJacocoArtifacts \
-            :app:lintDebug \
-            :app:assembleDebugAndroidTest \
-            :app:assembleDebug
+            :app:dependencies \
+            --configuration debugAndroidTestRuntimeClasspath
           status=$?
           set -e
-          cp app/gradle.lockfile build/quality/qa6-ci-lock/gradle.lockfile.after
-          cp gradle/verification-metadata.xml build/quality/qa6-ci-lock/verification-metadata.after.xml
+          cp app/gradle.lockfile build/quality/qa6-androidtest-lock/gradle.lockfile.after
           sha256sum \
-            build/quality/qa6-ci-lock/gradle.lockfile.before \
-            build/quality/qa6-ci-lock/gradle.lockfile.after \
-            build/quality/qa6-ci-lock/verification-metadata.before.xml \
-            build/quality/qa6-ci-lock/verification-metadata.after.xml \
-            > build/quality/qa6-ci-lock/sha256sums.txt
-          git diff -- app/gradle.lockfile > build/quality/qa6-ci-lock/gradle-lockfile.diff
-          git diff -- gradle/verification-metadata.xml > build/quality/qa6-ci-lock/verification-metadata.diff
-          printf 'GRADLE_GENERATION_EXIT=%s\n' "$status" | tee build/quality/qa6-ci-lock/generation-status.txt
+            build/quality/qa6-androidtest-lock/gradle.lockfile.before \
+            build/quality/qa6-androidtest-lock/gradle.lockfile.after \
+            > build/quality/qa6-androidtest-lock/sha256sums.txt
+          git diff -- app/gradle.lockfile > build/quality/qa6-androidtest-lock/gradle-lockfile.diff
+          printf 'GRADLE_GENERATION_EXIT=%s\n' "$status" | tee build/quality/qa6-androidtest-lock/generation-status.txt
           exit "$status"
 
-      - name: Validate bounded generated state
+      - name: Validate targeted lock result
         if: steps.generate.outcome == 'success'
         run: |
           set -euo pipefail
-          kotlin_line="$(grep '^org.jetbrains.kotlin:kotlin-stdlib-common:2.3.10=' app/gradle.lockfile)"
-          printf '%s\n' "$kotlin_line"
-          printf '%s\n' "$kotlin_line" | grep -F 'debugAndroidTestRuntimeClasspath'
-          if grep -E '(^|[,=])jacoco(Agent|Ant)(,|$)' app/gradle.lockfile; then
-            echo 'Ephemeral JaCoCo configuration leaked into dependency lock state' >&2
-            exit 1
-          fi
-          grep -F '<component group="org.jacoco"' gradle/verification-metadata.xml
-          grep -F '<component group="org.ow2.asm" name="asm-bom" version="9.6">' gradle/verification-metadata.xml
-          mapfile -t changed < <(git diff --name-only | sort)
-          printf 'TRACKED_GENERATED_CHANGES=%s\n' "${changed[*]}"
-          expected=("app/gradle.lockfile" "gradle/verification-metadata.xml")
-          test "${#changed[@]}" -eq "${#expected[@]}"
-          for i in "${!expected[@]}"; do
-            test "${changed[$i]}" = "${expected[$i]}"
-          done
+          line="$(grep '^org.jetbrains.kotlin:kotlin-stdlib-common:2.3.10=' app/gradle.lockfile)"
+          printf '%s\n' "$line"
+          printf '%s\n' "$line" | grep -F 'debugAndroidTestRuntimeClasspath'
+          test "$(git diff --name-only)" = "app/gradle.lockfile"
 
-      - name: Upload bounded CI lock-completion evidence
+      - name: Upload targeted AndroidTest lock evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: morimil-qa6-ci-lock-completion-${{ github.event.pull_request.head.sha }}
-          path: build/quality/qa6-ci-lock/
+          name: morimil-qa6-androidtest-lock-${{ github.event.pull_request.head.sha }}
+          path: build/quality/qa6-androidtest-lock/
           if-no-files-found: error
           retention-days: 30
