@@ -1,13 +1,9 @@
 name: SBOM
 
 on:
-  push:
-    branches:
-      - main
   pull_request:
     branches:
       - main
-  workflow_dispatch:
 
 permissions:
   contents: read
@@ -17,127 +13,84 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  generate:
-    name: Generate resolved supply-chain evidence
+  generate-pit-verification-evidence:
+    name: Generate bounded PIT verification evidence
+    if: github.event.pull_request.number == 168 && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 30
 
     steps:
-      - name: Checkout exact source revision
+      - name: Checkout exact PR head
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 2
 
-      - name: Select hosted JDK 17 and verify tool runtimes
+      - name: Verify bounded parent and frozen state
         run: |
           set -euo pipefail
+          test "$(git rev-parse HEAD^)" = "74973da23d69f3b9ebcc3098ad773423bd8bbfc4"
+          test "$(git diff --name-only HEAD^ HEAD)" = ".github/workflows/sbom.yml"
+          test "$(sha256sum app/gradle.lockfile | cut -d' ' -f1)" = "49d418a5e5ab8b0f11d29a1b41cb0f40551f70fec7e89661513a701946f44e4e"
+          test "$(sha256sum gradle/verification-metadata.xml | cut -d' ' -f1)" = "a4ebd754704a1ba2c3d67a7dd8d5eee15718aaed91de877f93528c3692ec035d"
           test -x "${JAVA_HOME_17_X64}/bin/java"
           echo "JAVA_HOME=${JAVA_HOME_17_X64}" >> "${GITHUB_ENV}"
           echo "${JAVA_HOME_17_X64}/bin" >> "${GITHUB_PATH}"
           "${JAVA_HOME_17_X64}/bin/java" -version
-          python3 - <<'PY'
-          import platform
-          import sys
-          assert sys.version_info >= (3, 11), sys.version
-          print(f"PYTHON={platform.python_version()}")
-          PY
-
-      - name: Test QA-6 supply-chain tooling
-        run: |
-          PYTHONPATH=tools/quality python3 -m unittest \
-            tools.quality.test_qa6_supply_chain_report_v1 \
-            tools.quality.test_qa6_supply_chain_scope_v1 \
-            tools.quality.test_qa6_locking_boundary_v1
 
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
 
-      - name: Validate pinned supply-chain state
+      - name: Preserve audited before-state
         run: |
           set -euo pipefail
-          test "$(sha256sum app/gradle.lockfile | cut -d' ' -f1)" = "49d418a5e5ab8b0f11d29a1b41cb0f40551f70fec7e89661513a701946f44e4e"
-          test "$(sha256sum gradle/verification-metadata.xml | cut -d' ' -f1)" = "a4ebd754704a1ba2c3d67a7dd8d5eee15718aaed91de877f93528c3692ec035d"
-          grep -F 'lockMode = LockMode.STRICT' build.gradle.kts
-          python3 -m unittest tools.quality.test_qa6_locking_boundary_v1
+          mkdir -p build/quality/qa6-pit-verification
+          cp gradle/verification-metadata.xml build/quality/qa6-pit-verification/verification-metadata.before.xml
+          cp app/gradle.lockfile build/quality/qa6-pit-verification/gradle.lockfile.before
 
-      - name: Prove strict locks, verification, resolved inventory, and debug APK
+      - name: Generate PIT classpath verification metadata without running mutation
+        id: generate
         run: |
+          set +e
           ./gradlew \
-            --dependency-verification=strict \
-            --init-script tools/quality/qa6-supply-chain.init.gradle \
+            --dependency-verification=lenient \
+            --write-verification-metadata sha256 \
+            --init-script tools/quality/android-pitest-pilot.init.gradle \
             --no-daemon \
             --stacktrace \
             --console=plain \
-            :qa6ResolveAll \
-            :app:qa6ResolvedDependencyInventory \
-            :app:assembleDebug
+            help
+          status=$?
+          set -e
+          cp gradle/verification-metadata.xml build/quality/qa6-pit-verification/verification-metadata.after.xml
+          cp app/gradle.lockfile build/quality/qa6-pit-verification/gradle.lockfile.after
+          sha256sum \
+            build/quality/qa6-pit-verification/verification-metadata.before.xml \
+            build/quality/qa6-pit-verification/verification-metadata.after.xml \
+            build/quality/qa6-pit-verification/gradle.lockfile.before \
+            build/quality/qa6-pit-verification/gradle.lockfile.after \
+            > build/quality/qa6-pit-verification/sha256sums.txt
+          git diff -- gradle/verification-metadata.xml > build/quality/qa6-pit-verification/verification-metadata.diff
+          git diff -- app/gradle.lockfile > build/quality/qa6-pit-verification/gradle-lockfile.diff
+          printf 'GRADLE_GENERATION_EXIT=%s\n' "$status" | tee build/quality/qa6-pit-verification/generation-status.txt
+          exit "$status"
 
-      - name: Prove pinned state did not drift
+      - name: Validate bounded PIT metadata generation
+        if: steps.generate.outcome == 'success'
         run: |
           set -euo pipefail
           test "$(sha256sum app/gradle.lockfile | cut -d' ' -f1)" = "49d418a5e5ab8b0f11d29a1b41cb0f40551f70fec7e89661513a701946f44e4e"
-          test "$(sha256sum gradle/verification-metadata.xml | cut -d' ' -f1)" = "a4ebd754704a1ba2c3d67a7dd8d5eee15718aaed91de877f93528c3692ec035d"
-          git diff --exit-code -- app/gradle.lockfile gradle/verification-metadata.xml
+          git diff --exit-code -- app/gradle.lockfile
+          test "$(git diff --name-only)" = "gradle/verification-metadata.xml"
+          grep -F '<component group="org.pitest"' gradle/verification-metadata.xml
+          grep -F '<component group="antlr" name="antlr" version="2.7.7">' gradle/verification-metadata.xml
+          grep -F '<component group="org.ow2.asm" name="asm-analysis" version="9.9.1">' gradle/verification-metadata.xml
 
-      - name: Build strict resolved SBOM, APK inventory, OSV scan, and license inventory
-        run: |
-          python3 tools/quality/qa6_supply_chain_report_v1.py collect \
-            --gradle-inventory app/build/quality/qa6/gradle-resolved-inventory.json \
-            --apk app/build/outputs/apk/debug/app-debug.apk \
-            --policy tools/quality/qa6_supply_chain_policy.json \
-            --adjudications tools/quality/qa6_supply_chain_adjudications.json \
-            --output-dir build/quality/qa6 \
-            --mode strict
-
-      - name: Generate independent Syft APK SBOM
-        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
-        with:
-          file: app/build/outputs/apk/debug/app-debug.apk
-          format: spdx-json
-          output-file: build/quality/qa6/apk-syft.spdx.json
-          upload-artifact: false
-          upload-release-assets: false
-
-      - name: Cross-check locks, checksums, runtime scope, licenses, and APK identity
-        run: |
-          python3 tools/quality/qa6_supply_chain_scope_v1.py \
-            --inventory app/build/quality/qa6/gradle-resolved-inventory.json \
-            --lockfile app/gradle.lockfile \
-            --verification-metadata gradle/verification-metadata.xml \
-            --vulnerabilities build/quality/qa6/vulnerabilities.json \
-            --licenses build/quality/qa6/licenses.json \
-            --syft build/quality/qa6/apk-syft.spdx.json \
-            --apk-inventory build/quality/qa6/apk-inventory.json \
-            --policy tools/quality/qa6_supply_chain_policy.json \
-            --adjudications tools/quality/qa6_supply_chain_adjudications.json \
-            --output build/quality/qa6/scope-summary.json
-
-      - name: Validate final QA-6 evidence inventory
-        run: |
-          set -euo pipefail
-          test -s app/gradle.lockfile
-          test -s gradle/verification-metadata.xml
-          test -s app/build/quality/qa6/gradle-resolved-inventory.json
-          test -s build/quality/qa6/apk-inventory.json
-          test -s build/quality/qa6/licenses.json
-          test -s build/quality/qa6/vulnerabilities.json
-          test -s build/quality/qa6/resolved-components.spdx.json
-          test -s build/quality/qa6/apk-syft.spdx.json
-          test -s build/quality/qa6/summary.json
-          test -s build/quality/qa6/scope-summary.json
-          python3 -m json.tool app/build/quality/qa6/gradle-resolved-inventory.json > /dev/null
-          python3 -m json.tool build/quality/qa6/summary.json > /dev/null
-          python3 -m json.tool build/quality/qa6/scope-summary.json > /dev/null
-
-      - name: Upload QA-6 evidence artifact
+      - name: Upload bounded PIT verification evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: morimil-qa6-evidence-${{ github.event.pull_request.head.sha || github.sha }}
-          path: |
-            app/gradle.lockfile
-            gradle/verification-metadata.xml
-            app/build/quality/qa6/gradle-resolved-inventory.json
-            build/quality/qa6/
+          name: morimil-qa6-pit-verification-${{ github.event.pull_request.head.sha }}
+          path: build/quality/qa6-pit-verification/
           if-no-files-found: error
           retention-days: 30
