@@ -4,218 +4,205 @@ on:
   pull_request:
     branches:
       - main
+  push:
+    branches:
+      - main
 
 permissions:
-  actions: read
-  contents: write
+  contents: read
 
 jobs:
-  pin-jacoco-runtime:
-    name: Audit and pin instrumented JaCoCo runtime checksum
-    if: github.event.pull_request.number == 168 && github.event.pull_request.head.repo.full_name == github.repository
+  build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
 
     steps:
-      - name: Checkout exact PR head
+      - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up JDK
+        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4.8.0
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          fetch-depth: 2
+          distribution: temurin
+          java-version: '17'
 
-      - name: Verify bounded parent and frozen state
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+
+      - name: Test deliberative artifact certifier
+        run: python -m unittest discover -s tools/model-artifacts -p 'test_*.py'
+
+      - name: Validate frozen trimotor evidence
+        id: validate-frozen-trimotor-evidence
+        continue-on-error: true
         run: |
-          set -euo pipefail
-          test "$(git rev-parse HEAD^)" = "2db5c0316b46119a583c553c64eb37509d76512e"
-          test "$(git diff --name-only HEAD^ HEAD)" = ".github/workflows/android-ci.yml"
-          test "$(sha256sum app/gradle.lockfile | cut -d' ' -f1)" = "49d418a5e5ab8b0f11d29a1b41cb0f40551f70fec7e89661513a701946f44e4e"
-          test "$(sha256sum gradle/verification-metadata.xml | cut -d' ' -f1)" = "7b5ac701da2cc62cff7ea430672d25c94c187c4c0e00c7f3ad8c0c8f9b1bdb79"
-          python3 -m unittest tools.quality.test_qa6_locking_boundary_v1
+          set -o pipefail
+          {
+            python tools/benchmarks/validate_trimotor_v02_physical_benchmark_evidence_v1.py check
+            python tools/benchmarks/test_validate_trimotor_v02_physical_benchmark_evidence_v1.py
+            python tools/benchmarks/validate_trimotor_v02_physical_benchmark_evidence_v2.py check
+            python tools/benchmarks/test_validate_trimotor_v02_physical_benchmark_evidence_v2.py
+          } > current-trimotor-evidence-validation.log 2>&1
 
-      - name: Select hosted JDK 17
+      - name: Enforce trimotor evidence validation
+        if: steps.validate-frozen-trimotor-evidence.outcome == 'failure'
         run: |
-          set -euo pipefail
-          test -x "${JAVA_HOME_17_X64}/bin/java"
-          echo "JAVA_HOME=${JAVA_HOME_17_X64}" >> "${GITHUB_ENV}"
-          echo "${JAVA_HOME_17_X64}/bin" >> "${GITHUB_PATH}"
-          "${JAVA_HOME_17_X64}/bin/java" -version
+          cat current-trimotor-evidence-validation.log
+          exit 1
 
-      - name: Make Gradle wrapper executable
+      - name: Test deliberative comparative benchmark
+        run: |
+          python -m unittest discover -s tools/benchmarks -p 'test_*.py'
+          python tools/benchmarks/morimil_deliberative_benchmark_v0.py check
+          python tools/benchmarks/validate_v02_baseline_evidence_v0.py check
+          python tools/benchmarks/validate_v02_physical_benchmark_evidence_v1.py check
+
+      - name: Test Android arm64 host tools
+        run: |
+          python tools/android-arm64/run_gemma3n_e2b_arm64_unplugged_energy_v0.py --self-test
+          python tools/android-arm64/run_gemma3n_e2b_arm64_unplugged_energy_v0_1.py --self-test
+          python tools/android-arm64/run_gemma3n_e2b_arm64_deliberative_benchmark_v0.py --self-test
+          python tools/android-arm64/run_gemma3n_e2b_arm64_trimotor_benchmark_v0.py --self-test
+          python tools/android-arm64/run_current_gemma3n_e2b_arm64_trimotor_benchmark_v0.py --self-test
+          python tools/android-arm64/test_current_trimotor_physical_evidence_v0.py
+          python tools/android-arm64/test_run_gemma3n_e2b_arm64_deliberative_benchmark_v0.py
+          python tools/android-arm64/test_physical_benchmark_adb_v0.py
+
+      - name: Test quality tooling
+        run: python -m unittest discover -s tools/quality -p 'test_*.py'
+
+      - name: Install pinned Python coverage tool
+        run: |
+          python -m pip install \
+            --disable-pip-version-check \
+            --no-input \
+            --no-cache-dir \
+            coverage==7.15.2
+
+      - name: Generate Python coverage baseline
+        run: |
+          mkdir -p build/quality
+          python -m coverage erase
+          python -m coverage run -m unittest discover -s tools/governance -p 'test_*.py'
+          python -m coverage run --append -m unittest discover -s tools/model-artifacts -p 'test_*.py'
+          python -m coverage run --append -m unittest discover -s tools/benchmarks -p 'test_*.py'
+          python -m coverage run --append tools/android-arm64/test_current_trimotor_physical_evidence_v0.py
+          python -m coverage run --append -m unittest discover -s tools/quality -p 'test_*.py'
+          python -m coverage report
+          python -m coverage xml
+          python -m coverage json
+
+      - name: Make Gradle executable
         run: chmod +x ./gradlew
 
-      - name: Capture immutable before state
+      - name: Generate Android unit-test coverage baseline
         run: |
-          set -euo pipefail
-          mkdir -p build/quality/qa6-jacoco-runtime
-          cp gradle/verification-metadata.xml build/quality/qa6-jacoco-runtime/verification-metadata.before.xml
-          cp app/gradle.lockfile build/quality/qa6-jacoco-runtime/gradle.lockfile.before
-          sha256sum gradle/verification-metadata.xml app/gradle.lockfile \
-            | tee build/quality/qa6-jacoco-runtime/before.sha256
-
-      - name: Independently fetch Maven Central runtime artifact
-        run: |
-          set -euo pipefail
-          base='https://repo.maven.apache.org/maven2/org/jacoco/org.jacoco.agent/0.8.11'
-          curl --fail --silent --show-error --location --retry 4 --retry-all-errors \
-            "$base/org.jacoco.agent-0.8.11-runtime.jar" \
-            --output build/quality/qa6-jacoco-runtime/org.jacoco.agent-0.8.11-runtime.jar
-          curl --fail --silent --show-error --location --retry 4 --retry-all-errors \
-            "$base/org.jacoco.agent-0.8.11-runtime.jar.sha1" \
-            --output build/quality/qa6-jacoco-runtime/org.jacoco.agent-0.8.11-runtime.jar.sha1
-          test "$(stat -c '%s' build/quality/qa6-jacoco-runtime/org.jacoco.agent-0.8.11-runtime.jar)" = "300661"
-          expected_sha1="$(tr -d '[:space:]' < build/quality/qa6-jacoco-runtime/org.jacoco.agent-0.8.11-runtime.jar.sha1)"
-          actual_sha1="$(sha1sum build/quality/qa6-jacoco-runtime/org.jacoco.agent-0.8.11-runtime.jar | cut -d' ' -f1)"
-          test "$actual_sha1" = "$expected_sha1"
-          sha256sum build/quality/qa6-jacoco-runtime/org.jacoco.agent-0.8.11-runtime.jar \
-            | tee build/quality/qa6-jacoco-runtime/maven-central.sha256
-
-      - name: Generate missing checksum through Gradle
-        run: |
-          set -euo pipefail
           ./gradlew \
+            --init-script tools/quality/android-unit-coverage.init.gradle \
             --no-daemon \
             --stacktrace \
             --console=plain \
-            --write-verification-metadata sha256 \
-            --init-script tools/quality/android-instrumented-coverage.init.gradle \
-            :app:dependencies \
-            --configuration debugRuntimeClasspath \
-            > build/quality/qa6-jacoco-runtime/gradle-generation.log 2>&1
-          cp gradle/verification-metadata.xml build/quality/qa6-jacoco-runtime/verification-metadata.after.xml
-          cp app/gradle.lockfile build/quality/qa6-jacoco-runtime/gradle.lockfile.after
-          sha256sum gradle/verification-metadata.xml app/gradle.lockfile \
-            | tee build/quality/qa6-jacoco-runtime/after.sha256
+            :app:createDebugUnitTestCoverageReport
 
-      - name: Validate exact one-artifact delta
+      - name: Derive authored Android coverage view
+        run: |
+          python tools/quality/android_authored_coverage_v1.py \
+            --report app/build/reports/coverage/test/debug/report.xml \
+            --source-root app/src/main \
+            --json-output build/quality/android-authored-coverage.json \
+            --markdown-output build/quality/android-authored-coverage.md \
+            --require-generated-exclusion
+
+      - name: Validate coverage baseline reports
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-          import hashlib
+          test -s build/quality/python-coverage.xml
+          test -s build/quality/python-coverage.json
+          test -s app/build/reports/coverage/test/debug/report.xml
+          test -s build/quality/android-authored-coverage.json
+          test -s build/quality/android-authored-coverage.md
+          python -m json.tool build/quality/android-authored-coverage.json > /dev/null
+          python - <<'PY'
           import json
-          import re
           import xml.etree.ElementTree as ET
           from pathlib import Path
 
-          ns = {"v": "https://schema.gradle.org/dependency-verification"}
-          root = Path("build/quality/qa6-jacoco-runtime")
-
-          def snapshot(path: Path):
-              xml_root = ET.parse(path).getroot()
-              configuration = xml_root.find("v:configuration", ns)
-              components = xml_root.find("v:components", ns)
-              assert configuration is not None and components is not None
-              entries = {}
-              for component in components:
-                  coordinate = (
-                      component.attrib["group"],
-                      component.attrib["name"],
-                      component.attrib["version"],
-                  )
-                  for artifact in component.findall("v:artifact", ns):
-                      entries[coordinate + (artifact.attrib["name"],)] = tuple(
-                          (
-                              child.tag.rsplit("}", 1)[-1],
-                              child.attrib.get("value"),
-                              child.attrib.get("origin"),
-                          )
-                          for child in artifact
-                      )
-              return ET.tostring(configuration, encoding="unicode"), entries
-
-          before_config, before = snapshot(root / "verification-metadata.before.xml")
-          after_config, after = snapshot(root / "verification-metadata.after.xml")
-          assert before_config == after_config, "verification configuration changed"
-          removed = set(before) - set(after)
-          changed = {k for k in before if k in after and before[k] != after[k]}
-          added = set(after) - set(before)
-          expected = (
-              "org.jacoco",
-              "org.jacoco.agent",
-              "0.8.11",
-              "org.jacoco.agent-0.8.11-runtime.jar",
+          python_report = json.loads(
+              Path("build/quality/python-coverage.json").read_text(encoding="utf-8")
           )
-          assert removed == set(), removed
-          assert changed == set(), changed
-          assert added == {expected}, added
-          checksums = after[expected]
-          assert len(checksums) == 1, checksums
-          algorithm, value, origin = checksums[0]
-          assert algorithm == "sha256", algorithm
-          assert value and re.fullmatch(r"[0-9a-f]{64}", value), value
-          assert origin == "Generated by Gradle", origin
-          direct_sha256 = hashlib.sha256(
-              (root / "org.jacoco.agent-0.8.11-runtime.jar").read_bytes()
-          ).hexdigest()
-          assert value == direct_sha256, (value, direct_sha256)
-          assert (root / "gradle.lockfile.before").read_bytes() == (
-              root / "gradle.lockfile.after"
-          ).read_bytes(), "lockfile changed"
-          summary = {
-              "schema": "morimil.qa6.jacoco_runtime_checksum_audit.v1",
-              "artifact": "org.jacoco:org.jacoco.agent:0.8.11:org.jacoco.agent-0.8.11-runtime.jar",
-              "sha256": value,
-              "added": 1,
-              "removed": 0,
-              "existing_changed": 0,
-              "lockfile_unchanged": True,
-              "maven_central_sha256_match": True,
+          python_totals = python_report["totals"]
+          assert python_totals["num_statements"] > 0
+          assert python_totals["covered_lines"] > 0
+          assert python_totals["num_branches"] > 0
+
+          jacoco_root = ET.parse(
+              "app/build/reports/coverage/test/debug/report.xml"
+          ).getroot()
+          jacoco = {
+              item.attrib["type"]: {
+                  "covered": int(item.attrib["covered"]),
+                  "missed": int(item.attrib["missed"]),
+              }
+              for item in jacoco_root.findall("counter")
           }
-          (root / "audit.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
-          print(json.dumps(summary, indent=2))
-          PY
-          git diff --exit-code -- app/gradle.lockfile
+          for counter in ("INSTRUCTION", "BRANCH", "LINE"):
+              assert counter in jacoco
+              assert jacoco[counter]["covered"] + jacoco[counter]["missed"] > 0
 
-      - name: Append bounded checksum evidence
-        run: |
-          set -euo pipefail
-          checksum="$(python3 -c 'import json; print(json.load(open("build/quality/qa6-jacoco-runtime/audit.json"))["sha256"])')"
-          cat >> docs/quality/evidence/QA_6_SUPPLY_CHAIN_EVIDENCE_2026-08-06.md <<EOF
-
-          ## Instrumented JaCoCo runtime verification completion — 2026-08-07
-
-          \`org.jacoco:org.jacoco.agent:0.8.11:org.jacoco.agent-0.8.11-runtime.jar\`
-          was resolved specifically by the managed-device coverage path. Maven Central's
-          published SHA-1 was verified against the independently downloaded 300661-byte
-          artifact, and its independently computed SHA-256 matched Gradle's generated
-          verification record exactly.
-
-          \`JACOCO_RUNTIME_SHA256=$checksum\`
-          \`VERIFICATION_METADATA_ADDED=1\`
-          \`VERIFICATION_METADATA_REMOVED=0\`
-          \`EXISTING_CHECKSUMS_CHANGED=0\`
-          \`APP_GRADLE_LOCKFILE_DRIFT=0\`
-
-          Dependency verification remains strict. No additional dependency-locking
-          exception is introduced by this checksum completion.
-EOF
-          sed -i 's/^          //' docs/quality/evidence/QA_6_SUPPLY_CHAIN_EVIDENCE_2026-08-06.md
-
-      - name: Commit only audited verification state
-        run: |
-          set -euo pipefail
-          expected=(
-            "docs/quality/evidence/QA_6_SUPPLY_CHAIN_EVIDENCE_2026-08-06.md"
-            "gradle/verification-metadata.xml"
+          print(
+              "PYTHON_COVERAGE="
+              f"{python_totals['percent_covered_display']}% "
+              f"LINE={python_totals['percent_statements_covered_display']}% "
+              f"BRANCH={python_totals['percent_branches_covered_display']}%"
           )
-          git diff --exit-code -- app/gradle.lockfile
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add "${expected[@]}"
-          mapfile -t changed < <(git diff --cached --name-only | sort)
-          printf '%s\n' "${changed[@]}"
-          test "${#changed[@]}" -eq "${#expected[@]}"
-          for i in "${!expected[@]}"; do
-            test "${changed[$i]}" = "${expected[$i]}"
-          done
-          git diff --cached --check
-          git commit -m "[QA-6] Pin instrumented JaCoCo runtime checksum [skip ci]"
-          git push origin HEAD:qa/qa-6-supply-chain-truth
+          for counter in ("INSTRUCTION", "BRANCH", "LINE"):
+              covered = jacoco[counter]["covered"]
+              total = covered + jacoco[counter]["missed"]
+              print(f"ANDROID_{counter}_COVERAGE={covered}/{total}={covered / total:.4%}")
+          PY
 
-      - name: Upload checksum audit evidence
+      - name: Generate report-only Android mutation pilot
+        run: |
+          ./gradlew \
+            --init-script tools/quality/android-pitest-pilot.init.gradle \
+            --no-daemon \
+            --stacktrace \
+            --console=plain \
+            :app:pitestDebug
+
+      - name: Validate Android mutation pilot
+        run: |
+          set -euo pipefail
+          test -s app/build/reports/pitest/debug/mutations.xml
+          python tools/quality/android_mutation_report_v1.py \
+            --report app/build/reports/pitest/debug/mutations.xml \
+            --expected-class com.morimil.app.data.genesis.GenesisManifestVerifierCore \
+            --primary-source GenesisManifestVerifier.kt \
+            --allowed-inline-source Comparisons.kt \
+            --json-output build/quality/android-mutation-pilot.json \
+            --markdown-output build/quality/android-mutation-pilot.md
+          test -s build/quality/android-mutation-pilot.json
+          test -s build/quality/android-mutation-pilot.md
+          python -m json.tool build/quality/android-mutation-pilot.json > /dev/null
+
+      - name: Build debug APK
+        run: ./gradlew :app:assembleDebug
+
+      - name: Upload CI diagnostics and quality baselines
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: qa6-jacoco-runtime-checksum-${{ github.event.pull_request.head.sha }}
-          path: build/quality/qa6-jacoco-runtime/
+          name: current-trimotor-evidence-validation
+          path: |
+            current-trimotor-evidence-validation.log
+            build/quality/python-coverage.xml
+            build/quality/python-coverage.json
+            build/quality/android-authored-coverage.json
+            build/quality/android-authored-coverage.md
+            build/quality/android-mutation-pilot.json
+            build/quality/android-mutation-pilot.md
+            app/build/reports/coverage/test/debug/
+            app/build/reports/pitest/debug/
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 7
