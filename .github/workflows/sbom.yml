@@ -1,306 +1,143 @@
 name: SBOM
 
 on:
+  push:
+    branches:
+      - main
   pull_request:
     branches:
       - main
+  workflow_dispatch:
 
 permissions:
-  actions: read
-  contents: write
+  contents: read
 
 concurrency:
   group: sbom-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  pin-ci-verification-boundary:
-    name: Pin audited CI verification boundary
-    if: github.event.pull_request.number == 168 && github.event.pull_request.head.repo.full_name == github.repository
+  generate:
+    name: Generate resolved supply-chain evidence
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 60
 
     steps:
-      - name: Checkout exact PR head
+      - name: Checkout exact source revision
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          fetch-depth: 2
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
-      - name: Verify bounded parent and frozen state
+      - name: Select hosted JDK 17 and verify tool runtimes
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD^)" = "6f3c3c032a29e210ef8708a09b88999f103984aa"
-          test "$(git diff --name-only HEAD^ HEAD)" = ".github/workflows/sbom.yml"
-          test "$(sha256sum app/gradle.lockfile | cut -d' ' -f1)" = "49d418a5e5ab8b0f11d29a1b41cb0f40551f70fec7e89661513a701946f44e4e"
-          test "$(sha256sum gradle/verification-metadata.xml | cut -d' ' -f1)" = "5f9268f82d5493073db7884c5706f096473ac607e9ebb36ad1e629e5cae75d11"
-
-      - name: Download audited CI verification artifact
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          mkdir -p build/quality/qa6-pin
-          curl --fail --location --retry 4 --retry-all-errors \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer ${GH_TOKEN}" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/artifacts/8999737089/zip" \
-            -o build/quality/qa6-pin/artifact.zip
-          test "$(sha256sum build/quality/qa6-pin/artifact.zip | cut -d' ' -f1)" = "edd4150d304d4867d470b04512204509493c77d5582954aee6836622f0a78922"
-          unzip -q build/quality/qa6-pin/artifact.zip -d build/quality/qa6-pin/unpacked
-          test "$(sha256sum build/quality/qa6-pin/unpacked/verification-metadata.after.xml | cut -d' ' -f1)" = "a4ebd754704a1ba2c3d67a7dd8d5eee15718aaed91de877f93528c3692ec035d"
-          test "$(sha256sum build/quality/qa6-pin/unpacked/gradle.lockfile.before | cut -d' ' -f1)" = "49d418a5e5ab8b0f11d29a1b41cb0f40551f70fec7e89661513a701946f44e4e"
-
-      - name: Validate verification metadata delta
-        run: |
-          set -euo pipefail
+          test -x "${JAVA_HOME_17_X64}/bin/java"
+          echo "JAVA_HOME=${JAVA_HOME_17_X64}" >> "${GITHUB_ENV}"
+          echo "${JAVA_HOME_17_X64}/bin" >> "${GITHUB_PATH}"
+          "${JAVA_HOME_17_X64}/bin/java" -version
           python3 - <<'PY'
-          import re
-          import xml.etree.ElementTree as ET
-          from pathlib import Path
-
-          ns = {"v": "https://schema.gradle.org/dependency-verification"}
-
-          def snapshot(path: Path):
-              root = ET.parse(path).getroot()
-              configuration = root.find("v:configuration", ns)
-              components = root.find("v:components", ns)
-              assert configuration is not None and components is not None
-              entries = {}
-              for component in components:
-                  coordinate = (
-                      component.attrib["group"],
-                      component.attrib["name"],
-                      component.attrib["version"],
-                  )
-                  for artifact in component.findall("v:artifact", ns):
-                      entries[coordinate + (artifact.attrib["name"],)] = tuple(
-                          (
-                              child.tag.rsplit("}", 1)[-1],
-                              child.attrib.get("value"),
-                              child.attrib.get("origin"),
-                          )
-                          for child in artifact
-                      )
-              return ET.tostring(configuration, encoding="unicode"), entries
-
-          before_config, before = snapshot(Path("gradle/verification-metadata.xml"))
-          after_path = Path("build/quality/qa6-pin/unpacked/verification-metadata.after.xml")
-          after_config, after = snapshot(after_path)
-          assert before_config == after_config, "verification configuration changed"
-          assert not (set(before) - set(after)), "verification artifacts removed"
-          assert not {k for k in before if k in after and before[k] != after[k]}, "existing checksum changed"
-          added = set(after) - set(before)
-          assert len(added) == 51, len(added)
-          for key in added:
-              checksums = after[key]
-              assert len(checksums) == 1, (key, checksums)
-              algorithm, value, origin = checksums[0]
-              assert algorithm == "sha256", (key, algorithm)
-              assert value and re.fullmatch(r"[0-9a-f]{64}", value), (key, value)
-              assert origin == "Generated by Gradle", (key, origin)
-          required = {
-              ("org.jacoco", "org.jacoco.agent", "0.8.11", "org.jacoco.agent-0.8.11.jar"),
-              ("org.jacoco", "org.jacoco.ant", "0.8.11", "org.jacoco.ant-0.8.11.jar"),
-              ("org.jacoco", "org.jacoco.report", "0.8.11", "org.jacoco.report-0.8.11.jar"),
-              ("org.ow2.asm", "asm-bom", "9.6", "asm-bom-9.6.pom"),
-              ("com.android.tools.lint", "lint", "31.6.1", "lint-31.6.1.jar"),
-          }
-          assert required <= added, sorted(required - added)
-          print("QA6_CI_VERIFICATION_DELTA=PASS")
-          print("QA6_VERIFICATION_ADDITIONS=51")
+          import platform
+          import sys
+          assert sys.version_info >= (3, 11), sys.version
+          print(f"PYTHON={platform.python_version()}")
           PY
 
-      - name: Pin exact locking and verification boundaries
+      - name: Test QA-6 supply-chain tooling
+        run: |
+          PYTHONPATH=tools/quality python3 -m unittest \
+            tools.quality.test_qa6_supply_chain_report_v1 \
+            tools.quality.test_qa6_supply_chain_scope_v1 \
+            tools.quality.test_qa6_locking_boundary_v1
+
+      - name: Make Gradle wrapper executable
+        run: chmod +x ./gradlew
+
+      - name: Validate pinned supply-chain state
         run: |
           set -euo pipefail
-          cp build/quality/qa6-pin/unpacked/verification-metadata.after.xml gradle/verification-metadata.xml
-          python3 - <<'PY'
-          from pathlib import Path
-
-          build = Path("build.gradle.kts")
-          text = build.read_text(encoding="utf-8")
-          marker = """    dependencyLocking {\n        lockAllConfigurations()\n        lockMode = LockMode.STRICT\n    }\n"""
-          replacement = """    dependencyLocking {\n        lockAllConfigurations()\n        lockMode = LockMode.STRICT\n    }\n\n    // AGP's debug instrumentation runtime resolves a Kotlin component that Gradle\n    // does not persist with --write-locks. Keep that test-only surface under\n    // strict checksum verification while production/release configurations remain locked.\n    if (path == \":app\") {\n        configurations.configureEach {\n            if (name == \"debugAndroidTestRuntimeClasspath\") {\n                resolutionStrategy.deactivateDependencyLocking()\n            }\n        }\n    }\n"""
-          assert text.count(marker) == 1
-          assert "debugAndroidTestRuntimeClasspath" not in text
-          build.write_text(text.replace(marker, replacement, 1), encoding="utf-8")
-
-          coverage = Path("tools/quality/android-unit-coverage.init.gradle")
-          text = coverage.read_text(encoding="utf-8")
-          old = '["jacocoAgent", "jacocoAnt"]'
-          new = '["jacocoAgent", "jacocoAnt", "androidJacocoAnt"]'
-          assert text.count(old) == 1
-          coverage.write_text(text.replace(old, new, 1), encoding="utf-8")
-          PY
           test "$(sha256sum app/gradle.lockfile | cut -d' ' -f1)" = "49d418a5e5ab8b0f11d29a1b41cb0f40551f70fec7e89661513a701946f44e4e"
           test "$(sha256sum gradle/verification-metadata.xml | cut -d' ' -f1)" = "a4ebd754704a1ba2c3d67a7dd8d5eee15718aaed91de877f93528c3692ec035d"
-
-      - name: Add executable boundary contract
-        run: |
-          cat > tools/quality/test_qa6_locking_boundary_v1.py <<'PY'
-          from pathlib import Path
-          import re
-          import unittest
-
-          ROOT = Path(__file__).resolve().parents[2]
-
-
-          class Qa6LockingBoundaryTest(unittest.TestCase):
-              def test_production_locking_stays_strict_with_one_androidtest_runtime_exception(self):
-                  text = (ROOT / "build.gradle.kts").read_text(encoding="utf-8")
-                  self.assertIn("lockAllConfigurations()", text)
-                  self.assertIn("lockMode = LockMode.STRICT", text)
-                  self.assertEqual(text.count("resolutionStrategy.deactivateDependencyLocking()"), 1)
-                  self.assertEqual(text.count('name == "debugAndroidTestRuntimeClasspath"'), 1)
-                  for production_name in (
-                      "debugRuntimeClasspath",
-                      "releaseRuntimeClasspath",
-                      "releaseCompileClasspath",
-                      "releaseUnsignedRuntimeClasspath",
-                  ):
-                      self.assertNotIn(f'name == "{production_name}"', text)
-
-              def test_coverage_locking_exception_is_exactly_ephemeral_jacoco_tooling(self):
-                  text = (ROOT / "tools/quality/android-unit-coverage.init.gradle").read_text(encoding="utf-8")
-                  match = re.search(r"configuration\.name in \[(.*?)\]", text)
-                  self.assertIsNotNone(match)
-                  names = set(re.findall(r'"([^"]+)"', match.group(1)))
-                  self.assertEqual(names, {"jacocoAgent", "jacocoAnt", "androidJacocoAnt"})
-                  self.assertEqual(text.count("deactivateDependencyLocking()"), 1)
-
-
-          if __name__ == "__main__":
-              unittest.main()
-          PY
+          grep -F 'lockMode = LockMode.STRICT' build.gradle.kts
           python3 -m unittest tools.quality.test_qa6_locking_boundary_v1
 
-      - name: Version boundary evidence
+      - name: Prove strict locks, verification, resolved inventory, and debug APK
         run: |
-          cat > docs/quality/evidence/QA_6_SUPPLY_CHAIN_EVIDENCE_2026-08-06.md <<'EOF'
-          # Document status: CURRENT
+          ./gradlew \
+            --dependency-verification=strict \
+            --init-script tools/quality/qa6-supply-chain.init.gradle \
+            --no-daemon \
+            --stacktrace \
+            --console=plain \
+            :qa6ResolveAll \
+            :app:qa6ResolvedDependencyInventory \
+            :app:assembleDebug
 
-          # QA-6 — Supply-chain evidence
-
-          ## Frozen identity
-
-          ```text
-          BASE_MAIN=92d15c0269b1d56ce26d4201e2b464c951a6f175
-          BRANCH=qa/qa-6-supply-chain-truth
-          PR=168
-          PR_MODE=DRAFT
-          MERGE_AUTHORIZED=FALSE
-          ```
-
-          ## Audited Gradle state
-
-          ```text
-          APP_GRADLE_LOCKFILE_SHA256=49d418a5e5ab8b0f11d29a1b41cb0f40551f70fec7e89661513a701946f44e4e
-          VERIFICATION_METADATA_SHA256=a4ebd754704a1ba2c3d67a7dd8d5eee15718aaed91de877f93528c3692ec035d
-          VERIFICATION_CONFIGURATION_CHANGED=FALSE
-          VERIFICATION_ARTIFACTS_REMOVED=0
-          VERIFICATION_EXISTING_CHECKSUMS_CHANGED=0
-          CI_VERIFICATION_ARTIFACTS_ADDED=51
-          CI_COMPLETION_RUN_ID=31192852447
-          CI_COMPLETION_ARTIFACT_ID=8999737089
-          CI_COMPLETION_ARTIFACT_SHA256=edd4150d304d4867d470b04512204509493c77d5582954aee6836622f0a78922
-          ```
-
-          Gradle's own `--write-locks` output was reproduced for
-          `debugAndroidTestRuntimeClasspath` and for the exact Reference Checks task pair.
-          In both cases the lockfile remained byte-for-byte unchanged while strict mode
-          rejected `org.jetbrains.kotlin:kotlin-stdlib-common:2.3.10` on the debug
-          instrumentation runtime. The bounded policy therefore deactivates dependency
-          locking only for `debugAndroidTestRuntimeClasspath`. Dependency verification
-          remains strict, so new or changed artifacts still require audited SHA-256
-          metadata. Production and release classpaths remain under `LockMode.STRICT`.
-
-          JaCoCo configurations `jacocoAgent`, `jacocoAnt`, and `androidJacocoAnt` are
-          build-time coverage tooling and are likewise excluded from dependency locking
-          while remaining under strict dependency verification.
-
-          ## Strict SBOM evidence already demonstrated
-
-          ```text
-          STRICT_SBOM_RUN_ID=31190813263
-          STRICT_SBOM_ARTIFACT_ID=8998859578
-          STRICT_SBOM_ARTIFACT_SHA256=859d88d34e401e81add1c22bb2ce25c57d59e221a01c63b3c17354ec30d8de3a
-          RESOLVED_COMPONENTS=260
-          RESOLVED_ARTIFACTS=211
-          LOCKED_COMPONENTS=260
-          APK_SHA256=57e4c265001f109a73ffc08355e8214872117c00f777503fb26b6fd8647848f3
-          VULNERABILITIES_TOTAL=39
-          RUNTIME_VULNERABILITIES=0
-          CRITICAL_VULNERABILITIES=0
-          BUILD_TEST_ONLY_VULNERABILITIES=39
-          LICENSES_KNOWN=259
-          LICENSE_NOASSERTION=1
-          SCOPE_FAILURES=0
-          SUMMARY_FAILURES=0
-          ```
-
-          The single `NOASSERTION` license entry is
-          `net.zetetic:sqlcipher-android:4.15.0` and is covered by the versioned evidence
-          adjudication. This statement does not promote the application to production.
-
-          ## Final candidate requirements
-
-          ```text
-          DEPENDENCY_LOCKING_PRODUCTION_RELEASE=STRICT_REQUIRED
-          DEBUG_ANDROIDTEST_RUNTIME_LOCK_EXCEPTION=EXACTLY_ONE_REQUIRED
-          JACOCO_LOCK_EXCEPTIONS=EXACTLY_THREE_REQUIRED
-          GRADLE_DEPENDENCY_VERIFICATION=STRICT_REQUIRED
-          VERIFICATION_METADATA_DRIFT=0_REQUIRED
-          LOCKFILE_DRIFT=0_REQUIRED
-          RESOLVED_GRAPH_INVENTORY=PASS_REQUIRED
-          APK_COMPONENT_INVENTORY=PASS_REQUIRED
-          SBOM_RESOLVED_COMPONENTS=PASS_REQUIRED
-          VULNERABILITY_SCAN_EXECUTED=PASS_REQUIRED
-          UNADJUDICATED_CRITICAL_CVES=0_REQUIRED
-          LICENSE_INVENTORY=PASS_REQUIRED
-          GRADLE_APK_SBOM_CROSSCHECK=PASS_REQUIRED
-          ALL_REQUIRED_PR_CHECKS=GREEN_REQUIRED
-          ```
-
-          ## Status before final exact-head CI
-
-          ```text
-          QA_6_DIAGNOSTICADO=TRUE
-          QA_6_IMPLEMENTADO_EN_RAMA=FINAL_CANDIDATE_PRE_CI
-          QA_6_CI_PR_VERDE=NOT_YET_DEMONSTRATED_ON_FINAL_HEAD
-          QA_6_TECNICAMENTE_COMPLETO=FALSE
-          PR_DRAFT=TRUE
-          MERGE_AUTHORIZED=FALSE
-          BODY_MODIFIED=FALSE
-          GUARDIAN_MODIFIED=FALSE
-          SEED_IMPORTED=FALSE
-          GENESIS_EXECUTED=FALSE
-          ACTIVATION_EXECUTED=FALSE
-          MORIMIL_OPERATIONAL_BIRTH=NOT_OCCURRED
-          ```
-          EOF
-          sed -i 's/^          //' docs/quality/evidence/QA_6_SUPPLY_CHAIN_EVIDENCE_2026-08-06.md
-
-      - name: Commit only audited QA-6 boundary state
+      - name: Prove pinned state did not drift
         run: |
           set -euo pipefail
-          expected=(
-            "build.gradle.kts"
-            "docs/quality/evidence/QA_6_SUPPLY_CHAIN_EVIDENCE_2026-08-06.md"
-            "gradle/verification-metadata.xml"
-            "tools/quality/android-unit-coverage.init.gradle"
-            "tools/quality/test_qa6_locking_boundary_v1.py"
-          )
-          git diff --exit-code -- app/gradle.lockfile
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add "${expected[@]}"
-          mapfile -t changed < <(git diff --cached --name-only | sort)
-          printf '%s\n' "${changed[@]}"
-          test "${#changed[@]}" -eq "${#expected[@]}"
-          for i in "${!expected[@]}"; do
-            test "${changed[$i]}" = "${expected[$i]}"
-          done
-          git commit -m "[QA-6] Pin audited CI verification boundary [skip ci]"
-          git push origin HEAD:qa/qa-6-supply-chain-truth
+          test "$(sha256sum app/gradle.lockfile | cut -d' ' -f1)" = "49d418a5e5ab8b0f11d29a1b41cb0f40551f70fec7e89661513a701946f44e4e"
+          test "$(sha256sum gradle/verification-metadata.xml | cut -d' ' -f1)" = "a4ebd754704a1ba2c3d67a7dd8d5eee15718aaed91de877f93528c3692ec035d"
+          git diff --exit-code -- app/gradle.lockfile gradle/verification-metadata.xml
+
+      - name: Build strict resolved SBOM, APK inventory, OSV scan, and license inventory
+        run: |
+          python3 tools/quality/qa6_supply_chain_report_v1.py collect \
+            --gradle-inventory app/build/quality/qa6/gradle-resolved-inventory.json \
+            --apk app/build/outputs/apk/debug/app-debug.apk \
+            --policy tools/quality/qa6_supply_chain_policy.json \
+            --adjudications tools/quality/qa6_supply_chain_adjudications.json \
+            --output-dir build/quality/qa6 \
+            --mode strict
+
+      - name: Generate independent Syft APK SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          file: app/build/outputs/apk/debug/app-debug.apk
+          format: spdx-json
+          output-file: build/quality/qa6/apk-syft.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+
+      - name: Cross-check locks, checksums, runtime scope, licenses, and APK identity
+        run: |
+          python3 tools/quality/qa6_supply_chain_scope_v1.py \
+            --inventory app/build/quality/qa6/gradle-resolved-inventory.json \
+            --lockfile app/gradle.lockfile \
+            --verification-metadata gradle/verification-metadata.xml \
+            --vulnerabilities build/quality/qa6/vulnerabilities.json \
+            --licenses build/quality/qa6/licenses.json \
+            --syft build/quality/qa6/apk-syft.spdx.json \
+            --apk-inventory build/quality/qa6/apk-inventory.json \
+            --policy tools/quality/qa6_supply_chain_policy.json \
+            --adjudications tools/quality/qa6_supply_chain_adjudications.json \
+            --output build/quality/qa6/scope-summary.json
+
+      - name: Validate final QA-6 evidence inventory
+        run: |
+          set -euo pipefail
+          test -s app/gradle.lockfile
+          test -s gradle/verification-metadata.xml
+          test -s app/build/quality/qa6/gradle-resolved-inventory.json
+          test -s build/quality/qa6/apk-inventory.json
+          test -s build/quality/qa6/licenses.json
+          test -s build/quality/qa6/vulnerabilities.json
+          test -s build/quality/qa6/resolved-components.spdx.json
+          test -s build/quality/qa6/apk-syft.spdx.json
+          test -s build/quality/qa6/summary.json
+          test -s build/quality/qa6/scope-summary.json
+          python3 -m json.tool app/build/quality/qa6/gradle-resolved-inventory.json > /dev/null
+          python3 -m json.tool build/quality/qa6/summary.json > /dev/null
+          python3 -m json.tool build/quality/qa6/scope-summary.json > /dev/null
+
+      - name: Upload QA-6 evidence artifact
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: morimil-qa6-evidence-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            app/gradle.lockfile
+            gradle/verification-metadata.xml
+            app/build/quality/qa6/gradle-resolved-inventory.json
+            build/quality/qa6/
+          if-no-files-found: error
+          retention-days: 30
