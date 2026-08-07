@@ -98,12 +98,15 @@ jobs:
 
       - name: Generate Android unit-test coverage baseline
         run: |
+          set -o pipefail
+          mkdir -p build/quality
           ./gradlew \
             --init-script tools/quality/android-unit-coverage.init.gradle \
             --no-daemon \
             --stacktrace \
             --console=plain \
-            :app:createDebugUnitTestCoverageReport
+            :app:createDebugUnitTestCoverageReport \
+            2>&1 | tee build/quality/android-unit-coverage.log
 
       - name: Derive authored Android coverage view
         run: |
@@ -162,6 +165,27 @@ jobs:
               print(f"ANDROID_{counter}_COVERAGE={covered}/{total}={covered / total:.4%}")
           PY
 
+      - name: Generate Android lint evidence
+        run: |
+          set +e
+          ./gradlew --no-daemon --stacktrace --console=plain :app:lintDebug \
+            > build/quality/android-lint.log 2>&1
+          status=$?
+          tail -n 250 build/quality/android-lint.log
+          test -s app/build/reports/lint-results-debug.xml
+          exit "$status"
+
+      - name: Enforce QA-7 JVM quality ratchets
+        run: |
+          python tools/quality/qa7_quality_ratchet_v1.py jvm \
+            --baseline tools/quality/qa7_quality_ratchet_baseline.json \
+            --android-authored build/quality/android-authored-coverage.json \
+            --python-coverage build/quality/python-coverage.json \
+            --kotlin-log build/quality/android-unit-coverage.log \
+            --lint-xml app/build/reports/lint-results-debug.xml \
+            --output build/quality/qa7-jvm-quality-ratchet.json
+          python -m json.tool build/quality/qa7-jvm-quality-ratchet.json > /dev/null
+
       - name: Generate report-only Android mutation pilot
         run: |
           ./gradlew \
@@ -198,10 +222,14 @@ jobs:
             current-trimotor-evidence-validation.log
             build/quality/python-coverage.xml
             build/quality/python-coverage.json
+            build/quality/android-unit-coverage.log
+            build/quality/android-lint.log
             build/quality/android-authored-coverage.json
             build/quality/android-authored-coverage.md
+            build/quality/qa7-jvm-quality-ratchet.json
             build/quality/android-mutation-pilot.json
             build/quality/android-mutation-pilot.md
+            app/build/reports/lint-results-debug.xml
             app/build/reports/coverage/test/debug/
             app/build/reports/pitest/debug/
           if-no-files-found: error
