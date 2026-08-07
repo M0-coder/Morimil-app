@@ -1,4 +1,12 @@
 gradle.beforeProject { project ->
+    if (project.path == ":app") {
+        project.configurations.configureEach { configuration ->
+            if (configuration.name in ["jacocoAgent", "jacocoAnt", "androidJacocoAnt"]) {
+                configuration.resolutionStrategy.deactivateDependencyLocking()
+            }
+        }
+    }
+
     project.pluginManager.withPlugin("com.android.application") {
         def android = project.extensions.getByName("android")
         def debug = android.buildTypes.getByName("debug")

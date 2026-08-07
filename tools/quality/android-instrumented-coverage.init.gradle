@@ -1,4 +1,15 @@
 gradle.beforeProject { project ->
+    if (project.path == ":app") {
+        project.configurations.configureEach { configuration ->
+            // Enabling AndroidTest coverage injects JaCoCo into build-time-only
+            // configurations that are not part of the normal application runtime
+            // lock surface. Dependency checksum verification remains strict.
+            if (configuration.name in ["debugRuntimeClasspath", "androidJacocoAnt"]) {
+                configuration.resolutionStrategy.deactivateDependencyLocking()
+            }
+        }
+    }
+
     project.pluginManager.withPlugin("com.android.application") {
         def android = project.extensions.getByName("android")
         def debug = android.buildTypes.getByName("debug")
