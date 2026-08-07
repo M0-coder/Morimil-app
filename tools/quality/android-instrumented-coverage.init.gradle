@@ -1,4 +1,15 @@
 gradle.beforeProject { project ->
+    if (project.path == ":app") {
+        project.configurations.configureEach { configuration ->
+            // Enabling AndroidTest coverage injects the JaCoCo agent into the app's
+            // debug runtime classpath. That coverage-only graph is not the normal
+            // application runtime lock surface; checksum verification remains strict.
+            if (configuration.name == "debugRuntimeClasspath") {
+                configuration.resolutionStrategy.deactivateDependencyLocking()
+            }
+        }
+    }
+
     project.pluginManager.withPlugin("com.android.application") {
         def android = project.extensions.getByName("android")
         def debug = android.buildTypes.getByName("debug")
