@@ -1,7 +1,7 @@
 gradle.beforeProject { project ->
     if (project.path == ":app") {
         project.configurations.configureEach { configuration ->
-            if (configuration.name in ["jacocoAgent", "jacocoAnt"]) {
+            if (configuration.name in ["jacocoAgent", "jacocoAnt", "androidJacocoAnt"]) {
                 configuration.resolutionStrategy.deactivateDependencyLocking()
             }
         }

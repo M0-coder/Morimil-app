@@ -2,44 +2,76 @@
 
 # QA-6 — Supply-chain evidence
 
-## Evidence identity
+## Frozen identity
 
 ```text
 BASE_MAIN=92d15c0269b1d56ce26d4201e2b464c951a6f175
 BRANCH=qa/qa-6-supply-chain-truth
-BOOTSTRAP_HEAD=3648eddd910ad5d1d9ea8419c80707105a32fb73
-MODE=STRICT_FINAL_VALIDATION_PENDING
+PR=168
+PR_MODE=DRAFT
+MERGE_AUTHORIZED=FALSE
 ```
 
-## Audited bootstrap state
+## Audited Gradle state
 
 ```text
-BOOTSTRAP_WORKFLOW_RUN_ID=31118724421
-BOOTSTRAP_JOB_ID=92901852043
-BOOTSTRAP_ARTIFACT_ID=8998157575
-BOOTSTRAP_ARTIFACT_SHA256=3eadb16dfb140af8b9ca14fdd1b73c7256aaff1b94a1981135ca166109670ac8
 APP_GRADLE_LOCKFILE_SHA256=49d418a5e5ab8b0f11d29a1b41cb0f40551f70fec7e89661513a701946f44e4e
-VERIFICATION_METADATA_BEFORE_SHA256=c21442729b2e7b78d957763545888945e789016cc380eacd4c08415959c2a792
-VERIFICATION_METADATA_ACCEPTED_SHA256=5f9268f82d5493073db7884c5706f096473ac607e9ebb36ad1e629e5cae75d11
+VERIFICATION_METADATA_SHA256=a4ebd754704a1ba2c3d67a7dd8d5eee15718aaed91de877f93528c3692ec035d
 VERIFICATION_CONFIGURATION_CHANGED=FALSE
 VERIFICATION_ARTIFACTS_REMOVED=0
 VERIFICATION_EXISTING_CHECKSUMS_CHANGED=0
-VERIFICATION_ARTIFACTS_ADDED=7
+CI_VERIFICATION_ARTIFACTS_ADDED=51
+CI_COMPLETION_RUN_ID=31192852447
+CI_COMPLETION_ARTIFACT_ID=8999737089
+CI_COMPLETION_ARTIFACT_SHA256=edd4150d304d4867d470b04512204509493c77d5582954aee6836622f0a78922
 ```
 
-The seven added records are parent/BOM metadata required by the resolved
-Jackson, Guava, Kotlin/coroutines, and JUnit graph. Their coordinates were
-cross-checked against Maven Central. Publisher-side checksum sidecars were
-not independently reconstructed by the connector, so this document does
-not claim a second publisher checksum channel.
+Gradle's own `--write-locks` output was reproduced for
+`debugAndroidTestRuntimeClasspath` and for the exact Reference Checks task pair.
+In both cases the lockfile remained byte-for-byte unchanged while strict mode
+rejected `org.jetbrains.kotlin:kotlin-stdlib-common:2.3.10` on the debug
+instrumentation runtime. The bounded policy therefore deactivates dependency
+locking only for `debugAndroidTestRuntimeClasspath`. Dependency verification
+remains strict, so new or changed artifacts still require audited SHA-256
+metadata. Production and release classpaths remain under `LockMode.STRICT`.
 
-## Final strict gates
+JaCoCo configurations `jacocoAgent`, `jacocoAnt`, and `androidJacocoAnt` are
+build-time coverage tooling and are likewise excluded from dependency locking
+while remaining under strict dependency verification.
+
+## Strict SBOM evidence already demonstrated
 
 ```text
-DEPENDENCY_LOCKING=LockMode.STRICT
-GRADLE_DEPENDENCY_VERIFICATION=strict
-LOCKFILE_DRIFT=0
-VERIFICATION_METADATA_DRIFT=0
+STRICT_SBOM_RUN_ID=31190813263
+STRICT_SBOM_ARTIFACT_ID=8998859578
+STRICT_SBOM_ARTIFACT_SHA256=859d88d34e401e81add1c22bb2ce25c57d59e221a01c63b3c17354ec30d8de3a
+RESOLVED_COMPONENTS=260
+RESOLVED_ARTIFACTS=211
+LOCKED_COMPONENTS=260
+APK_SHA256=57e4c265001f109a73ffc08355e8214872117c00f777503fb26b6fd8647848f3
+VULNERABILITIES_TOTAL=39
+RUNTIME_VULNERABILITIES=0
+CRITICAL_VULNERABILITIES=0
+BUILD_TEST_ONLY_VULNERABILITIES=39
+LICENSES_KNOWN=259
+LICENSE_NOASSERTION=1
+SCOPE_FAILURES=0
+SUMMARY_FAILURES=0
+```
+
+The single `NOASSERTION` license entry is
+`net.zetetic:sqlcipher-android:4.15.0` and is covered by the versioned evidence
+adjudication. This statement does not promote the application to production.
+
+## Final candidate requirements
+
+```text
+DEPENDENCY_LOCKING_PRODUCTION_RELEASE=STRICT_REQUIRED
+DEBUG_ANDROIDTEST_RUNTIME_LOCK_EXCEPTION=EXACTLY_ONE_REQUIRED
+JACOCO_LOCK_EXCEPTIONS=EXACTLY_THREE_REQUIRED
+GRADLE_DEPENDENCY_VERIFICATION=STRICT_REQUIRED
+VERIFICATION_METADATA_DRIFT=0_REQUIRED
+LOCKFILE_DRIFT=0_REQUIRED
 RESOLVED_GRAPH_INVENTORY=PASS_REQUIRED
 APK_COMPONENT_INVENTORY=PASS_REQUIRED
 SBOM_RESOLVED_COMPONENTS=PASS_REQUIRED
@@ -47,15 +79,15 @@ VULNERABILITY_SCAN_EXECUTED=PASS_REQUIRED
 UNADJUDICATED_CRITICAL_CVES=0_REQUIRED
 LICENSE_INVENTORY=PASS_REQUIRED
 GRADLE_APK_SBOM_CROSSCHECK=PASS_REQUIRED
+ALL_REQUIRED_PR_CHECKS=GREEN_REQUIRED
 ```
 
-## Status
+## Status before final exact-head CI
 
 ```text
 QA_6_DIAGNOSTICADO=TRUE
-QA_6_IMPLEMENTADO_EN_RAMA=STRICT_CANDIDATE
-QA_6_BOOTSTRAP_EXECUTADO=TRUE
-QA_6_CI_PR_VERDE=FALSE
+QA_6_IMPLEMENTADO_EN_RAMA=FINAL_CANDIDATE_PRE_CI
+QA_6_CI_PR_VERDE=NOT_YET_DEMONSTRATED_ON_FINAL_HEAD
 QA_6_TECNICAMENTE_COMPLETO=FALSE
 PR_DRAFT=TRUE
 MERGE_AUTHORIZED=FALSE
