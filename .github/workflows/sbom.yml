@@ -29,7 +29,7 @@ jobs:
       - name: Verify bounded parent and toolchain
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD^)" = "80a3347cce3800153354176d60fe64b90c7162c2"
+          test "$(git rev-parse HEAD^)" = "1b0158a5bcd9b315a4c7681f2456be357d41b5c1"
           test "$(git diff --name-only HEAD^ HEAD)" = ".github/workflows/sbom.yml"
           test -x "${JAVA_HOME_17_X64}/bin/java"
           echo "JAVA_HOME=${JAVA_HOME_17_X64}" >> "${GITHUB_ENV}"
@@ -43,36 +43,24 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
 
-      - name: Preserve audited before-state and create bounded resolver
+      - name: Preserve audited before-state and create JaCoCo resolver
         run: |
           set -euo pipefail
           mkdir -p build/quality/qa6-ci-lock
           cp app/gradle.lockfile build/quality/qa6-ci-lock/gradle.lockfile.before
           cp gradle/verification-metadata.xml build/quality/qa6-ci-lock/verification-metadata.before.xml
-          cat > build/quality/qa6-ci-lock/resolve-ci-surfaces.init.gradle <<'EOF'
+          cat > build/quality/qa6-ci-lock/resolve-jacoco.init.gradle <<'EOF'
           gradle.projectsEvaluated {
               def root = gradle.rootProject
-              root.tasks.register("qa6ResolveCiLockSurfaces") {
+              root.tasks.register("qa6ResolveJacocoArtifacts") {
                   group = "verification"
-                  description = "Resolves bounded CI dependency surfaces without executing tests."
+                  description = "Resolves ephemeral JaCoCo artifacts without placing them in dependency lock state."
                   doLast {
                       def app = root.project(":app")
-                      def names = [
-                          "debugAndroidTestCompileClasspath",
-                          "debugAndroidTestRuntimeClasspath",
-                          "debugRuntimeClasspath",
-                          "debugUnitTestCompileClasspath",
-                          "debugUnitTestRuntimeClasspath",
-                          "jacocoAgent",
-                          "jacocoAnt"
-                      ]
-                      names.each { name ->
+                      ["jacocoAgent", "jacocoAnt"].each { name ->
                           def configuration = app.configurations.findByName(name)
-                          if (configuration == null) {
-                              throw new GradleException("QA-6 missing expected configuration: ${name}")
-                          }
-                          if (!configuration.canBeResolved) {
-                              throw new GradleException("QA-6 configuration is not resolvable: ${name}")
+                          if (configuration == null || !configuration.canBeResolved) {
+                              throw new GradleException("QA-6 missing resolvable JaCoCo configuration: ${name}")
                           }
                           def files = configuration.files.toList().sort { a, b -> a.name <=> b.name }
                           println("QA6_RESOLVED_CONFIGURATION=${name};FILES=${files.size()}")
@@ -88,7 +76,7 @@ jobs:
           }
           EOF
 
-      - name: Generate lock and verification state from real CI surfaces
+      - name: Generate lock and verification state through real Android tasks
         id: generate
         run: |
           set +e
@@ -97,11 +85,11 @@ jobs:
             --write-locks \
             --write-verification-metadata sha256 \
             --init-script tools/quality/android-unit-coverage.init.gradle \
-            --init-script build/quality/qa6-ci-lock/resolve-ci-surfaces.init.gradle \
+            --init-script build/quality/qa6-ci-lock/resolve-jacoco.init.gradle \
             --no-daemon \
             --stacktrace \
             --console=plain \
-            :qa6ResolveCiLockSurfaces \
+            :qa6ResolveJacocoArtifacts \
             :app:lintDebug \
             :app:assembleDebugAndroidTest \
             :app:assembleDebug
