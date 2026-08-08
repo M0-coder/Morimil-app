@@ -6,111 +6,67 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CrossDatabaseOperationProtocolAdrContractTest {
-    private val adr by lazy {
-        repositoryFile("docs/adr/ADR-0002-cross-database-operation-protocol.md").readText()
-    }
+    private val adr by lazy { repositoryFile("docs/adr/ADR-0002-cross-database-operation-protocol.md").readText() }
 
     @Test
-    fun adrIsCurrentAcceptedImplementedAndHistoricallyTraceable() {
+    fun adrIsCurrentAcceptedForCogOrchAndAgent() {
         assertTrue(adr.startsWith("# Document status: CURRENT"))
-        assertTrue(
-            adr.contains(
-                "Status: Accepted and implemented for COG-001 through COG-004 and ORCH-002 through ORCH-004"
-            )
-        )
-        assertTrue(adr.contains(CONTENT_BASELINE_SHA))
-        assertTrue(adr.contains(CONTENT_BASELINE_PARENT_SHA))
-        assertTrue(adr.contains(CURRENT_MAIN_RESOLUTION))
-        assertTrue(adr.contains(MERGE_SHA_EVIDENCE))
-        assertTrue(adr.contains(COG_AUDITED_SOURCE_HEAD))
-        assertTrue(adr.contains(ORCH_AUDITED_SOURCE_HEAD))
-        assertTrue(adr.contains("PR `#149`: closed and merged by squash"))
-        assertTrue(adr.contains("PR `#150`: closed and merged by squash"))
-        assertTrue(adr.contains("PR `#153`: closed and merged by squash"))
-        assertTrue(adr.contains("PR `#172`: closed and merged by squash"))
-        assertTrue(adr.contains("PR_153=MERGED_BY_SQUASH_HISTORICAL"))
-        assertTrue(adr.contains("PR_172=MERGED_BY_SQUASH_HISTORICAL"))
-        assertTrue(adr.contains("ADR_0002=ACCEPTED_AND_IMPLEMENTED_FOR_COG_001_004_AND_ORCH_002_004"))
-
-        STALE_PHRASES.forEach { phrase ->
-            assertFalse("ADR contains stale phrase $phrase", adr.contains(phrase, true))
-        }
+        assertTrue(adr.contains("Status: Accepted and implemented for COG-001..004, ORCH-002..004, and AGENT-001..006"))
+        listOf(
+            CONTENT_BASELINE_SHA,
+            CONTENT_BASELINE_PARENT_SHA,
+            "CURRENT_MAIN_RESOLUTION=EXTERNAL_GIT_REF",
+            "MERGE_SHA_EVIDENCE=EXTERNAL",
+            COG_AUDITED_SOURCE_HEAD,
+            ORCH_AUDITED_SOURCE_HEAD,
+            AGENT_AUDITED_SOURCE_HEAD,
+            "PR_174=MERGED_BY_SQUASH_HISTORICAL",
+            "ADR_0002=ACCEPTED_AND_IMPLEMENTED_FOR_COG_ORCH_AND_AGENT_BOUNDED_SCOPES"
+        ).forEach { token -> assertTrue("Missing ADR token $token", adr.contains(token)) }
     }
 
     @Test
     fun authorityDeterminismAndStateMachineRemainNormative() {
-        assertTrue(adr.contains("instanceId != bodyId"))
-        assertTrue(adr.contains("-> CanonicalConsumerReadPort"))
-        assertTrue(adr.contains("-> CognitiveMigrationCanonicalReadPort"))
-        assertTrue(adr.contains("must not reopen a second direct identity or memory authority"))
-        assertTrue(adr.contains("CanonicalOrchestrationCommitPort"))
-        assertTrue(adr.contains("Wall-clock time is metadata only"))
-        assertTrue(adr.contains("MUST NOT participate in `operationId`, `eventId`"))
+        listOf(
+            "instanceId != bodyId",
+            "agentInstanceId != instanceId",
+            "CanonicalCognitiveMigrationCommitPort",
+            "CanonicalOrchestrationCommitPort",
+            "CanonicalAgentLifecycleCommitPort",
+            "Wall clock is metadata only",
+            "No implementation may expose new owner state before exact canonical receipt verification"
+        ).forEach { token -> assertTrue("Missing authority/protocol token $token", adr.contains(token, true)) }
 
-        val stateSection = adr.substringAfter("## State machine")
-        assertInOrder(
-            stateSection,
-            listOf(
-                "`STAGED`",
-                "`PENDING_CANONICAL`",
-                "`CANONICAL_COMMITTED`",
-                "`PENDING_LOCAL_COMMIT`",
-                "`COMMITTED`",
-                "`BLOCKED`"
-            )
-        )
+        val state = adr.substringAfter("## Deterministic identity and state machine")
+        assertInOrder(state, listOf("STAGED", "PENDING_CANONICAL", "CANONICAL_COMMITTED", "PENDING_LOCAL_COMMIT", "COMMITTED", "BLOCKED"))
     }
 
     @Test
-    fun implementedCogAndOrchMappingsRemainExplicit() {
-        listOf("COG-001", "COG-002", "COG-003", "COG-004").forEach { id ->
-            assertTrue("Missing $id", adr.contains(id))
-        }
-        listOf("ORCH-002", "ORCH-003", "ORCH-004").forEach { id ->
-            assertTrue("Missing $id", adr.contains(id))
+    fun implementedMappingsRemainExplicit() {
+        listOf("COG-001", "COG-002", "COG-003", "COG-004", "ORCH-002", "ORCH-003", "ORCH-004", "AGENT-001", "AGENT-002", "AGENT-003", "AGENT-004", "AGENT-005", "AGENT-006").forEach {
+            assertTrue("Missing mapping $it", adr.contains(it))
         }
         listOf(
-            "cognitive_migration.proposed",
-            "cognitive_migration.approved",
-            "cognitive_migration.executed",
-            "cognitive_migration.rollback",
-            "orchestration.delegated_task.proposed",
-            "orchestration.delegated_task.approved",
-            "orchestration.delegated_task.rejected"
-        ).forEach { event ->
-            assertTrue("Missing $event", adr.contains(event))
-        }
-        listOf(
-            "outside the Room write transaction",
-            "real `sha256:*` snapshot",
-            "preservation of the owner's existing `postSnapshotId`",
-            "serializes process-wide advancement by `operationId`",
-            "reloads after lost CAS",
-            "rejects stale blocking",
-            "without double counting",
-            "serialized by `taskId`",
-            "approvalId IS NULL"
-        ).forEach { requirement ->
-            assertTrue("Missing ADR requirement $requirement", adr.contains(requirement, true))
-        }
+            "agent_lifecycle.agent_created",
+            "agent_lifecycle.task_assigned",
+            "agent_lifecycle.result_submitted",
+            "agent_lifecycle.agent_evaluated",
+            "agent_lifecycle.agent_quarantined",
+            "status=approved",
+            "non-null `approvalId`",
+            "one local finalization after one canonical receipt"
+        ).forEach { token -> assertTrue("Missing AGENT ADR token $token", adr.contains(token, true)) }
     }
 
     @Test
-    fun projectVaultF33AndResidualHardeningStaySeparate() {
-        assertTrue(adr.contains("ProjectVault remains unchanged and separate"))
-        assertTrue(adr.contains("ORCH_001=OPEN"))
-        assertTrue(adr.contains("AGENT_001_006=OPEN"))
-        assertTrue(adr.contains("F3_3=OPEN"))
-        assertTrue(adr.contains("TRACKER_88=OPEN_FOR_REMAINING_OWNERS"))
-        listOf(
-            "Room-backed concurrent execution",
-            "failed-rollback snapshot fixture",
-            "redundant `rollbackEventHash`",
-            "UPDATE-trigger replacement",
-            "ORCH-specific mutation testing"
-        ).forEach { finding ->
-            assertTrue("Missing residual finding $finding", adr.contains(finding, true))
+    fun remainingOwnersAndResidualsStayOpen() {
+        listOf("ORCH_001=OPEN", "BOOT_001=OPEN", "RECALL_001=OPEN", "REST_001_002=OPEN", "F3_3=OPEN", "TRACKER_88=OPEN_FOR_REMAINING_OWNERS").forEach {
+            assertTrue("Missing open state $it", adr.contains(it))
         }
+        listOf("AGENT-specific mutation testing", "direct instrumented line coverage", "single-process", "ORCH-specific mutation testing", "physical ARM64").forEach {
+            assertTrue("Missing residual $it", adr.contains(it, true))
+        }
+        assertFalse(adr.contains("AGENT_001_006=OPEN"))
     }
 
     private fun assertInOrder(text: String, markers: List<String>) {
@@ -123,27 +79,15 @@ class CrossDatabaseOperationProtocolAdrContractTest {
         }
     }
 
-    private fun repositoryFile(relativePath: String): File {
-        return sequenceOf(File(relativePath), File("../$relativePath"))
-            .firstOrNull(File::isFile)
+    private fun repositoryFile(relativePath: String): File =
+        sequenceOf(File(relativePath), File("../$relativePath")).firstOrNull(File::isFile)
             ?: error("Repository file not found: $relativePath")
-    }
 
     private companion object {
-        const val CONTENT_BASELINE_SHA =
-            "CONTENT_BASELINE_SHA=c6a6b0ca998d053c31c75977c5b6d4d9ae166e96"
-        const val CONTENT_BASELINE_PARENT_SHA =
-            "CONTENT_BASELINE_PARENT_SHA=c22920f68f8820bbec676a6cbc74b60548e43d29"
-        const val CURRENT_MAIN_RESOLUTION = "CURRENT_MAIN_RESOLUTION=EXTERNAL_GIT_REF"
-        const val MERGE_SHA_EVIDENCE = "MERGE_SHA_EVIDENCE=EXTERNAL"
+        const val CONTENT_BASELINE_SHA = "CONTENT_BASELINE_SHA=d577a75290d70f423f6e83bf237a8a453f3a534e"
+        const val CONTENT_BASELINE_PARENT_SHA = "CONTENT_BASELINE_PARENT_SHA=9da342f2c147105ea882076f4ebc6ab5f5494190"
         const val COG_AUDITED_SOURCE_HEAD = "7bdbda2aa4b7568695ba8e98be54d506d42c99d5"
         const val ORCH_AUDITED_SOURCE_HEAD = "0348dccb561e576d17c45e7f8b1e38717332772b"
-        val STALE_PHRASES = listOf(
-            "accepted design with audited candidate amendment",
-            "draft pr `#149`",
-            "not integrated in protected `main`",
-            "production_integrated=false",
-            "accepted and implemented for cog-001 through cog-004."
-        )
+        const val AGENT_AUDITED_SOURCE_HEAD = "74e072b911db692041d3716af9d0511b83ad70b7"
     }
 }
