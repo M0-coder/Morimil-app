@@ -169,7 +169,7 @@ class GenesisUltraRuntimeBootstrapCoordinatorAndroidTest {
                 keyEpochId = "guardian_key_epoch_1",
                 publicKeyRef = GenesisUltraHashProfile.sha256("guardian-key".utf8()),
                 status = "active",
-                role = "custodian_without_ownership",
+                role = "custodian_witness",
                 anchorDigest = GenesisUltraHashProfile.sha256("guardian-anchor".utf8())
             ),
             seed = GenesisUltraRuntimeVerifiedSeed(
