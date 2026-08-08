@@ -10,7 +10,9 @@
 >
 > **Historical COG audited source head:** `7bdbda2aa4b7568695ba8e98be54d506d42c99d5`.
 >
-> **ORCH audited source head:** `0348dccb561e576d17c45e7f8b1e38717332772b`.
+> **ORCH-002..004 audited source head:** `0348dccb561e576d17c45e7f8b1e38717332772b`.
+>
+> **ORCH-001 audited source head:** `fe188fdee8eae901434a255051b6fa4f852b929b`.
 >
 > **AGENT audited source head:** `74e072b911db692041d3716af9d0511b83ad70b7`.
 >
@@ -23,6 +25,10 @@
 > **PR #177:** merged by squash for post-BOOT CURRENT reconciliation.
 >
 > **PR #178:** merged by squash for RECALL-001.
+>
+> **PR #179:** merged by squash for post-RECALL CURRENT reconciliation.
+>
+> **PR #180:** merged by squash for ORCH-001.
 >
 > A versioned CURRENT document records a known content baseline. The moving SHA of protected `main` is resolved externally and is not predicted by the commit that contains this document.
 
@@ -40,6 +46,8 @@ PR_175=MERGED_BY_SQUASH_HISTORICAL
 PR_176=MERGED_BY_SQUASH_HISTORICAL
 PR_177=MERGED_BY_SQUASH_HISTORICAL
 PR_178=MERGED_BY_SQUASH_HISTORICAL
+PR_179=MERGED_BY_SQUASH_HISTORICAL
+PR_180=MERGED_BY_SQUASH_HISTORICAL
 ```
 
 ## Identity and Body boundary
@@ -52,7 +60,7 @@ Morimil is the continuous personal Instance. `Morimil-app` is the current native
 - one Body may hold the active-writer role;
 - writer authorization is not ownership;
 - Body succession, signed export, restore, writer transfer and predecessor revocation are not implemented;
-- reasoning output, a provider, a database, Android, GitHub, an agent worker, a BOOT projection, a recall projection, or a Guardian cannot create a second identity authority.
+- reasoning output, a provider, a database, Android, GitHub, an agent worker, a BOOT projection, an ORCH projection, a recall projection, or a Guardian cannot create a second identity authority.
 
 `MORIMIL_OPERATIONAL_BIRTH=NOT_OCCURRED` remains unchanged.
 
@@ -115,11 +123,11 @@ RECALL-001 is not an XOP owner. Its schedule is a rebuildable local projection d
 
 Protected main provides deterministic identities, exact canonical receipts, typed finalization, owner-scoped recovery, append-only rollback evidence, and replay safety for COG-001..004.
 
-## Integrated ORCH-002 through ORCH-004
+## Integrated ORCH-001 through ORCH-004
 
-Protected main provides deterministic task/operation/event identities, exact canonical receipt before delegated-task visibility, task-scoped approve/reject serialization, conditional Room transitions, process-death recovery, and COG/ORCH owner isolation.
+Protected main provides deterministic task/operation/event identities, exact canonical receipt before delegated-task visibility, task-scoped approve/reject serialization, conditional Room transitions, process-death recovery, and COG/ORCH owner isolation for ORCH-002..004.
 
-`ORCH-001` remains open because `seedDefaultOrchestrationIfNeeded` still depends on the legacy `MemoryRepository.hasCompleteBirth()` gate.
+ORCH-001 is also integrated. `AgentOrchestrationRepository.seedDefaultOrchestrationIfNeeded` no longer receives or consults `MemoryRepository.hasCompleteBirth()`. It reads committed Genesis Ultra identity first; absent identity produces no seed mutation, while inconsistent committed identity fails closed through `readCommittedIdentity()`. Agent profiles and orchestrator devices remain rebuildable local projections and do not become Instance identity or canonical-memory authority.
 
 ## Integrated AGENT-001 through AGENT-006
 
@@ -160,7 +168,7 @@ Recall schedules are derived, rebuildable state. They are not canonical memory, 
 ```text
 RECALL_001=INTEGRATED
 RECALL_BOOT_READINESS=OPEN
-ORCH_001=OPEN
+ORCH_001=INTEGRATED
 REST_001_002=OPEN
 HEALTH_CONVERGENCE=OPEN
 F3_3=OPEN
@@ -193,10 +201,10 @@ Auxiliary providers return unverified advisory output and cannot become Morimil'
 
 | Phase | Evidence-backed state |
 | --- | --- |
-| F1 | F1-A, BOOT and the RECALL canonical read path are integrated; `#86` remains open for ORCH-001, REST, health, recall startup readiness and final legacy convergence. |
+| F1 | F1-A, BOOT, RECALL and ORCH-001 are integrated; `#86` remains open for REST, health, recall startup readiness and final legacy convergence. |
 | F2 | Closed for canonical verified memory and bounded promotion/convergence. |
 | F3.1 | ProjectVault protected outbox/recovery integrated. |
-| F3.2 | Integrated for ProjectVault, COG-001..004, ORCH-002..004, AGENT-001..006, BOOT-001 and RECALL-001 derived rebuild. ORCH-001, REST and health/readiness convergence remain open. |
+| F3.2 | Integrated for ProjectVault, COG-001..004, ORCH-001..004, AGENT-001..006, BOOT-001 and RECALL-001 derived rebuild. REST and health/readiness convergence remain open. |
 | F3.3 | Open. Irreversible legacy removal has not begun. |
 | F4 | Open: sovereign durable continuation. |
 | F5 | Open: signed export, dry-run restore, Body succession, writer transfer/revocation. |
@@ -205,7 +213,7 @@ Auxiliary providers return unverified advisory output and cannot become Morimil'
 
 ## Validation and residual hardening
 
-RECALL PR-associated integration-ref validation completed all five governed workflows successfully. Managed API 30 and API 35 tests completed with zero failures and the existing four physical-ARM64-only cases skipped per emulator target. QA-7 JVM and instrumented ratchets passed. API 30 instrumented coverage reported 25.1013% instructions, 11.6158% branches and 32.8200% lines.
+ORCH-001 PR-associated validation completed all five governed workflows successfully for source head `fe188fdee8eae901434a255051b6fa4f852b929b`: Android CI, Genesis Body Preparation, Reference Checks, CodeQL, and SBOM. Genesis validation passed unit tests, lint, debug/instrumentation APK, release-signing fail-closed, ephemeral signed release, managed API30/API35 compatibility, and canonical API30 instrumented coverage. The global mutation pilot remained report-only and is not ORCH-specific mutation evidence.
 
 Residual hardening remains visible:
 
