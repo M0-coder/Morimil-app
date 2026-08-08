@@ -11,97 +11,72 @@ class CognitiveMigrationImplementationBlueprintContractTest {
     }
 
     @Test
-    fun blueprintIsCurrentImplementedAndHistoricallyTraceable() {
+    fun blueprintIsCurrentAndUsesPostAgentBaseline() {
         assertTrue(blueprint.startsWith("# Document status: CURRENT"))
         assertTrue(blueprint.contains("implemented and audited design", true))
-        assertTrue(blueprint.contains(CONTENT_BASELINE_SHA))
-        assertTrue(blueprint.contains(CONTENT_BASELINE_PARENT_SHA))
-        assertTrue(blueprint.contains(CURRENT_MAIN_RESOLUTION))
-        assertTrue(blueprint.contains(MERGE_SHA_EVIDENCE))
-        assertTrue(blueprint.contains(COG_AUDITED_SOURCE_HEAD))
-        assertTrue(blueprint.contains(ORCH_AUDITED_SOURCE_HEAD))
-        assertTrue(blueprint.contains("PR `#149`: closed and merged by squash"))
-        assertTrue(blueprint.contains("PR `#150`: closed and merged by squash"))
-        assertTrue(blueprint.contains("PR `#153`: closed and merged by squash"))
-        assertTrue(blueprint.contains("PR `#172`: closed and merged by squash"))
-        assertTrue(blueprint.contains("PR_153=MERGED_BY_SQUASH_HISTORICAL"))
-        assertTrue(blueprint.contains("PR_172=MERGED_BY_SQUASH_HISTORICAL"))
-        assertTrue(blueprint.contains("COG_001_004=INTEGRATED_IN_MAIN"))
-        assertTrue(blueprint.contains("ORCH_002_004=INTEGRATED_IN_MAIN"))
-
-        STALE_PHRASES.forEach { phrase ->
-            assertFalse("Blueprint contains stale phrase $phrase", blueprint.contains(phrase, true))
-        }
+        listOf(
+            CONTENT_BASELINE_SHA,
+            CONTENT_BASELINE_PARENT_SHA,
+            "CURRENT_MAIN_RESOLUTION=EXTERNAL_GIT_REF",
+            "MERGE_SHA_EVIDENCE=EXTERNAL",
+            COG_AUDITED_SOURCE_HEAD,
+            ORCH_AUDITED_SOURCE_HEAD,
+            AGENT_AUDITED_SOURCE_HEAD,
+            "PR_174=MERGED_BY_SQUASH_HISTORICAL",
+            "COG_001_004=INTEGRATED_IN_MAIN",
+            "ORCH_002_004=INTEGRATED_IN_MAIN",
+            "AGENT_001_006=INTEGRATED_IN_MAIN"
+        ).forEach { token -> assertTrue("Missing blueprint token $token", blueprint.contains(token)) }
     }
 
     @Test
     fun authorityFrontierAndBoundedScopeRemainExplicit() {
-        val identityAuthority = blueprint.indexOf(
-            "GenesisUltraRuntimeIdentityRepository + CanonicalMemoryRepository"
-        )
+        val identityAuthority = blueprint.indexOf("GenesisUltraRuntimeIdentityRepository + CanonicalMemoryRepository")
         val commonBoundary = blueprint.indexOf("-> CanonicalConsumerReadPort", identityAuthority)
-        val specializedBoundary = blueprint.indexOf(
-            "-> CognitiveMigrationCanonicalReadPort",
-            commonBoundary
-        )
-
-        assertTrue(identityAuthority >= 0)
-        assertTrue(commonBoundary > identityAuthority)
-        assertTrue(specializedBoundary > commonBoundary)
-        assertTrue(blueprint.contains("does not open a second direct identity or memory authority"))
-        assertTrue(blueprint.contains("ProjectVault remains separate and preserved"))
-        assertTrue(blueprint.contains("F3.3 legacy removal"))
-        assertTrue(blueprint.contains("ORCH-002 through ORCH-004"))
-        assertTrue(blueprint.contains("ORCH-001"))
-        assertTrue(blueprint.contains("F3_3=OPEN"))
+        val specializedBoundary = blueprint.indexOf("-> CognitiveMigrationCanonicalReadPort", commonBoundary)
+        assertTrue(identityAuthority >= 0 && commonBoundary > identityAuthority && specializedBoundary > commonBoundary)
+        assertTrue(blueprint.contains("ProjectVault remains separate"))
+        assertTrue(blueprint.contains("PR #174 integrated AGENT-001..006"))
+        listOf("BOOT-001", "RECALL-001", "ORCH-001", "REST-001/002", "F3.3 legacy removal remains open").forEach {
+            assertTrue("Missing remaining scope $it", blueprint.contains(it))
+        }
     }
 
     @Test
-    fun deterministicProtocolStatesAndOperationsRemainComplete() {
-        listOf("COG-001", "COG-002", "COG-003", "COG-004").forEach { operation ->
-            assertTrue("Missing operation $operation", blueprint.contains(operation))
+    fun deterministicCogProtocolRemainsComplete() {
+        listOf("COG-001", "COG-002", "COG-003", "COG-004").forEach {
+            assertTrue("Missing operation $it", blueprint.contains(it))
         }
-        listOf(
-            "cognitive_migration.proposed",
-            "cognitive_migration.approved",
-            "cognitive_migration.executed",
-            "cognitive_migration.rollback"
-        ).forEach { eventType ->
-            assertTrue("Missing event $eventType", blueprint.contains(eventType))
+        listOf("cognitive_migration.proposed", "cognitive_migration.approved", "cognitive_migration.executed", "cognitive_migration.rollback").forEach {
+            assertTrue("Missing event $it", blueprint.contains(it))
         }
-
-        val stateBlock = blueprint.substringAfter("The only normal forward order is:")
-            .substringBefore("`BLOCKED` is terminal")
+        val state = blueprint.substringAfter("## 5. Durable journal and state machine")
         assertInOrder(
-            stateBlock,
+            state,
             listOf(
                 "STAGED\n",
-                "PENDING_CANONICAL\n",
-                "CANONICAL_COMMITTED\n",
-                "PENDING_LOCAL_COMMIT\n",
-                "\nCOMMITTED\n",
-                "\nBLOCKED\n"
+                "-> PENDING_CANONICAL",
+                "-> CANONICAL_COMMITTED",
+                "-> PENDING_LOCAL_COMMIT",
+                "-> COMMITTED",
+                "`BLOCKED` is terminal"
             )
         )
-        assertTrue(blueprint.contains("The clock is metadata only"))
-        assertTrue(blueprint.contains("approvalId = operationId"))
+        assertTrue(blueprint.contains("Clock is metadata only", true))
     }
 
     @Test
-    fun mergedCorrectionsAndResidualHardeningRemainVisible() {
+    fun ownerScopedRecoveryAndResidualHardeningRemainVisible() {
         listOf(
-            "process-wide advancement by deterministic `operationId`",
-            "reloads durable state after a lost CAS",
-            "prevents stale snapshots from writing `BLOCKED`",
-            "NULL-safe",
-            "postSnapshotId",
-            "Room-backed concurrent regression",
-            "redundant `rollbackEventHash`",
-            "UPDATE-trigger replacement",
-            "owner-scoped registry"
-        ).forEach { token ->
-            assertTrue("Missing blueprint token $token", blueprint.contains(token, true))
-        }
+            "serializes advancement by deterministic `operationId`",
+            "reloads after lost CAS",
+            "rejects stale blocking",
+            "COG recovery cannot consume ORCH or AGENT rows",
+            "Room-backed multi-coordinator concurrency",
+            "rollback snapshot",
+            "UPDATE-trigger replacement"
+        ).forEach { token -> assertTrue("Missing blueprint token $token", blueprint.contains(token, true)) }
+        assertFalse(blueprint.contains("AGENT, BOOT, RECALL, ORCH-001, REST, and F3.3 legacy removal remain open", true))
     }
 
     private fun assertInOrder(text: String, markers: List<String>) {
@@ -114,28 +89,15 @@ class CognitiveMigrationImplementationBlueprintContractTest {
         }
     }
 
-    private fun repositoryFile(relativePath: String): File {
-        return sequenceOf(File(relativePath), File("../$relativePath"))
-            .firstOrNull(File::isFile)
+    private fun repositoryFile(relativePath: String): File =
+        sequenceOf(File(relativePath), File("../$relativePath")).firstOrNull(File::isFile)
             ?: error("Repository file not found: $relativePath")
-    }
 
     private companion object {
-        const val CONTENT_BASELINE_SHA =
-            "CONTENT_BASELINE_SHA=c6a6b0ca998d053c31c75977c5b6d4d9ae166e96"
-        const val CONTENT_BASELINE_PARENT_SHA =
-            "CONTENT_BASELINE_PARENT_SHA=c22920f68f8820bbec676a6cbc74b60548e43d29"
-        const val CURRENT_MAIN_RESOLUTION = "CURRENT_MAIN_RESOLUTION=EXTERNAL_GIT_REF"
-        const val MERGE_SHA_EVIDENCE = "MERGE_SHA_EVIDENCE=EXTERNAL"
+        const val CONTENT_BASELINE_SHA = "CONTENT_BASELINE_SHA=d577a75290d70f423f6e83bf237a8a453f3a534e"
+        const val CONTENT_BASELINE_PARENT_SHA = "CONTENT_BASELINE_PARENT_SHA=9da342f2c147105ea882076f4ebc6ab5f5494190"
         const val COG_AUDITED_SOURCE_HEAD = "7bdbda2aa4b7568695ba8e98be54d506d42c99d5"
         const val ORCH_AUDITED_SOURCE_HEAD = "0348dccb561e576d17c45e7f8b1e38717332772b"
-        val STALE_PHRASES = listOf(
-            "isolated implementation candidate",
-            "draft pr `#149`",
-            "not integrated in protected `main`",
-            "production_integrated=false",
-            "f3.2 open candidate",
-            "orch, agent, boot, recall, rest, and f3.3 legacy removal are not promoted"
-        )
+        const val AGENT_AUDITED_SOURCE_HEAD = "74e072b911db692041d3716af9d0511b83ad70b7"
     }
 }

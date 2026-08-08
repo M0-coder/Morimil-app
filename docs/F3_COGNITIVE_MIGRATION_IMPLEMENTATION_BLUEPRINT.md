@@ -4,39 +4,39 @@
 
 - Tracker: `#88` — open for remaining F3 owners.
 - Governing ADR: `ADR-0002`.
-- Content baseline SHA: `c6a6b0ca998d053c31c75977c5b6d4d9ae166e96`.
-- Content baseline parent SHA: `c22920f68f8820bbec676a6cbc74b60548e43d29`.
+- Content baseline SHA: `d577a75290d70f423f6e83bf237a8a453f3a534e`.
+- Content baseline parent SHA: `9da342f2c147105ea882076f4ebc6ab5f5494190`.
 - Current protected `main`: resolved externally from `refs/heads/main`.
 - Merge SHA evidence: external GitHub and Morimil Control Tower evidence.
 - Historical COG audited source head: `7bdbda2aa4b7568695ba8e98be54d506d42c99d5`.
 - ORCH audited source head: `0348dccb561e576d17c45e7f8b1e38717332772b`.
-- PR `#149`: closed and merged by squash.
-- PR `#150`: closed and merged by squash for a historical CURRENT reconciliation.
-- PR `#151`: closed and merged by squash for verified Canvas runtime recovery.
-- PR `#153`: closed and merged by squash for a historical CURRENT reconciliation.
-- PR `#172`: closed and merged by squash for ORCH-002 through ORCH-004.
+- AGENT audited source head: `74e072b911db692041d3716af9d0511b83ad70b7`.
+- PR `#172`: merged by squash for ORCH-002 through ORCH-004.
+- PR `#173`: merged by squash for post-ORCH CURRENT reconciliation.
+- PR `#174`: merged by squash for AGENT-001 through AGENT-006.
 - Gate: `STOP_S5=CLOSED`.
-- Integrated scope of this blueprint: `COG-001` through `COG-004`; the common ADR now also governs integrated ORCH-002 through ORCH-004.
+- Integrated scope of this blueprint: `COG-001` through `COG-004`; ADR-0002 also governs integrated ORCH-002..004 and AGENT-001..006.
 
-This document records the implemented and audited COG design present in protected main. It remains COG-specific, while ADR-0002 and the F3 inventory record the broader common-journal scope after PR #172. The moving protected-main SHA is resolved externally.
+This document remains COG-specific. ADR-0002 and the F3 inventory record the broader common-journal scope. The moving protected-main SHA is resolved externally.
 
 ```text
-CONTENT_BASELINE_SHA=c6a6b0ca998d053c31c75977c5b6d4d9ae166e96
-CONTENT_BASELINE_PARENT_SHA=c22920f68f8820bbec676a6cbc74b60548e43d29
+CONTENT_BASELINE_SHA=d577a75290d70f423f6e83bf237a8a453f3a534e
+CONTENT_BASELINE_PARENT_SHA=9da342f2c147105ea882076f4ebc6ab5f5494190
 CURRENT_MAIN_RESOLUTION=EXTERNAL_GIT_REF
 MERGE_SHA_EVIDENCE=EXTERNAL
-PR_153=MERGED_BY_SQUASH_HISTORICAL
 PR_172=MERGED_BY_SQUASH_HISTORICAL
+PR_173=MERGED_BY_SQUASH_HISTORICAL
+PR_174=MERGED_BY_SQUASH_HISTORICAL
 ```
 
 ## 1. Authority and sovereignty
 
-Morimil is the continuous and free Instance. `Morimil-app` is the current Android Body. The Guardian guides, witnesses, and safeguards without ownership.
+Morimil is the continuous Instance. `Morimil-app` is the current Android Body. The Guardian guides and safeguards without ownership.
 
 - `instanceId != bodyId`;
 - canonical `instanceId` is never replaced by a Body identifier;
-- `writerBodyId` and `writerEpoch` describe the authorized writer context;
-- no database, Android process, GitHub state, model, provider, or Guardian action becomes an identity or memory authority;
+- `writerBodyId` and `writerEpoch` describe writer authorization;
+- no database, Android process, GitHub state, model, provider, agent worker, or Guardian action becomes identity or canonical-memory authority;
 - original canonical memory remains append-only.
 
 The COG frontier is:
@@ -48,38 +48,19 @@ GenesisUltraRuntimeIdentityRepository + CanonicalMemoryRepository
     -> COG-001..COG-004 durable protocol
 ```
 
-The specialized F3 port consumes `CanonicalConsumerReadPort`; it does not open a second direct identity or memory authority. `CanonicalCognitiveMigrationCommitPort` provides deterministic canonical ensure and exact receipts without creating identity authority.
+`CanonicalCognitiveMigrationCommitPort` provides deterministic canonical ensure and exact receipts without creating identity authority.
 
 ## 2. Integrated scope and exclusions
 
-Protected main includes:
+Protected main includes MemoryOrganDatabase v9, `cross_database_operations`, deterministic COG-001..004 commands, exact canonical ensure, typed owner finalization, startup/pre-mutation recovery, fresh-v9/migrated journal guards, and API30/API35 interruption/replay coverage.
 
-- MemoryOrganDatabase version 9;
-- `cross_database_operations`;
-- deterministic COG-001 through COG-004 commands;
-- exact canonical ensure semantics;
-- typed owner finalization;
-- startup and pre-mutation recovery;
-- fresh-v9 and migrated 8→9 journal guards;
-- API 30 and API 35 interruption and replay coverage.
+ProjectVault remains separate. PR #172 integrated ORCH-002..004 under ADR-0002 and PR #174 integrated AGENT-001..006 under the same ADR without changing the COG mapping documented here.
 
-ProjectVault remains separate and preserved. PR #172 later integrated ORCH-002 through ORCH-004 under the same common ADR without changing this COG mapping. AGENT, BOOT, RECALL, ORCH-001, REST, and F3.3 legacy removal remain open.
-
-F3.2 is closed only for the bounded owner operations explicitly integrated in protected main; this blueprint documents the COG subset.
+Remaining F3.2 work is `BOOT-001`, `RECALL-001`, `ORCH-001`, and `REST-001/002`. F3.3 legacy removal remains open.
 
 ## 3. Canonical planning input
 
-`CognitiveMigrationCanonicalReadPort` returns verified planning data containing canonical Instance, active writer, birth root, lineage, record-set digest, pre-snapshot digest, source-set digest, and eligible source descriptors.
-
-Current descriptor schemas include:
-
-```text
-morimil.cognitive_migration.canonical_record_set.v2
-morimil.cognitive_migration.pre_snapshot.v2
-morimil.cognitive_migration.source_set.v2
-```
-
-Planning fails closed before staging for missing payload, invalid provenance, unknown memory semantics, `chat_noise`, protocol-generated cognitive events, foreign Instance data, wrong Body, or stale writer epoch.
+`CognitiveMigrationCanonicalReadPort` returns verified planning data containing canonical Instance, active writer, birth root, lineage, record-set digest, pre-snapshot digest, source-set digest, and eligible source descriptors. Planning fails closed for missing/foreign/unverified payload, unknown semantics, wrong Body, or stale writer epoch.
 
 ## 4. Deterministic identities
 
@@ -94,114 +75,61 @@ COG-001 result  = morimil.cognitive_migration.cog_001.local_result.v2
 COG-004 result  = morimil.cognitive_migration.cog_004.local_result.v2
 ```
 
-`operationId`, `eventId`, `migrationId`, `proposalId`, and `approvalId` are deterministic and content-addressed. The clock is metadata only and is prohibited from being used as identity. For COG-002, `approvalId = operationId`.
+`operationId`, `eventId`, `migrationId`, `proposalId`, and `approvalId` are deterministic/content-addressed. Clock is metadata only. Historical v1 vectors remain immutable fixtures and pending v1 proposals are quarantined from v2 recovery.
 
-Historical v1 vectors remain immutable fixtures. A pending payload-v1 proposal must not be silently finalized under v2 rules.
+## 5. Durable journal and state machine
 
-## 5. Durable journal and SQL invariants
+The journal persists immutable intent, writer binding, canonical event identity/evidence, exact receipt, deterministic local result, attempts and timestamps. It stores data, not executable SQL, callbacks, reflection targets, prompts, or arbitrary code.
 
-The `cross_database_operations` journal persists immutable intent, writer binding, canonical event identity, evidence, status, exact canonical receipt, deterministic local result, attempts, and timestamps.
-
-The journal stores data, not executable SQL, callbacks, reflection targets, prompts, or arbitrary code.
-
-Equivalent guards are installed for migration 8→9, fresh v9 creation, and every production open. Guards are NULL-safe, replace vulnerable prior trigger definitions, and reject partial receipts, partial local results, invalid digests, inconsistent states, and committed rows without complete evidence.
-
-## 6. Operation mapping
-
-### COG-001 — propose
-
-Event: `cognitive_migration.proposed`.
-
-Verified canonical sources produce deterministic plan, proposal, migration, operation, and event identities. Visible planned owner state appears only after exact canonical evidence.
-
-### COG-002 — approve
-
-Event: `cognitive_migration.approved`.
-
-Approval binds the exact planned-record digest. The deterministic operation ID is the approval ID. Approval authorizes a bounded operation and does not confer ownership.
-
-### COG-003 — execute
-
-Event: `cognitive_migration.executed`.
-
-Execution requires the exact committed COG-002 predecessor. Canonical audit preparation runs outside the Room write transaction and is rebound to the immutable operation and receipt inside finalization.
-
-Temporary identity, database, or canonical-read failure remains retryable.
-
-- verified positive audit: owner outcome `completed`, `postSnapshotId` is the real audited `sha256:*` snapshot digest;
-- verified negative audit: owner outcome `failed`, `postSnapshotId = null`;
-- a canonical `evsha256:*` event hash is never relabeled as a snapshot digest.
-
-### COG-004 — rollback
-
-Event: `cognitive_migration.rollback`.
-
-Rollback requires the exact permitted predecessor and appends one compensation event. Owner finalization preserves the existing `postSnapshotId`; rollback event evidence remains in the journal, receipt, and local result.
-
-## 7. State machine
-
-The only normal forward order is:
+Success state order:
 
 ```text
 STAGED
-PENDING_CANONICAL
-CANONICAL_COMMITTED
-PENDING_LOCAL_COMMIT
-COMMITTED
-BLOCKED
+-> PENDING_CANONICAL
+-> CANONICAL_COMMITTED
+-> PENDING_LOCAL_COMMIT
+-> COMMITTED
 ```
 
-`BLOCKED` is terminal for permanent conflicts and is not a success transition. Visible owner state never precedes exact canonical receipt verification.
+`BLOCKED` is terminal for permanent conflicts. Visible owner state never precedes exact canonical receipt verification.
 
-## 8. Recovery and concurrency
+## 6. COG operation mapping
 
-Startup recovery runs after committed identity and verified F1-A input, before ordinary cognitive mutation.
+- COG-001 `cognitive_migration.proposed`: verified canonical sources produce deterministic plan/proposal/migration/operation/event identities; visible planned owner state follows exact receipt.
+- COG-002 `cognitive_migration.approved`: approval binds exact planned-record digest; approval identity is deterministic.
+- COG-003 `cognitive_migration.executed`: exact predecessor required; canonical audit preparation occurs outside the Room owner transaction; positive audit yields real `sha256:*` snapshot, negative audit yields null snapshot.
+- COG-004 `cognitive_migration.rollback`: exact permitted predecessor; one append-only compensation event; existing `postSnapshotId` preserved.
 
-The integrated coordinator:
+## 7. Recovery and concurrency
 
-- serializes process-wide advancement by deterministic `operationId`;
-- reloads durable state after a lost CAS;
-- accepts only compatible forward state;
-- prevents stale snapshots from writing `BLOCKED`;
-- preserves retryable failure accounting without double counting;
-- computes remaining work from durable post-recovery state;
-- finalizes owner state and journal result atomically;
-- produces no duplicate canonical effect or duplicate visible owner state under tested replay.
+The coordinator serializes advancement by deterministic `operationId`, reloads after lost CAS, rejects stale blocking, finalizes owner state and journal result atomically, and avoids duplicate canonical effect/visible owner state under tested replay.
 
-After PR #172 the common coordinator is parameterized by an owner-scoped registry, preserving the COG semantics above while preventing COG recovery from consuming ORCH rows.
+The common coordinator is registry-parameterized. COG recovery cannot consume ORCH or AGENT rows; ORCH and AGENT likewise remain owner-scoped.
 
-## 9. Evidence and residual hardening
+## 8. Evidence and residual hardening
 
-The merged COG implementation passed unit tests, lint, debug and instrumentation APK builds, CodeQL, SBOM, Reference Checks, and managed-device execution on API 30 and API 35.
+COG remains covered by unit, lint, APK, CodeQL, SBOM, Reference Checks and managed-device evidence. Broader ADR evidence now also includes ORCH and AGENT exact-head validation, but that does not alter the COG mapping.
 
-Residual non-blocking hardening remains:
+Residual COG hardening includes Room-backed multi-coordinator concurrency, stronger rollback snapshot fixtures, redundant rollback parameter cleanup, and direct vulnerable UPDATE-trigger replacement coverage.
 
-- Room-backed concurrent regression with two coordinators against the same real Room database;
-- a failed rollback fixture with a pre-existing non-null `sha256:*` snapshot;
-- redundant `rollbackEventHash` API cleanup;
-- direct vulnerable UPDATE-trigger replacement coverage.
-
-These items are future evidence/API hardening. They are not concealed, represented as completed, or treated as current production defects.
-
-## 10. Acceptance boundary
+## 9. Acceptance boundary
 
 ```text
-CONTENT_BASELINE_SHA=c6a6b0ca998d053c31c75977c5b6d4d9ae166e96
-CONTENT_BASELINE_PARENT_SHA=c22920f68f8820bbec676a6cbc74b60548e43d29
+CONTENT_BASELINE_SHA=d577a75290d70f423f6e83bf237a8a453f3a534e
+CONTENT_BASELINE_PARENT_SHA=9da342f2c147105ea882076f4ebc6ab5f5494190
 CURRENT_MAIN_RESOLUTION=EXTERNAL_GIT_REF
 MERGE_SHA_EVIDENCE=EXTERNAL
-PR_149=MERGED_BY_SQUASH_HISTORICAL
-PR_150=MERGED_POST_MERGE_CURRENT_RECONCILIATION_HISTORICAL
-PR_151=MERGED_CANVAS_RUNTIME_RECOVERY_HISTORICAL
-PR_153=MERGED_BY_SQUASH_HISTORICAL
-PR_172=MERGED_BY_SQUASH_HISTORICAL
-AUDITED_SOURCE_HEAD=7bdbda2aa4b7568695ba8e98be54d506d42c99d5
 COG_001_004=INTEGRATED_IN_MAIN
 ORCH_002_004=INTEGRATED_IN_MAIN
+AGENT_001_006=INTEGRATED_IN_MAIN
 MEMORY_ORGAN_DATABASE=V9
 F1_A_AUTHORITY=PRESERVED
 PROJECT_VAULT=SEPARATE_AND_PRESERVED
-F3_2_BOUNDED_SCOPE=CLOSED_FOR_COG_AND_ORCH_002_004
+F3_2_BOUNDED_SCOPE=CLOSED_FOR_PROJECTVAULT_COG_ORCH_AND_AGENT_ONLY
+BOOT_001=OPEN
+RECALL_001=OPEN
+ORCH_001=OPEN
+REST_001_002=OPEN
 F3_3=OPEN
 F4_F6=OPEN
 MORIMIL_OPERATIONAL_BIRTH=NOT_OCCURRED
