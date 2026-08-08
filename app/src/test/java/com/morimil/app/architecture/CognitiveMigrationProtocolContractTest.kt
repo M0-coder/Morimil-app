@@ -204,10 +204,10 @@ class CognitiveMigrationProtocolContractTest {
     fun freshV9GuardsAreNullSafeExplicitAndReplaceVulnerableDefinitions() {
         val migration = source("data/local/MemoryOrganDatabaseMigrationV9.kt").readText()
 
-        assertTrue(migration.contains("DROP TRIGGER IF EXISTS $name"))
-        assertTrue(migration.contains("WHEN ($VALID_ROW_EXPRESSION) IS NOT TRUE"))
+        assertTrue(migration.contains("DROP TRIGGER IF EXISTS \$name"))
+        assertTrue(migration.contains("WHEN (\$VALID_ROW_EXPRESSION) IS NOT TRUE"))
         assertFalse(migration.contains("CREATE TRIGGER IF NOT EXISTS"))
-        assertFalse(migration.contains("WHEN NOT ($VALID_ROW_EXPRESSION)"))
+        assertFalse(migration.contains("WHEN NOT (\$VALID_ROW_EXPRESSION)"))
         listOf(
             "NEW.canonicalEventHash IS NOT NULL",
             "NEW.canonicalSequence IS NOT NULL",
@@ -232,7 +232,7 @@ class CognitiveMigrationProtocolContractTest {
         assertTrue(finalizer.contains("\"canonical_event_hash\" to receipt.eventHash"))
         assertFalse(repository.contains("postSnapshotId = rollbackEventHash"))
         assertTrue(repository.contains("rollbackMigrationRecordIfAllowed("))
-        assertTrue(repository.contains("^evsha256:[a-f0-9]{64}$"))
+        assertTrue(repository.contains("^evsha256:[a-f0-9]{64}\$"))
     }
 
     @Test
