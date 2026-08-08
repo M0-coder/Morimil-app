@@ -244,7 +244,6 @@ class MorimilAppContainer(context: Context) {
     val agentOrchestrationRepository: AgentOrchestrationRepository by lazy {
         AgentOrchestrationRepository(
             organDatabase = organDatabase,
-            memoryRepository = memoryRepository,
             identityRepository = genesisUltraRuntimeIdentityRepository,
             protocol = orchestrationProtocolCoordinator
         )
