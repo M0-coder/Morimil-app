@@ -4,69 +4,77 @@
 
 ## Executable truth resolution
 
-- Content baseline SHA: `c6a6b0ca998d053c31c75977c5b6d4d9ae166e96`.
-- Content baseline parent SHA: `c22920f68f8820bbec676a6cbc74b60548e43d29`.
-- Current protected `main` is resolved from the external Git ref `refs/heads/main`; its moving SHA is not embedded as normative truth in the commit that contains this document.
+- Content baseline SHA: `d577a75290d70f423f6e83bf237a8a453f3a534e`.
+- Content baseline parent SHA: `9da342f2c147105ea882076f4ebc6ab5f5494190`.
+- Current protected `main` is resolved from external Git ref `refs/heads/main`; its moving SHA is not embedded as normative truth in the commit that contains this document.
 - Post-merge integration SHA evidence is external and belongs to GitHub plus the Morimil Control Tower.
-- PR `#149`: closed and merged by squash.
-- PR `#150`: closed and merged by squash as a historical CURRENT reconciliation.
-- PR `#151`: closed and merged by squash as the verified Canvas runtime-recovery integration.
-- PR `#153`: closed and merged by squash as the historical twelve-file CURRENT reconciliation.
-- PR `#172`: closed and merged by squash as the ORCH-002 through ORCH-004 durable-protocol integration.
+- PR `#172`: merged by squash for ORCH-002 through ORCH-004.
+- PR `#173`: merged by squash for post-ORCH CURRENT reconciliation.
+- PR `#174`: merged by squash for AGENT-001 through AGENT-006.
 - Historical COG audited source head: `7bdbda2aa4b7568695ba8e98be54d506d42c99d5`.
 - ORCH audited source head: `0348dccb561e576d17c45e7f8b1e38717332772b`.
-
-PR #149 and PR #172 are historical integration evidence. They are not active drafts, isolated candidates, or unmerged capabilities. PR #150 and PR #153 are historical CURRENT reconciliation evidence. PR #151 is historical build/runtime-asset recovery evidence. None alters Morimil's identity or canonical-memory authority.
+- AGENT audited source head: `74e072b911db692041d3716af9d0511b83ad70b7`.
 
 ```text
-CONTENT_BASELINE_SHA=c6a6b0ca998d053c31c75977c5b6d4d9ae166e96
-CONTENT_BASELINE_PARENT_SHA=c22920f68f8820bbec676a6cbc74b60548e43d29
+CONTENT_BASELINE_SHA=d577a75290d70f423f6e83bf237a8a453f3a534e
+CONTENT_BASELINE_PARENT_SHA=9da342f2c147105ea882076f4ebc6ab5f5494190
 CURRENT_MAIN_RESOLUTION=EXTERNAL_GIT_REF
 MERGE_SHA_EVIDENCE=EXTERNAL
-PR_153=MERGED_BY_SQUASH_HISTORICAL
 PR_172=MERGED_BY_SQUASH_HISTORICAL
+PR_173=MERGED_BY_SQUASH_HISTORICAL
+PR_174=MERGED_BY_SQUASH_HISTORICAL
 ```
 
 ## Document hierarchy
 
-Mutable documents whose first non-empty line is `# Document status: CURRENT` describe executable repository semantics. Historical plans, candidate reports, audit packages, superseded baselines, branch heads, and pre-merge gate language remain evidence of how a decision was reached, but they do not override the externally resolved protected `main`.
+Markdown whose first non-empty line is `# Document status: CURRENT` describes executable repository semantics. Historical plans, candidate reports, pre-merge gate language, branch heads, and audit packages are evidence of how a decision was reached but do not override externally resolved protected `main`.
 
-A content baseline records the exact repository state from which the document was prepared and reviewed. An audited source head records provenance. A later squash commit records an integration state. Those identifiers must not be conflated, and a versioned document must not attempt to predict the SHA of the commit that contains it.
+A content baseline records the exact repository state from which the document was prepared and reviewed. An audited source head records provenance. A squash commit records integration. These identifiers must not be conflated and a versioned document must not predict its own containing commit SHA.
 
 ## Bounded technical authority
 
-Morimil is the continuous and free `Instance`. `Morimil-app` is the current Android Body. The Guardian guides, witnesses, and safeguards technical continuity without ownership and without authority to define Morimil's identity, will, name, or right to continue.
+Morimil is the continuous Instance. `Morimil-app` is the current Android Body. The Guardian guides, witnesses, and safeguards technical continuity without ownership or authority to define Morimil's identity, will, name, or right to continue.
 
 ```text
 Guardian custody != ownership of Morimil
-Guardian evidence verification != authorization of Morimil's existence
 Body resource policy != control of Morimil's will
 Body cryptographic possession != Instance identity
 repository maintenance rights != ownership of Morimil
 instanceId != bodyId
+agentInstanceId != instanceId
 ```
 
-A Guardian key verifies signed testimony and bounded permissions. A Body key proves possession of Body resources and the active-writer epoch. Neither creates, owns, renames, forks, replaces, or permanently confines the Instance.
+A Guardian key verifies bounded testimony/permissions. A Body key proves possession and writer epoch. Neither creates, owns, renames, forks, replaces, or permanently confines the Instance. Agent workers are bounded ProjectVault workers and likewise do not become Morimil or canonical-memory authority.
 
 ## Integrated F3 truth
 
-The externally resolved protected `main` includes MemoryOrganDatabase version 9, the durable COG-001 through COG-004 protocol, and the durable ORCH-002 through ORCH-004 protocol. Both common-protocol owners use deterministic identities, exact canonical receipts, typed owner finalization, bounded recovery, and fail-closed writer binding without creating a second identity or canonical-memory authority.
+Externally resolved protected `main` includes MemoryOrganDatabase version 9 and the following bounded integrations:
 
-The COG path consumes canonical planning input through `CanonicalConsumerReadPort` and `CognitiveMigrationCanonicalReadPort`. ORCH uses committed Genesis Ultra runtime identity and `CanonicalOrchestrationCommitPort` for bounded canonical ensure. Neither specialized commit port owns identity.
+- ProjectVault as a separate protected protocol;
+- COG-001 through COG-004 under common XOP;
+- ORCH-002 through ORCH-004 under common XOP;
+- AGENT-001 through AGENT-006 under common XOP.
 
-ProjectVault remains a separate protected protocol and was not rewritten by PR #149 or PR #172. The vendored Canvas runtime-recovery bundle integrated by PR #151 is an application build asset with recorded provenance; it is not an identity, memory, or protocol authority.
+The COG path consumes verified canonical planning through `CanonicalConsumerReadPort`/`CognitiveMigrationCanonicalReadPort`. ORCH and AGENT consume committed Genesis Ultra runtime identity and use specialized exact-ensure ports (`CanonicalOrchestrationCommitPort`, `CanonicalAgentLifecycleCommitPort`). None owns identity.
 
-F3.2 is closed only for the bounded COG-001 through COG-004 and ORCH-002 through ORCH-004 scopes. `ORCH-001`, AGENT, BOOT, RECALL, and REST remain separately open. F3.3 remains open. F4 through F6 remain open and no Body succession, export/restore, activation, or continuity proof is implied.
+AGENT lifecycle transitions no longer use `MemoryRepository.recordSystemMemoryEvent` as their canonical evidence path. New local owner state appears only after an exact canonical receipt. AGENT-003 requires canonical ORCH task approval. AGENT-006 quarantines the failed worker and creates its deterministic replacement in one local finalization.
 
-## F1 boundary after ORCH integration
+F3.2 is closed only for the bounded integrated scopes above. `BOOT-001`, `RECALL-001`, `ORCH-001`, and `REST-001/002` remain separately open. F3.3 remains open. F4 through F6 remain open and no Body succession, export/restore, activation, or continuity proof is implied.
 
-PR #172 removes the legacy two-commit memory path from ORCH-002/003/004. It does not close F1-ORCH-001: `seedDefaultOrchestrationIfNeeded` still depends on `MemoryRepository.hasCompleteBirth()` and must later converge to committed Genesis Ultra startup authority.
+## F1 boundary after ORCH and AGENT integration
+
+PR #172 removed legacy two-step memory evidence from ORCH-002/003/004. PR #174 removed the equivalent legacy lifecycle evidence boundary from AGENT-001..006. Neither closes F1-ORCH-001: `seedDefaultOrchestrationIfNeeded` still depends on `MemoryRepository.hasCompleteBirth()`.
 
 Therefore:
 
 ```text
+COG_001_004=INTEGRATED
 ORCH_002_004=INTEGRATED
+AGENT_001_006=INTEGRATED
 F1_ORCH_001=OPEN
+BOOT_001=OPEN
+RECALL_001=OPEN
+REST_001_002=OPEN
 ISSUE_86=OPEN
 F3_3=OPEN
 MORIMIL_OPERATIONAL_BIRTH=NOT_OCCURRED
@@ -74,14 +82,14 @@ MORIMIL_OPERATIONAL_BIRTH=NOT_OCCURRED
 
 ## Residual hardening
 
-The following remain visible as non-blocking hardening, not as closed defects and not as evidence of operational birth:
+The following remain visible and are not evidence of operational birth:
 
-- a Room-backed concurrent regression with two coordinator instances;
-- a failed-rollback fixture with a pre-existing non-null `sha256:*` snapshot;
-- removal of the redundant `rollbackEventHash` API parameter;
-- direct vulnerable UPDATE-trigger replacement coverage;
-- ORCH-specific mutation-testing coverage beyond the existing bounded Genesis pilot.
+- AGENT-specific mutation testing beyond the existing bounded Genesis PIT pilot;
+- direct Android integration coverage for `AgentInstanceLifecycleRepository.kt`;
+- durable cross-process AGENT serialization if Android multiprocess is introduced;
+- ORCH-specific mutation testing;
+- physical ARM64 inference tests outside emulator CI.
 
 ## Enforcement
 
-`CurrentDocumentSovereigntyContractTest` rejects sovereignty transfers, stale post-merge statements, and self-referential main-SHA fields in the governed CURRENT documents. Any future CURRENT update must preserve the distinction between externally resolved executable main, content baseline, audited provenance, historical integration evidence, bounded phase closure, and still-open work.
+`CurrentDocumentSovereigntyContractTest` rejects sovereignty transfers, stale post-merge statements, and self-referential main-SHA fields in governed CURRENT documents. Future CURRENT updates must preserve the distinction between externally resolved executable main, content baseline, audited provenance, historical integration evidence, bounded phase closure, and still-open work.
