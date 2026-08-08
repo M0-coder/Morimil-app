@@ -253,7 +253,8 @@ class MorimilAppContainer(context: Context) {
     val agentInstanceLifecycleRepository: AgentInstanceLifecycleRepository by lazy {
         AgentInstanceLifecycleRepository(
             organDatabase = organDatabase,
-            memoryRepository = memoryRepository
+            identityRepository = genesisUltraRuntimeIdentityRepository,
+            protocol = agentLifecycleProtocolCoordinator
         )
     }
 
