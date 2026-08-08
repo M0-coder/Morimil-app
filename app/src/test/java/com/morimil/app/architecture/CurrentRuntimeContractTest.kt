@@ -12,7 +12,7 @@ class CurrentRuntimeContractTest {
     }
 
     @Test
-    fun contractUsesPostRecallBaselineAndStableMainResolution() {
+    fun contractUsesPostOrchTruthAndStableMainResolution() {
         listOf(
             CONTENT_BASELINE_SHA,
             CONTENT_BASELINE_PARENT_SHA,
@@ -20,10 +20,13 @@ class CurrentRuntimeContractTest {
             "MERGE_SHA_EVIDENCE=EXTERNAL",
             COG_AUDITED_SOURCE_HEAD,
             ORCH_AUDITED_SOURCE_HEAD,
+            ORCH_001_AUDITED_SOURCE_HEAD,
             AGENT_AUDITED_SOURCE_HEAD,
             BOOT_AUDITED_SOURCE_HEAD,
             RECALL_AUDITED_SOURCE_HEAD,
-            "PR_178=MERGED_BY_SQUASH_HISTORICAL"
+            "PR_178=MERGED_BY_SQUASH_HISTORICAL",
+            "PR_179=MERGED_BY_SQUASH_HISTORICAL",
+            "PR_180=MERGED_BY_SQUASH_HISTORICAL"
         ).forEach { token -> assertTrue("Missing runtime token $token", contract.contains(token)) }
 
         assertTrue(contract.contains("| `MorimilDatabase` | `15` |"))
@@ -33,14 +36,17 @@ class CurrentRuntimeContractTest {
     }
 
     @Test
-    fun canonicalAuthorityIncludesRecallAsDerivedConsumerWithoutExpandingIdentityAuthority() {
+    fun canonicalAuthorityIncludesRecallAndOrchSeedWithoutExpandingIdentityAuthority() {
         val recall = productionFile("com/morimil/app/data/repository/RecallScheduleRepository.kt").readText()
+        val orch = productionFile("com/morimil/app/data/repository/AgentOrchestrationRepository.kt").readText()
         assertTrue(contract.contains("GenesisUltraRuntimeIdentityRepository + CanonicalMemoryRepository"))
         assertTrue(contract.contains("CanonicalRuntimeBootstrapCommitPort"))
         assertTrue(contract.contains("No specialized port or derived projection becomes an identity source"))
         assertTrue(contract.contains("writer authorization is not ownership", true))
         assertTrue(recall.contains("CanonicalConsumerReadPort"))
         assertTrue(recall.contains("readRecallCandidates"))
+        assertTrue(orch.contains("identityRepository.readCommittedIdentity() ?: return"))
+        assertFalse(orch.contains("memoryRepository.hasCompleteBirth()"))
         listOf("loadGenesisCore(", "loadLocalIdentity(", "loadMemoryContext(", "local_instance_pending").forEach {
             assertFalse("Legacy recall dependency returned: $it", recall.contains(it))
         }
@@ -61,17 +67,18 @@ class CurrentRuntimeContractTest {
     }
 
     @Test
-    fun phaseTableIntegratesRecallButKeepsRemainingOwnersOpen() {
+    fun phaseTableIntegratesOrchButKeepsRemainingOwnersOpen() {
         listOf(
             "RECALL_001=INTEGRATED",
             "RECALL_BOOT_READINESS=OPEN",
-            "ORCH_001=OPEN",
+            "ORCH_001=INTEGRATED",
             "REST_001_002=OPEN",
             "HEALTH_CONVERGENCE=OPEN",
             "F3_3=OPEN"
         ).forEach { assertTrue("Missing phase token $it", contract.contains(it)) }
-        assertTrue(contract.contains("F3.2 | Integrated for ProjectVault, COG-001..004, ORCH-002..004, AGENT-001..006, BOOT-001 and RECALL-001 derived rebuild"))
+        assertTrue(contract.contains("F3.2 | Integrated for ProjectVault, COG-001..004, ORCH-001..004, AGENT-001..006, BOOT-001 and RECALL-001 derived rebuild"))
         assertFalse(contract.contains("RECALL_001=OPEN"))
+        assertFalse(contract.contains("ORCH_001=OPEN"))
         assertTrue(contract.contains("MORIMIL_OPERATIONAL_BIRTH=NOT_OCCURRED"))
         assertFalse(contract.contains("F3 complete", ignoreCase = true))
     }
@@ -106,6 +113,7 @@ class CurrentRuntimeContractTest {
         const val CONTENT_BASELINE_PARENT_SHA = "CONTENT_BASELINE_PARENT_SHA=bdbb5b2a040b728508948cd3cfbd8807b40a12f6"
         const val COG_AUDITED_SOURCE_HEAD = "7bdbda2aa4b7568695ba8e98be54d506d42c99d5"
         const val ORCH_AUDITED_SOURCE_HEAD = "0348dccb561e576d17c45e7f8b1e38717332772b"
+        const val ORCH_001_AUDITED_SOURCE_HEAD = "fe188fdee8eae901434a255051b6fa4f852b929b"
         const val AGENT_AUDITED_SOURCE_HEAD = "74e072b911db692041d3716af9d0511b83ad70b7"
         const val BOOT_AUDITED_SOURCE_HEAD = "c7710635fa172108cce87b3f7a76d6e037095864"
         const val RECALL_AUDITED_SOURCE_HEAD = "fae8a0df3c29775317986877bce2b8eda8593d27"
