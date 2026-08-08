@@ -230,7 +230,7 @@ class MorimilAppContainer(context: Context) {
     val recallScheduleRepository: RecallScheduleRepository by lazy {
         RecallScheduleRepository(
             organDatabase = organDatabase,
-            memoryDatabase = memoryDatabase
+            canonicalReadPort = canonicalConsumerReadPort
         )
     }
 
