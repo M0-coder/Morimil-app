@@ -2,36 +2,41 @@
 
 # F3.2 — Cross-database operation inventory
 
-- Inventory version: `6`.
-- Content baseline SHA: `d577a75290d70f423f6e83bf237a8a453f3a534e`.
-- Content baseline parent SHA: `9da342f2c147105ea882076f4ebc6ab5f5494190`.
+- Inventory version: `7`.
+- Content baseline SHA: `3a995232ce2a515e1ca9b9151f77e63805bad9d3`.
+- Content baseline parent SHA: `5918b64ec83e69cbb3d9718943b25d1e1299d698`.
 - Current protected `main`: resolved externally from `refs/heads/main`.
 - Merge SHA evidence: external GitHub and Morimil Control Tower evidence.
 - Historical COG audited source head: `7bdbda2aa4b7568695ba8e98be54d506d42c99d5`.
 - ORCH audited source head: `0348dccb561e576d17c45e7f8b1e38717332772b`.
 - AGENT audited source head: `74e072b911db692041d3716af9d0511b83ad70b7`.
+- BOOT audited source head: `c7710635fa172108cce87b3f7a76d6e037095864`.
 - PR `#172`: merged by squash for ORCH-002 through ORCH-004.
 - PR `#173`: merged by squash for post-ORCH CURRENT reconciliation.
 - PR `#174`: merged by squash for AGENT-001 through AGENT-006.
+- PR `#175`: merged by squash for post-AGENT CURRENT reconciliation.
+- PR `#176`: merged by squash for BOOT-001.
 - Tracker: `#88` — open for remaining F3 owners.
 - Protocol: `docs/adr/ADR-0002-cross-database-operation-protocol.md`.
 - Gate: `STOP_S5=CLOSED`.
 
 ```text
-CONTENT_BASELINE_SHA=d577a75290d70f423f6e83bf237a8a453f3a534e
-CONTENT_BASELINE_PARENT_SHA=9da342f2c147105ea882076f4ebc6ab5f5494190
+CONTENT_BASELINE_SHA=3a995232ce2a515e1ca9b9151f77e63805bad9d3
+CONTENT_BASELINE_PARENT_SHA=5918b64ec83e69cbb3d9718943b25d1e1299d698
 CURRENT_MAIN_RESOLUTION=EXTERNAL_GIT_REF
 MERGE_SHA_EVIDENCE=EXTERNAL
 PR_172=MERGED_BY_SQUASH_HISTORICAL
 PR_173=MERGED_BY_SQUASH_HISTORICAL
 PR_174=MERGED_BY_SQUASH_HISTORICAL
+PR_175=MERGED_BY_SQUASH_HISTORICAL
+PR_176=MERGED_BY_SQUASH_HISTORICAL
 ```
 
 ## Authority model
 
 Morimil is the continuous Instance; `Morimil-app` is the current Android Body. The Guardian safeguards without ownership. `instanceId != bodyId` and `agentInstanceId != instanceId` remain mandatory.
 
-Neither the XOP journal nor an owner repository becomes a second identity or canonical-memory authority.
+Neither the XOP journal nor an owner repository becomes a second identity or canonical-memory authority. Writer Body/epoch authorization is not ownership. BOOT runtime projections remain rebuildable projections and do not become identity authority.
 
 ## Protocol classifications
 
@@ -49,8 +54,8 @@ Neither the XOP journal nor an owner repository becomes a second identity or can
 | Owner path | Classification | Current disposition |
 | --- | --- | --- |
 | `app/src/main/java/com/morimil/app/data/repository/ProjectVaultRepository.kt` | `PROTECTED_REFERENCE` | Integrated and separate. |
-| `app/src/main/java/com/morimil/app/runtime/GenesisUltraRuntimeBootstrapCoordinator.kt` | `REQUIRES_PROTOCOL` | BOOT-001 open; isolated candidate work does not become protected-main truth before merge. |
-| `app/src/main/java/com/morimil/app/data/repository/RuntimeBootstrapProtocolFinalizer.kt` | `SUPPORT_BOUNDARY` | BOOT-001 candidate support boundary; not independently authoritative and not yet integrated in protected main. |
+| `app/src/main/java/com/morimil/app/runtime/GenesisUltraRuntimeBootstrapCoordinator.kt` | `INTEGRATED_PROTOCOL` | BOOT-001 integrated; deterministic runtime bootstrap and owner-scoped recovery use the common XOP journal. |
+| `app/src/main/java/com/morimil/app/data/repository/RuntimeBootstrapProtocolFinalizer.kt` | `SUPPORT_BOUNDARY` | Integrated BOOT-001 finalization support; not independently authoritative. |
 | `app/src/main/java/com/morimil/app/data/repository/RecallScheduleRepository.kt` | `DERIVED_REBUILD` | RECALL-001 open. |
 | `app/src/main/java/com/morimil/app/data/repository/RestCycleRepository.kt` | `REQUIRES_PROTOCOL` | REST-001/002 open. |
 | `app/src/main/java/com/morimil/app/data/repository/CognitiveMigrationRepository.kt` | `INTEGRATED_PROTOCOL` | COG-001 through COG-004 integrated. |
@@ -96,13 +101,18 @@ Neither the XOP journal nor an owner repository becomes a second identity or can
 | `AGENT-005` | `retireAgent`, `promoteAgent` | Integrated as separate durable retire/promote operation types. |
 | `AGENT-006` | `quarantineAgent` | Integrated: failed worker quarantine and deterministic replacement creation are one local finalization after one canonical receipt. |
 
-COG, ORCH and AGENT startup/pre-mutation recovery are owner-scoped and cannot consume one another's rows.
+### Runtime bootstrap
+
+| ID | Entry point | Current state |
+| --- | --- | --- |
+| `BOOT-001` | `bootstrap` | Integrated: deterministic Instance/Body/epoch-scoped XOP, exact canonical receipt before new BOOT projection state, idempotent MorimilDatabase preparation, MemoryOrgan seed-if-empty finalization, and owner-scoped recovery. |
+
+COG, ORCH, AGENT and BOOT recovery remain owner-scoped. BOOT recovery executes inside `bootstrap(identity)` after legacy convergence and ProjectVault recovery; it cannot consume another owner's journal rows.
 
 ## Remaining operations
 
 | ID | Entry point | Disposition |
 | --- | --- | --- |
-| `BOOT-001` | `bootstrap` | `REQUIRES_PROTOCOL`; open on protected main. An isolated candidate may be validated without changing this protected-main disposition before merge. |
 | `RECALL-001` | `seedFromRecentMemoryIfNeeded` | `DERIVED_REBUILD`; open. |
 | `ORCH-001` | `seedDefaultOrchestrationIfNeeded` | Open convergence/rebuild work; still uses legacy `hasCompleteBirth()` gate. |
 | `REST-001` | `runLocalRestCycleIfDue`, `approvePlannedRestCycle` | `REQUIRES_PROTOCOL`; open. |
@@ -111,7 +121,7 @@ COG, ORCH and AGENT startup/pre-mutation recovery are owner-scoped and cannot co
 
 ## Integrated common-protocol guarantees
 
-Within COG, ORCH and AGENT bounded scopes:
+Within COG, ORCH, AGENT and BOOT bounded scopes:
 
 1. deterministic operation/event identities;
 2. hidden immutable staging;
@@ -120,9 +130,11 @@ Within COG, ORCH and AGENT bounded scopes:
 5. owner-scoped startup/pre-mutation recovery;
 6. reload after lost CAS;
 7. stale-block prevention;
-8. atomic owner result + journal commit;
+8. atomic owner result + journal commit at the owner's MemoryOrgan finalization boundary;
 9. typed retryable/permanent failures;
 10. replay without duplicate canonical effect or duplicate owner state.
+
+BOOT additionally provides idempotent cross-file saga preparation in `MorimilDatabase`, seed-if-empty preservation of pre-existing orchestration state, `ownership_conferred=false`, `guardian_role=custodian_witness`, and successor-Body-compatible operation identity. It does not implement F5 succession or revocation.
 
 AGENT additionally provides semantic public retry recognition, canonical ORCH approval enforcement for result submission, and atomic quarantine+replacement local finalization.
 
@@ -133,13 +145,14 @@ No compatibility write to `memory_events`, `genesis_core`, or `local_instance_id
 1. `COG-001` through `COG-004` — integrated first common-protocol owner.
 2. `ORCH-002` through `ORCH-004` — integrated second common-protocol owner.
 3. `AGENT-001` through `AGENT-006` — integrated third common-protocol owner.
-4. `BOOT-001` — next bounded owner.
-5. `RECALL-001` and `ORCH-001`.
+4. `BOOT-001` — integrated fourth common-protocol owner.
+5. `RECALL-001` and `ORCH-001` — next bounded convergence work.
 6. `REST-001` and `REST-002`.
 7. F3.3 only after every F3.2 owner has a recorded disposition and separate authorization.
 
 ## Residual hardening
 
+- BOOT-specific mutation testing is not established; the existing report-only PIT pilot remains Genesis-scoped;
 - AGENT-specific mutation testing is not established;
 - direct Android integration coverage of `AgentInstanceLifecycleRepository.kt` remains absent;
 - AGENT mutex serialization is process-local and must be redesigned if multiprocess Android is introduced;
