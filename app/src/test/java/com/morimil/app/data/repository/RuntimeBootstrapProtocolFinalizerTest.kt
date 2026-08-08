@@ -18,7 +18,6 @@ import com.morimil.app.data.local.UserWorkspaceEntity
 import java.nio.charset.StandardCharsets
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -119,7 +118,11 @@ class RuntimeBootstrapProtocolFinalizerTest {
         )
 
         val exact = finalizer.prepareOutsideTransaction(operation, receipt)
-        val wrong = exact.copy(digest = "sha256:" + "9".repeat(64))
+        val wrongJson = exact.json.replace("\"workspace_id\"", "\"workspace_id_wrong\"")
+        val wrong = exact.copy(
+            json = wrongJson,
+            digest = CrossDatabaseOperationIdentity.digestCanonicalJson(wrongJson)
+        )
         assertFailure(
             CrossDatabaseProtocolErrors.FINALIZATION_PREPARATION_CONFLICT,
             runCatching {
