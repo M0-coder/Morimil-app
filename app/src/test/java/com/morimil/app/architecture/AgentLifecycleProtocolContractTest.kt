@@ -88,6 +88,22 @@ class AgentLifecycleProtocolContractTest {
     }
 
     @Test
+    fun semanticCreateRetryCannotResurrectTerminalWorker() {
+        val repository = productionFile(
+            "com/morimil/app/data/repository/AgentInstanceLifecycleRepository.kt"
+        ).readText()
+        val createSection = repository.substringAfter("suspend fun createAgentForVault")
+            .substringBefore("suspend fun assignTaskToAgent")
+
+        assertTrue(createSection.contains("recoverBeforeMutation(identity)"))
+        assertTrue(createSection.contains("hasCommittedOperation(existing.agentInstanceId"))
+        assertTrue(createSection.contains("existing.status != STATUS_RETIRED"))
+        assertTrue(createSection.contains("existing.status != STATUS_QUARANTINED"))
+        assertTrue(createSection.contains("existing.briefing == cleanBriefing"))
+        assertTrue(createSection.contains("val ordinal = existingAgents.count"))
+    }
+
+    @Test
     fun resultSubmissionRequiresCanonicalOrchestrationApproval() {
         val repository = productionFile(
             "com/morimil/app/data/repository/AgentInstanceLifecycleRepository.kt"
