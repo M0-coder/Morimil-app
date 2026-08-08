@@ -11,6 +11,7 @@ internal object RuntimeBootstrapProtocolSchemas {
 }
 
 internal object RuntimeBootstrapOperationFactory {
+    const val GUARDIAN_ROLE = "custodian_witness"
     const val PROJECT_STATUS =
         "genesis_ultra_runtime_ready;memory=canonical;boot=durable;" +
             "rest_cycle=canonical_adapter_pending;recalls=canonical_adapter_pending;health=ready"
@@ -24,6 +25,9 @@ internal object RuntimeBootstrapOperationFactory {
         }
         require(!identity.authorization.ownershipConferred) {
             "runtime_bootstrap_ownership_conferred"
+        }
+        require(identity.guardian.role == GUARDIAN_ROLE) {
+            "runtime_bootstrap_guardian_role_invalid"
         }
         require(identity.activeBody.status == "active_writer") {
             "runtime_bootstrap_writer_not_active"
