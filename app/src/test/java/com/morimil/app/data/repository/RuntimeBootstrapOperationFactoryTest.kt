@@ -69,8 +69,9 @@ class RuntimeBootstrapOperationFactoryTest {
 
     @Test
     fun ownershipConferredIdentityCannotCreateBootstrapOperation() {
-        val invalid = identity().copy(
-            authorization = identity().authorization.copy(ownershipConferred = true)
+        val base = identity()
+        val invalid = base.copy(
+            authorization = base.authorization.copy(ownershipConferred = true)
         )
 
         val failure = runCatching {
@@ -81,13 +82,27 @@ class RuntimeBootstrapOperationFactoryTest {
     }
 
     @Test
-    fun payloadPreservesGuardianWithoutOwnershipAndCanonicalMemoryTruth() {
+    fun nonCanonicalGuardianRoleCannotCreateBootstrapOperation() {
+        val base = identity()
+        val invalid = base.copy(
+            guardian = base.guardian.copy(role = "custodian_without_ownership")
+        )
+
+        val failure = runCatching {
+            RuntimeBootstrapOperationFactory.initialize(invalid)
+        }.exceptionOrNull()
+
+        assertEquals("runtime_bootstrap_guardian_role_invalid", failure?.message)
+    }
+
+    @Test
+    fun payloadPreservesCanonicalGuardianWitnessAndNoOwnershipTruth() {
         val command = RuntimeBootstrapOperationFactory.initialize(identity())
         val payload = JSONObject(command.payloadJson)
         val project = payload.getJSONObject("project")
 
         assertFalse(payload.getBoolean("ownership_conferred"))
-        assertEquals("custodian_without_ownership", payload.getString("guardian_role"))
+        assertEquals("custodian_witness", payload.getString("guardian_role"))
         assertEquals(
             "genesis_ultra_runtime_ready;memory=canonical;boot=durable;" +
                 "rest_cycle=canonical_adapter_pending;recalls=canonical_adapter_pending;health=ready",
@@ -121,7 +136,7 @@ class RuntimeBootstrapOperationFactoryTest {
                 keyEpochId = "guardian_epoch",
                 publicKeyRef = digest("guardian_key"),
                 status = "active",
-                role = "custodian_without_ownership",
+                role = "custodian_witness",
                 anchorDigest = digest("guardian_anchor")
             ),
             seed = GenesisUltraRuntimeVerifiedSeed(
