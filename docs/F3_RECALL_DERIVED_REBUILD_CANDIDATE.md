@@ -1,4 +1,4 @@
-# Document status: CANDIDATE
+# Document status: PROPOSAL
 
 # F1 / F3 — RECALL-001 canonical derived rebuild
 
