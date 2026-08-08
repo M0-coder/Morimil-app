@@ -6,10 +6,58 @@ import com.morimil.app.data.local.DelegatedTaskEntity
 import com.morimil.app.data.local.MemoryOrganDatabase
 import org.json.JSONObject
 
-internal class OrchestrationProtocolFinalizer(
+internal interface OrchestrationFinalizerStore {
+    suspend fun loadDelegatedTask(taskId: String): DelegatedTaskEntity?
+    suspend fun insertDelegatedTask(task: DelegatedTaskEntity)
+    suspend fun approveDelegatedTaskIfAwaitingApproval(
+        taskId: String,
+        approvalId: String,
+        updatedAtMillis: Long
+    ): Int
+
+    suspend fun rejectDelegatedTaskIfAwaitingApproval(
+        taskId: String,
+        errorSummary: String,
+        updatedAtMillis: Long,
+        completedAtMillis: Long
+    ): Int
+}
+
+private class RoomOrchestrationFinalizerStore(
     database: MemoryOrganDatabase
+) : OrchestrationFinalizerStore {
+    private val dao = database.memoryOrganDao()
+
+    override suspend fun loadDelegatedTask(taskId: String): DelegatedTaskEntity? =
+        dao.loadDelegatedTask(taskId)
+
+    override suspend fun insertDelegatedTask(task: DelegatedTaskEntity) {
+        dao.insertDelegatedTask(task)
+    }
+
+    override suspend fun approveDelegatedTaskIfAwaitingApproval(
+        taskId: String,
+        approvalId: String,
+        updatedAtMillis: Long
+    ): Int = dao.approveDelegatedTaskIfAwaitingApproval(taskId, approvalId, updatedAtMillis)
+
+    override suspend fun rejectDelegatedTaskIfAwaitingApproval(
+        taskId: String,
+        errorSummary: String,
+        updatedAtMillis: Long,
+        completedAtMillis: Long
+    ): Int = dao.rejectDelegatedTaskIfAwaitingApproval(
+        taskId = taskId,
+        errorSummary = errorSummary,
+        updatedAtMillis = updatedAtMillis,
+        completedAtMillis = completedAtMillis
+    )
+}
+
+internal class OrchestrationProtocolFinalizer private constructor(
+    private val store: OrchestrationFinalizerStore
 ) : CrossDatabaseTypedFinalizer {
-    private val organDao = database.memoryOrganDao()
+    constructor(database: MemoryOrganDatabase) : this(RoomOrchestrationFinalizerStore(database))
 
     override val supportedOperationTypes: Set<String> =
         OrchestrationProtocolTypes.CLOSED_REGISTRY.keys
@@ -60,9 +108,9 @@ internal class OrchestrationProtocolFinalizer(
         )
 
         val candidate = plannedTaskObject.toEntity(operation)
-        val existing = organDao.loadDelegatedTask(candidate.taskId)
+        val existing = store.loadDelegatedTask(candidate.taskId)
         val inserted = if (existing == null) {
-            organDao.insertDelegatedTask(candidate)
+            store.insertDelegatedTask(candidate)
             true
         } else {
             permanentCheck(existing == candidate, CrossDatabaseProtocolErrors.OWNER_STATE_CONFLICT)
@@ -106,7 +154,7 @@ internal class OrchestrationProtocolFinalizer(
         val updated = when {
             task.status == AgentCapabilityPolicy.STATUS_AWAITING_APPROVAL &&
                 task.approvalId == null -> {
-                val changed = organDao.approveDelegatedTaskIfAwaitingApproval(
+                val changed = store.approveDelegatedTaskIfAwaitingApproval(
                     taskId = task.taskId,
                     approvalId = operation.operationId,
                     updatedAtMillis = operation.occurredAtMillis
@@ -176,7 +224,7 @@ internal class OrchestrationProtocolFinalizer(
         val updated = when {
             task.status == AgentCapabilityPolicy.STATUS_AWAITING_APPROVAL &&
                 task.approvalId == null -> {
-                val changed = organDao.rejectDelegatedTaskIfAwaitingApproval(
+                val changed = store.rejectDelegatedTaskIfAwaitingApproval(
                     taskId = task.taskId,
                     errorSummary = reason,
                     updatedAtMillis = operation.occurredAtMillis,
@@ -252,7 +300,7 @@ internal class OrchestrationProtocolFinalizer(
     }
 
     private suspend fun requireTask(taskId: String): DelegatedTaskEntity {
-        return organDao.loadDelegatedTask(taskId)
+        return store.loadDelegatedTask(taskId)
             ?: throw CrossDatabaseProtocolErrors.permanent(
                 CrossDatabaseProtocolErrors.OWNER_STATE_CONFLICT
             )
@@ -321,5 +369,10 @@ internal class OrchestrationProtocolFinalizer(
         code: String = CrossDatabaseProtocolErrors.OWNER_STATE_CONFLICT
     ) {
         if (!condition) throw CrossDatabaseProtocolErrors.permanent(code)
+    }
+
+    internal companion object {
+        fun testing(store: OrchestrationFinalizerStore): OrchestrationProtocolFinalizer =
+            OrchestrationProtocolFinalizer(store)
     }
 }
