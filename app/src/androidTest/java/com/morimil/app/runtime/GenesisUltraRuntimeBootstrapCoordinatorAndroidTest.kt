@@ -13,8 +13,16 @@ import com.morimil.app.data.genesis.ultra.GenesisUltraRuntimeGuardian
 import com.morimil.app.data.genesis.ultra.GenesisUltraRuntimeIdentity
 import com.morimil.app.data.genesis.ultra.GenesisUltraRuntimePolicy
 import com.morimil.app.data.genesis.ultra.GenesisUltraRuntimeVerifiedSeed
+import com.morimil.app.data.local.CrossDatabaseOperationStatus
 import com.morimil.app.data.local.MemoryOrganDatabase
 import com.morimil.app.data.local.MorimilDatabase
+import com.morimil.app.data.repository.CrossDatabaseCanonicalCommand
+import com.morimil.app.data.repository.CrossDatabaseCanonicalEnsurePort
+import com.morimil.app.data.repository.CrossDatabaseCanonicalReceipt
+import com.morimil.app.data.repository.CrossDatabaseOperationCoordinator
+import com.morimil.app.data.repository.RuntimeBootstrapOperationFactory
+import com.morimil.app.data.repository.RuntimeBootstrapProtocolFinalizer
+import com.morimil.app.data.repository.RuntimeBootstrapProtocolTypes
 import java.nio.charset.StandardCharsets
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -50,11 +58,17 @@ class GenesisUltraRuntimeBootstrapCoordinatorAndroidTest {
     }
 
     @Test
-    fun cleanUltraBootstrapIsIdempotentAndNeverCreatesLegacyBirthRows() = runBlocking {
+    fun cleanUltraBootstrapIsDurableIdempotentAndNeverCreatesLegacyBirthRows() = runBlocking {
         val identity = validIdentity()
+        var canonicalEnsureCalls = 0
+        val protocol = bootstrapProtocol {
+            canonicalEnsureCalls += 1
+            receipt(it, sequence = 301L)
+        }
         val coordinator = GenesisUltraRuntimeBootstrapCoordinator.production(
             memoryDatabase = memoryDatabase,
-            organDatabase = organDatabase
+            organDatabase = organDatabase,
+            protocol = protocol
         )
 
         val first = coordinator.bootstrap(identity, nowMillis = 10_000L)
@@ -66,6 +80,10 @@ class GenesisUltraRuntimeBootstrapCoordinatorAndroidTest {
         val projects = memoryDao.observeProjects().first()
         val agents = organDao.observeAgentProfiles().first()
         val devices = organDao.observeOrchestratorDevices().first()
+        val command = RuntimeBootstrapOperationFactory.initialize(identity)
+        val operation = requireNotNull(
+            organDatabase.crossDatabaseOperationDao().loadOperation(command.operationId)
+        )
 
         assertEquals(0, memoryDao.countLocalIdentity())
         assertEquals(0, memoryDao.countGenesisCore())
@@ -75,7 +93,8 @@ class GenesisUltraRuntimeBootstrapCoordinatorAndroidTest {
         assertTrue(workspace?.genesisSource?.startsWith("genesis-ultra:") == true)
         assertEquals(1, projects.size)
         assertEquals("morimil_app:${identity.instanceId}", projects.single().projectId)
-        assertTrue(projects.single().status.contains("memory=phase_2_pending"))
+        assertTrue(projects.single().status.contains("memory=canonical"))
+        assertTrue(projects.single().status.contains("boot=durable"))
         assertEquals(7, agents.size)
         assertEquals(4, devices.size)
         assertTrue(devices.any { device ->
@@ -88,6 +107,42 @@ class GenesisUltraRuntimeBootstrapCoordinatorAndroidTest {
         assertEquals(7, second.agentProfileCount)
         assertEquals(4, second.orchestratorDeviceCount)
         assertTrue(second.legacyCounts.isEmpty)
+        assertEquals(1, canonicalEnsureCalls)
+        assertEquals(CrossDatabaseOperationStatus.COMMITTED, operation.status)
+    }
+
+    private fun bootstrapProtocol(
+        ensure: suspend (CrossDatabaseCanonicalCommand) -> CrossDatabaseCanonicalReceipt
+    ): CrossDatabaseOperationCoordinator {
+        return CrossDatabaseOperationCoordinator.production(
+            database = organDatabase,
+            canonicalEnsurePort = object : CrossDatabaseCanonicalEnsurePort {
+                override suspend fun ensureCommitted(
+                    command: CrossDatabaseCanonicalCommand
+                ): CrossDatabaseCanonicalReceipt = ensure(command)
+            },
+            finalizers = listOf(
+                RuntimeBootstrapProtocolFinalizer(
+                    memoryDatabase = memoryDatabase,
+                    organDatabase = organDatabase
+                )
+            ),
+            protocolRegistry = RuntimeBootstrapProtocolTypes.REGISTRY,
+            clockMillis = IncrementingClock()
+        )
+    }
+
+    private fun receipt(
+        command: CrossDatabaseCanonicalCommand,
+        sequence: Long
+    ): CrossDatabaseCanonicalReceipt {
+        return CrossDatabaseCanonicalReceipt(
+            eventId = command.eventId,
+            eventHash = "evsha256:" + digest("event:${command.eventId}").removePrefix("sha256:"),
+            sequence = sequence,
+            provenanceDigest = digest("provenance:${command.eventId}"),
+            reusedExistingEvent = false
+        )
     }
 
     private fun validIdentity(): GenesisUltraRuntimeIdentity {
@@ -160,5 +215,13 @@ class GenesisUltraRuntimeBootstrapCoordinatorAndroidTest {
         )
     }
 
+    private fun digest(value: String): String =
+        GenesisUltraHashProfile.sha256(value.toByteArray(StandardCharsets.UTF_8))
+
     private fun String.utf8(): ByteArray = toByteArray(StandardCharsets.UTF_8)
+
+    private class IncrementingClock : () -> Long {
+        private var value = 10_000L
+        override fun invoke(): Long = value++
+    }
 }
