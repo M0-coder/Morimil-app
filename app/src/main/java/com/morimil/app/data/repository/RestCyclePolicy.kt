@@ -1,6 +1,6 @@
 package com.morimil.app.data.repository
 
-object RestCyclePolicy {
+internal object RestCyclePolicy {
     fun requiresHumanApproval(events: List<RestCycleSourceEvent>): Boolean {
         val highImpactEvents = events.count { event -> event.importance >= HIGH_IMPACT_IMPORTANCE }
         val confirmedCriticalEvent = events.any { event ->
