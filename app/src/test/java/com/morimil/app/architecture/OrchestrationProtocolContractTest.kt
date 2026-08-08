@@ -118,9 +118,9 @@ class OrchestrationProtocolContractTest {
         assertFalse(orchestrationComposition.contains("memoryRepository = memoryRepository"))
         assertTrue(orchestrationComposition.contains("identityRepository = genesisUltraRuntimeIdentityRepository"))
 
-        // CURRENT documentation still describes protected main until this candidate is merged/reconciled.
-        assertTrue(inventory.contains("`ORCH-001`"))
-        assertTrue(inventory.contains("Open convergence/rebuild work"))
+        assertTrue(inventory.contains("`ORCH-001` | `seedDefaultOrchestrationIfNeeded` | Integrated F1 convergence:"))
+        assertTrue(inventory.contains("`ORCH-001` — integrated canonical identity-gated seed convergence"))
+        assertFalse(inventory.substringAfter("## Remaining operations").substringBefore("## Integrated guarantees").contains("ORCH-001"))
     }
 
     private fun production(relative: String): String =
