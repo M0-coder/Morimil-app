@@ -44,7 +44,9 @@ class AgentInstanceLifecycleRepository internal constructor(
             )
         val existingAgents = dao.loadAgentInstancesForVault(vaultId)
         existingAgents.firstOrNull { existing ->
-            existing.templateAgentId == cleanTemplate &&
+            existing.status != STATUS_RETIRED &&
+                existing.status != STATUS_QUARANTINED &&
+                existing.templateAgentId == cleanTemplate &&
                 existing.briefing == cleanBriefing &&
                 hasCommittedOperation(existing.agentInstanceId, AgentLifecycleProtocolTypes.CREATE) { payload ->
                     payload.optString("agent_instance_id") == existing.agentInstanceId &&
