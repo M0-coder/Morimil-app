@@ -51,6 +51,7 @@ class RuntimeBootstrapProtocolContractTest {
 
         assertTrue(source.contains("ownershipConferred"))
         assertTrue(source.contains("runtime_bootstrap_ownership_conferred"))
+        assertTrue(source.contains("custodian_witness"))
         assertTrue(source.contains("guardian_without_ownership"))
         assertTrue(source.contains("successor_body_rebootstrap_allowed"))
         assertTrue(source.contains("bootstrap:"))
@@ -71,8 +72,8 @@ class RuntimeBootstrapProtocolContractTest {
         val prepare = source.indexOf("override suspend fun prepareOutsideTransaction")
         val memoryProjection = source.indexOf("memoryStore.ensureProjection", prepare)
         val finalize = source.indexOf("override suspend fun finalizePreparedInsideTransaction")
-        val agentProjection = source.indexOf("organStore.ensureAgentProfiles", finalize)
-        val deviceProjection = source.indexOf("organStore.ensureOrchestratorDevices", finalize)
+        val agentProjection = source.indexOf("organStore.seedAgentProfilesIfEmpty", finalize)
+        val deviceProjection = source.indexOf("organStore.seedOrchestratorDevicesIfEmpty", finalize)
 
         assertTrue(prepare >= 0)
         assertTrue(memoryProjection > prepare)
@@ -81,6 +82,20 @@ class RuntimeBootstrapProtocolContractTest {
         assertTrue(deviceProjection > agentProjection)
         assertTrue(source.contains("FINALIZATION_PREPARATION_CONFLICT"))
         assertTrue(source.contains("PENDING_LOCAL_COMMIT"))
+    }
+
+    @Test
+    fun bootPreservesNonemptyOrchestrationTablesForSeparateOrch001Convergence() {
+        val source = productionFile(
+            "com/morimil/app/data/repository/RuntimeBootstrapProtocolFinalizer.kt"
+        ).readText()
+
+        assertTrue(source.contains("seedAgentProfilesIfEmpty"))
+        assertTrue(source.contains("seedOrchestratorDevicesIfEmpty"))
+        assertTrue(source.contains("if (before > 0) return before"))
+        assertTrue(source.contains("ORCH-001 owns convergence"))
+        assertFalse(source.contains("delete FROM agent_profiles", ignoreCase = true))
+        assertFalse(source.contains("delete FROM orchestrator_devices", ignoreCase = true))
     }
 
     @Test
