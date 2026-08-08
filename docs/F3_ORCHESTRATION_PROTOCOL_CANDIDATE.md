@@ -81,6 +81,10 @@ The existing COG-specific pre-recovery quarantine for the historical COG-001 v1 
 
 `seedDefaultOrchestrationIfNeeded` remains a separate F1/ORCH-001 convergence item and still contains the legacy `MemoryRepository.hasCompleteBirth()` gate. This candidate does not represent ORCH-001 as converged and does not use that legacy gate as ORCH-002/003/004 identity authority.
 
+## Residual API note
+
+The DAO still contains the pre-existing broad delegated-task decision update methods for compatibility while the candidate is under validation. ORCH-002/003/004 no longer call them; the architecture contract forbids direct calls from `AgentOrchestrationRepository`. Removing unused legacy DAO methods is allowed only after exact caller verification and is not required to claim that the active ORCH path is journal-governed.
+
 ## Required evidence before technical acceptance
 
 - JVM tests for deterministic task/operation/event identities;
