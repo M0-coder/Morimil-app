@@ -228,7 +228,10 @@ internal class RuntimeBootstrapProtocolFinalizer private constructor(
         requireOperation(operation, receipt)
         val plan = decodePlan(operation)
         val expectedPreparation = preparation(operation, receipt, plan)
-        permanentCheck(preparation != null, CrossDatabaseProtocolErrors.FINALIZATION_PREPARATION_CONFLICT)
+        permanentCheck(
+            preparation != null,
+            CrossDatabaseProtocolErrors.FINALIZATION_PREPARATION_CONFLICT
+        )
         permanentCheck(
             preparation == expectedPreparation,
             CrossDatabaseProtocolErrors.FINALIZATION_PREPARATION_CONFLICT
@@ -300,7 +303,9 @@ internal class RuntimeBootstrapProtocolFinalizer private constructor(
         permanentCheck(payload.getString("active_body_id") == operation.writerBodyId)
         permanentCheck(payload.getString("writer_epoch") == operation.writerEpoch)
         permanentCheck(!payload.getBoolean("ownership_conferred"))
-        permanentCheck(payload.getString("guardian_role").contains("without_ownership"))
+        permanentCheck(
+            payload.getString("guardian_role") == RuntimeBootstrapOperationFactory.GUARDIAN_ROLE
+        )
 
         val workspaceObject = payload.getJSONObject("workspace")
         val projectObject = payload.getJSONObject("project")
