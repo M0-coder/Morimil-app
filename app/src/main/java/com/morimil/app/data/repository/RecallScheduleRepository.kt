@@ -1,5 +1,6 @@
 package com.morimil.app.data.repository
 
+import androidx.room.withTransaction
 import com.morimil.app.data.genesis.ultra.CanonicalConsumerReadPort
 import com.morimil.app.data.genesis.ultra.CanonicalReadDisposition
 import com.morimil.app.data.genesis.ultra.CanonicalReadFailure
@@ -11,7 +12,7 @@ import com.morimil.app.data.local.RecallScheduleEntity
 import kotlinx.coroutines.flow.Flow
 
 class RecallScheduleRepository internal constructor(
-    organDatabase: MemoryOrganDatabase,
+    private val organDatabase: MemoryOrganDatabase,
     private val canonicalReadPort: CanonicalConsumerReadPort,
     private val nowMillis: () -> Long = { System.currentTimeMillis() }
 ) {
@@ -42,42 +43,46 @@ class RecallScheduleRepository internal constructor(
             )
             val intervalDays = RecallSchedulePolicy.initialIntervalDays(priority)
             val priorityBand = RecallSchedulePolicy.priorityBand(priority)
-            val insertedId = organDao.insertRecallSchedule(
-                RecallScheduleEntity(
-                    // Legacy-named projection column retained until F3.3; this value is the
-                    // canonical Genesis Ultra birth-root event hash, never a genesis_core row.
-                    genesisCoreId = batch.snapshot.birthRootEventHash,
-                    targetEventHash = candidate.event.eventHash,
-                    targetMemoryKind = candidate.memoryKind,
-                    prompt = buildPrompt(candidate),
-                    reason = "canonical_recall_schedule_v1:${candidate.memoryKind}/band=$priorityBand/i${candidate.importance}/c${candidate.confidence}/seq=${candidate.event.sequence}",
-                    priority = priority,
-                    intervalDays = intervalDays,
-                    dueAtMillis = now + RecallSchedulePolicy.delayMillis(intervalDays),
-                    status = "active",
-                    lastAction = "created",
-                    source = CANONICAL_MEMORY_SOURCE,
-                    createdAtMillis = now,
-                    updatedAtMillis = now,
-                    lastReviewedAtMillis = null
+            val insertedId = organDatabase.withTransaction {
+                val id = organDao.insertRecallSchedule(
+                    RecallScheduleEntity(
+                        // Legacy-named projection column retained until F3.3; this value is the
+                        // canonical Genesis Ultra birth-root event hash, never a genesis_core row.
+                        genesisCoreId = batch.snapshot.birthRootEventHash,
+                        targetEventHash = candidate.event.eventHash,
+                        targetMemoryKind = candidate.memoryKind,
+                        prompt = buildPrompt(candidate),
+                        reason = "canonical_recall_schedule_v1:${candidate.memoryKind}/band=$priorityBand/i${candidate.importance}/c${candidate.confidence}/seq=${candidate.event.sequence}",
+                        priority = priority,
+                        intervalDays = intervalDays,
+                        dueAtMillis = now + RecallSchedulePolicy.delayMillis(intervalDays),
+                        status = "active",
+                        lastAction = "created",
+                        source = CANONICAL_MEMORY_SOURCE,
+                        createdAtMillis = now,
+                        updatedAtMillis = now,
+                        lastReviewedAtMillis = null
+                    )
                 )
-            )
-            if (insertedId > 0) {
-                created += 1
-                memoryLinkRepository.createMemoryLink(
-                    instanceId = batch.instanceId,
-                    // Same legacy-named projection field semantics as RecallScheduleEntity.
-                    genesisCoreHash = batch.snapshot.birthRootEventHash,
-                    sourceId = canonicalRecallNodeId(candidate.event.eventHash),
-                    sourceType = RECALL_NODE_TYPE,
-                    targetId = candidate.event.eventHash,
-                    targetType = CANONICAL_MEMORY_EVENT_NODE_TYPE,
-                    relation = RELATION_SCHEDULES_REVIEW_FOR,
-                    strength = priority / 100.0,
-                    reason = "canonical_recall_schedule:${candidate.memoryKind}/priority=$priority/band=$priorityBand",
-                    createdAtMillis = now
-                )
+                if (id > 0) {
+                    val linked = memoryLinkRepository.createMemoryLink(
+                        instanceId = batch.instanceId,
+                        // Same legacy-named projection field semantics as RecallScheduleEntity.
+                        genesisCoreHash = batch.snapshot.birthRootEventHash,
+                        sourceId = "recall:$id",
+                        sourceType = RECALL_NODE_TYPE,
+                        targetId = candidate.event.eventHash,
+                        targetType = CANONICAL_MEMORY_EVENT_NODE_TYPE,
+                        relation = RELATION_SCHEDULES_REVIEW_FOR,
+                        strength = priority / 100.0,
+                        reason = "canonical_recall_schedule:${candidate.memoryKind}/priority=$priority/band=$priorityBand",
+                        createdAtMillis = now
+                    )
+                    check(linked) { "canonical_recall_link_insert_failed" }
+                }
+                id
             }
+            if (insertedId > 0) created += 1
         }
         return created
     }
@@ -210,11 +215,6 @@ class RecallScheduleRepository internal constructor(
         const val CANONICAL_MEMORY_SOURCE = "canonical_memory_event"
         const val RELATION_SCHEDULES_REVIEW_FOR = "schedules_review_for"
         private const val CANONICAL_CANDIDATE_LIMIT = 60
-
-        fun canonicalRecallNodeId(eventHash: String): String {
-            require(eventHash.isNotBlank()) { "canonical_recall_event_hash_missing" }
-            return "recall:$eventHash"
-        }
     }
 }
 
