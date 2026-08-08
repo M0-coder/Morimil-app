@@ -396,6 +396,23 @@ interface MemoryOrganDao {
     @Query(
         """
         UPDATE delegated_tasks
+        SET approvalId = :approvalId,
+            status = 'approved',
+            updatedAtMillis = :updatedAtMillis
+        WHERE taskId = :taskId
+          AND status = 'awaiting_approval'
+          AND approvalId IS NULL
+        """
+    )
+    suspend fun approveDelegatedTaskIfAwaitingApproval(
+        taskId: String,
+        approvalId: String,
+        updatedAtMillis: Long
+    ): Int
+
+    @Query(
+        """
+        UPDATE delegated_tasks
         SET status = :status,
             errorSummary = :errorSummary,
             updatedAtMillis = :updatedAtMillis,
@@ -406,6 +423,25 @@ interface MemoryOrganDao {
     suspend fun rejectDelegatedTask(
         taskId: String,
         status: String,
+        errorSummary: String,
+        updatedAtMillis: Long,
+        completedAtMillis: Long
+    ): Int
+
+    @Query(
+        """
+        UPDATE delegated_tasks
+        SET status = 'rejected',
+            errorSummary = :errorSummary,
+            updatedAtMillis = :updatedAtMillis,
+            completedAtMillis = :completedAtMillis
+        WHERE taskId = :taskId
+          AND status = 'awaiting_approval'
+          AND approvalId IS NULL
+        """
+    )
+    suspend fun rejectDelegatedTaskIfAwaitingApproval(
+        taskId: String,
         errorSummary: String,
         updatedAtMillis: Long,
         completedAtMillis: Long
