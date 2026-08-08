@@ -25,7 +25,7 @@ class CrossDatabaseOperationInventoryContractTest {
 
         assertTrue(inventory.contains("AgentInstanceLifecycleRepository.kt` | `INTEGRATED_PROTOCOL`"))
         assertTrue(inventory.contains("AGENT-001 through AGENT-006 integrated"))
-        assertTrue(inventory.contains("BOOT-001 — next bounded owner"))
+        assertTrue(inventory.contains("`BOOT-001` — next bounded owner"))
         assertTrue(inventory.contains("ORCH-001") && inventory.contains("open"))
         assertFalse(inventory.contains("AGENT-001 through AGENT-006 — next bounded owner family"))
     }
