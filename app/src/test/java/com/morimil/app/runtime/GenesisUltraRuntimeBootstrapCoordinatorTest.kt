@@ -19,10 +19,9 @@ import org.junit.Test
 
 class GenesisUltraRuntimeBootstrapCoordinatorTest {
     @Test
-    fun cleanUltraIdentityBootstrapsCanonicalProjectionWithoutLegacyRows() = runBlocking {
+    fun cleanUltraIdentityExecutesDurableBootstrapWithoutLegacyRows() = runBlocking {
         val identity = validIdentity()
-        var projectionWrites = 0
-        var orchestrationSeeds = 0
+        var durableExecutions = 0
         val coordinator = GenesisUltraRuntimeBootstrapCoordinator.forTest(
             inspectLegacyCounts = {
                 GenesisUltraRuntimeLegacyCounts(
@@ -30,36 +29,28 @@ class GenesisUltraRuntimeBootstrapCoordinatorTest {
                     genesisCoreCount = 0
                 )
             },
-            writeRuntimeProjection = { received, nowMillis ->
+            executeDurableBootstrap = { received, nowMillis ->
                 assertSame(identity, received)
                 assertEquals(5_000L, nowMillis)
-                projectionWrites += 1
+                durableExecutions += 1
                 GenesisUltraRuntimeProjection(
                     workspaceId = received.instanceId,
                     projectId = "morimil_app:${received.instanceId}"
                 )
             },
-            seedOrchestration = { received, nowMillis ->
-                assertSame(identity, received)
-                assertEquals(5_000L, nowMillis)
-                orchestrationSeeds += 1
-                GenesisUltraRuntimeOrchestrationSeed(
-                    agentProfileCount = 7,
-                    orchestratorDeviceCount = 4
-                )
-            },
-            countCanonicalMemoryEvents = { 1 }
+            countAgentProfiles = { 7 },
+            countOrchestratorDevices = { 4 },
+            countCanonicalMemoryEvents = { 2 }
         )
 
         val report = coordinator.bootstrap(identity, nowMillis = 5_000L)
 
-        assertEquals(1, projectionWrites)
-        assertEquals(1, orchestrationSeeds)
+        assertEquals(1, durableExecutions)
         assertEquals(identity.instanceId, report.workspaceId)
         assertEquals("morimil_app:${identity.instanceId}", report.projectId)
         assertEquals(7, report.agentProfileCount)
         assertEquals(4, report.orchestratorDeviceCount)
-        assertEquals(1, report.canonicalMemoryEventCount)
+        assertEquals(2, report.canonicalMemoryEventCount)
         assertEquals(GenesisUltraRuntimeSubsystemState.READY, report.healthState)
         assertEquals(
             GenesisUltraRuntimeSubsystemState.WAITING_FOR_CANONICAL_MEMORY_ADAPTER,
@@ -73,9 +64,8 @@ class GenesisUltraRuntimeBootstrapCoordinatorTest {
     }
 
     @Test
-    fun legacyRowsBlockBeforeAnyCanonicalProjectionIsWritten() = runBlocking {
-        var projectionWrites = 0
-        var orchestrationSeeds = 0
+    fun legacyRowsBlockBeforeDurableBootstrapExecutes() = runBlocking {
+        var durableExecutions = 0
         val coordinator = GenesisUltraRuntimeBootstrapCoordinator.forTest(
             inspectLegacyCounts = {
                 GenesisUltraRuntimeLegacyCounts(
@@ -83,17 +73,15 @@ class GenesisUltraRuntimeBootstrapCoordinatorTest {
                     genesisCoreCount = 0
                 )
             },
-            writeRuntimeProjection = { identity, _ ->
-                projectionWrites += 1
+            executeDurableBootstrap = { identity, _ ->
+                durableExecutions += 1
                 GenesisUltraRuntimeProjection(
                     workspaceId = identity.instanceId,
                     projectId = "morimil_app:${identity.instanceId}"
                 )
             },
-            seedOrchestration = { _, _ ->
-                orchestrationSeeds += 1
-                GenesisUltraRuntimeOrchestrationSeed(7, 4)
-            },
+            countAgentProfiles = { 0 },
+            countOrchestratorDevices = { 0 },
             countCanonicalMemoryEvents = { 0 }
         )
 
@@ -102,12 +90,11 @@ class GenesisUltraRuntimeBootstrapCoordinatorTest {
         }.exceptionOrNull()
 
         assertEquals("runtime_bootstrap_legacy_identity_conflict", failure?.message)
-        assertEquals(0, projectionWrites)
-        assertEquals(0, orchestrationSeeds)
+        assertEquals(0, durableExecutions)
     }
 
     @Test
-    fun bootstrapFailsIfAnyLegacyIdentityRowAppearsAfterProjection() = runBlocking {
+    fun bootstrapFailsIfAnyUnconvergedLegacyIdentityAppearsAfterProtocolCommit() = runBlocking {
         var inspections = 0
         val coordinator = GenesisUltraRuntimeBootstrapCoordinator.forTest(
             inspectLegacyCounts = {
@@ -118,16 +105,15 @@ class GenesisUltraRuntimeBootstrapCoordinatorTest {
                     GenesisUltraRuntimeLegacyCounts(0, 1)
                 }
             },
-            writeRuntimeProjection = { identity, _ ->
+            executeDurableBootstrap = { identity, _ ->
                 GenesisUltraRuntimeProjection(
                     workspaceId = identity.instanceId,
                     projectId = "morimil_app:${identity.instanceId}"
                 )
             },
-            seedOrchestration = { _, _ ->
-                GenesisUltraRuntimeOrchestrationSeed(7, 4)
-            },
-            countCanonicalMemoryEvents = { 0 }
+            countAgentProfiles = { 7 },
+            countOrchestratorDevices = { 4 },
+            countCanonicalMemoryEvents = { 2 }
         )
 
         val failure = runCatching {
@@ -190,7 +176,7 @@ class GenesisUltraRuntimeBootstrapCoordinatorTest {
                 keyEpochId = "guardian_key_epoch_1",
                 publicKeyRef = GenesisUltraHashProfile.sha256("guardian-key".utf8()),
                 status = "active",
-                role = "custodian_without_ownership",
+                role = "custodian_witness",
                 anchorDigest = GenesisUltraHashProfile.sha256("guardian-anchor".utf8())
             ),
             seed = GenesisUltraRuntimeVerifiedSeed(

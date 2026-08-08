@@ -13,8 +13,18 @@ import com.morimil.app.data.genesis.ultra.GenesisUltraRuntimeGuardian
 import com.morimil.app.data.genesis.ultra.GenesisUltraRuntimeIdentity
 import com.morimil.app.data.genesis.ultra.GenesisUltraRuntimePolicy
 import com.morimil.app.data.genesis.ultra.GenesisUltraRuntimeVerifiedSeed
+import com.morimil.app.data.local.AgentProfileEntity
+import com.morimil.app.data.local.CrossDatabaseOperationStatus
 import com.morimil.app.data.local.MemoryOrganDatabase
 import com.morimil.app.data.local.MorimilDatabase
+import com.morimil.app.data.local.OrchestratorDeviceEntity
+import com.morimil.app.data.repository.CrossDatabaseCanonicalCommand
+import com.morimil.app.data.repository.CrossDatabaseCanonicalEnsurePort
+import com.morimil.app.data.repository.CrossDatabaseCanonicalReceipt
+import com.morimil.app.data.repository.CrossDatabaseOperationCoordinator
+import com.morimil.app.data.repository.RuntimeBootstrapOperationFactory
+import com.morimil.app.data.repository.RuntimeBootstrapProtocolFinalizer
+import com.morimil.app.data.repository.RuntimeBootstrapProtocolTypes
 import java.nio.charset.StandardCharsets
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -50,11 +60,17 @@ class GenesisUltraRuntimeBootstrapCoordinatorAndroidTest {
     }
 
     @Test
-    fun cleanUltraBootstrapIsIdempotentAndNeverCreatesLegacyBirthRows() = runBlocking {
+    fun cleanUltraBootstrapIsDurableIdempotentAndNeverCreatesLegacyBirthRows() = runBlocking {
         val identity = validIdentity()
+        var canonicalEnsureCalls = 0
+        val protocol = bootstrapProtocol {
+            canonicalEnsureCalls += 1
+            receipt(it, sequence = 301L)
+        }
         val coordinator = GenesisUltraRuntimeBootstrapCoordinator.production(
             memoryDatabase = memoryDatabase,
-            organDatabase = organDatabase
+            organDatabase = organDatabase,
+            protocol = protocol
         )
 
         val first = coordinator.bootstrap(identity, nowMillis = 10_000L)
@@ -66,6 +82,10 @@ class GenesisUltraRuntimeBootstrapCoordinatorAndroidTest {
         val projects = memoryDao.observeProjects().first()
         val agents = organDao.observeAgentProfiles().first()
         val devices = organDao.observeOrchestratorDevices().first()
+        val command = RuntimeBootstrapOperationFactory.initialize(identity)
+        val operation = requireNotNull(
+            organDatabase.crossDatabaseOperationDao().loadOperation(command.operationId)
+        )
 
         assertEquals(0, memoryDao.countLocalIdentity())
         assertEquals(0, memoryDao.countGenesisCore())
@@ -75,7 +95,8 @@ class GenesisUltraRuntimeBootstrapCoordinatorAndroidTest {
         assertTrue(workspace?.genesisSource?.startsWith("genesis-ultra:") == true)
         assertEquals(1, projects.size)
         assertEquals("morimil_app:${identity.instanceId}", projects.single().projectId)
-        assertTrue(projects.single().status.contains("memory=phase_2_pending"))
+        assertTrue(projects.single().status.contains("memory=canonical"))
+        assertTrue(projects.single().status.contains("boot=durable"))
         assertEquals(7, agents.size)
         assertEquals(4, devices.size)
         assertTrue(devices.any { device ->
@@ -88,6 +109,103 @@ class GenesisUltraRuntimeBootstrapCoordinatorAndroidTest {
         assertEquals(7, second.agentProfileCount)
         assertEquals(4, second.orchestratorDeviceCount)
         assertTrue(second.legacyCounts.isEmpty)
+        assertEquals(1, canonicalEnsureCalls)
+        assertEquals(CrossDatabaseOperationStatus.COMMITTED, operation.status)
+    }
+
+    @Test
+    fun existingOrchestrationSeedIsPreservedForSeparateOrch001Convergence() = runBlocking {
+        val legacyAgent = AgentProfileEntity(
+            agentId = "legacy_agent",
+            displayName = "Legacy Agent",
+            role = "legacy_role",
+            description = "Legacy seed that BOOT must preserve for ORCH-001 convergence.",
+            capabilitySetJson = "[]",
+            allowedToolsetJson = "[]",
+            allowedTransportsJson = "[]",
+            riskLevel = "low",
+            requiresHumanApproval = true,
+            status = "active",
+            createdAtMillis = 1_111L,
+            updatedAtMillis = 1_222L
+        )
+        val legacyDevice = OrchestratorDeviceEntity(
+            deviceId = "legacy_android_body",
+            displayName = "Legacy Android Body",
+            deviceType = "android_phone",
+            ownershipScope = "user_owned",
+            trustedOwner = "legacy_owner_metadata",
+            allowedTransportsJson = "[]",
+            authorizationStatus = "authorized",
+            authorizationRequired = false,
+            riskLevel = "low",
+            pairingState = "paired_local",
+            lastSeenAtMillis = 1_333L,
+            createdAtMillis = 1_111L,
+            updatedAtMillis = 1_333L
+        )
+        val organDao = organDatabase.memoryOrganDao()
+        organDao.insertAgentProfiles(listOf(legacyAgent))
+        organDao.insertOrchestratorDevices(listOf(legacyDevice))
+
+        val identity = validIdentity()
+        var canonicalEnsureCalls = 0
+        val coordinator = GenesisUltraRuntimeBootstrapCoordinator.production(
+            memoryDatabase = memoryDatabase,
+            organDatabase = organDatabase,
+            protocol = bootstrapProtocol {
+                canonicalEnsureCalls += 1
+                receipt(it, sequence = 302L)
+            }
+        )
+
+        val report = coordinator.bootstrap(identity, nowMillis = 30_000L)
+        val agents = organDao.observeAgentProfiles().first()
+        val devices = organDao.observeOrchestratorDevices().first()
+
+        assertEquals(1, agents.size)
+        assertEquals(legacyAgent, agents.single())
+        assertEquals(1, devices.size)
+        assertEquals(legacyDevice, devices.single())
+        assertEquals(1, report.agentProfileCount)
+        assertEquals(1, report.orchestratorDeviceCount)
+        assertEquals(1, canonicalEnsureCalls)
+        assertEquals(0, memoryDatabase.memoryDao().countLocalIdentity())
+        assertEquals(0, memoryDatabase.memoryDao().countGenesisCore())
+    }
+
+    private fun bootstrapProtocol(
+        ensure: suspend (CrossDatabaseCanonicalCommand) -> CrossDatabaseCanonicalReceipt
+    ): CrossDatabaseOperationCoordinator {
+        return CrossDatabaseOperationCoordinator.production(
+            database = organDatabase,
+            canonicalEnsurePort = object : CrossDatabaseCanonicalEnsurePort {
+                override suspend fun ensureCommitted(
+                    command: CrossDatabaseCanonicalCommand
+                ): CrossDatabaseCanonicalReceipt = ensure(command)
+            },
+            finalizers = listOf(
+                RuntimeBootstrapProtocolFinalizer(
+                    memoryDatabase = memoryDatabase,
+                    organDatabase = organDatabase
+                )
+            ),
+            protocolRegistry = RuntimeBootstrapProtocolTypes.REGISTRY,
+            clockMillis = IncrementingClock()
+        )
+    }
+
+    private fun receipt(
+        command: CrossDatabaseCanonicalCommand,
+        sequence: Long
+    ): CrossDatabaseCanonicalReceipt {
+        return CrossDatabaseCanonicalReceipt(
+            eventId = command.eventId,
+            eventHash = "evsha256:" + digest("event:${command.eventId}").removePrefix("sha256:"),
+            sequence = sequence,
+            provenanceDigest = digest("provenance:${command.eventId}"),
+            reusedExistingEvent = false
+        )
     }
 
     private fun validIdentity(): GenesisUltraRuntimeIdentity {
@@ -114,7 +232,7 @@ class GenesisUltraRuntimeBootstrapCoordinatorAndroidTest {
                 keyEpochId = "guardian_key_epoch_1",
                 publicKeyRef = GenesisUltraHashProfile.sha256("guardian-key".utf8()),
                 status = "active",
-                role = "custodian_without_ownership",
+                role = "custodian_witness",
                 anchorDigest = GenesisUltraHashProfile.sha256("guardian-anchor".utf8())
             ),
             seed = GenesisUltraRuntimeVerifiedSeed(
@@ -160,5 +278,13 @@ class GenesisUltraRuntimeBootstrapCoordinatorAndroidTest {
         )
     }
 
+    private fun digest(value: String): String =
+        GenesisUltraHashProfile.sha256(value.toByteArray(StandardCharsets.UTF_8))
+
     private fun String.utf8(): ByteArray = toByteArray(StandardCharsets.UTF_8)
+
+    private class IncrementingClock : () -> Long {
+        private var value = 10_000L
+        override fun invoke(): Long = value++
+    }
 }

@@ -1,16 +1,15 @@
 package com.morimil.app.runtime
 
-import androidx.room.withTransaction
-import com.morimil.app.core.orchestration.AgentCapabilityPolicy
 import com.morimil.app.data.genesis.ultra.GenesisUltraRuntimeIdentity
-import com.morimil.app.data.local.AgentProfileEntity
+import com.morimil.app.data.local.CrossDatabaseOperationStatus
 import com.morimil.app.data.local.LegacyMemoryConvergenceEntity
 import com.morimil.app.data.local.MemoryOrganDatabase
 import com.morimil.app.data.local.MorimilDatabase
-import com.morimil.app.data.local.OrchestratorDeviceEntity
-import com.morimil.app.data.local.ProjectStateEntity
-import com.morimil.app.data.local.UserWorkspaceEntity
-import org.json.JSONArray
+import com.morimil.app.data.repository.CrossDatabaseOperationCoordinator
+import com.morimil.app.data.repository.RuntimeBootstrapOperationFactory
+import com.morimil.app.data.repository.RuntimeBootstrapProtocolSchemas
+import com.morimil.app.data.repository.RuntimeBootstrapProtocolTypes
+import org.json.JSONObject
 
 internal enum class GenesisUltraRuntimeSubsystemState {
     READY,
@@ -75,22 +74,26 @@ internal data class GenesisUltraRuntimeBootstrapReport(
 }
 
 /**
- * Idempotent post-birth initializer for a clean Genesis Ultra installation.
+ * Durable post-birth initializer for Genesis Ultra runtime projections.
  *
- * It projects runtime metadata from the verified identity without creating the
- * legacy local identity or copied Genesis Core. Memory-dependent subsystems
- * remain explicitly blocked until Phase 2 provides their canonical adapter.
+ * BOOT-001 now stages one deterministic XOP operation scoped to the current
+ * writer Body/epoch. The canonical receipt is committed before either database
+ * receives new bootstrap projection state. Memory-database projection is the
+ * recoverable saga preparation; MemoryOrgan projection and XOP COMMITTED state
+ * finalize atomically in the owner database.
+ *
+ * The subject is writer-epoch scoped, so a future F5 successor Body can rebuild
+ * projections without changing instanceId or colliding with a previous Body's
+ * completed BOOT operation.
  */
 internal class GenesisUltraRuntimeBootstrapCoordinator private constructor(
     private val inspectLegacyCounts: suspend () -> GenesisUltraRuntimeLegacyCounts,
-    private val writeRuntimeProjection: suspend (
+    private val executeDurableBootstrap: suspend (
         GenesisUltraRuntimeIdentity,
         Long
     ) -> GenesisUltraRuntimeProjection,
-    private val seedOrchestration: suspend (
-        GenesisUltraRuntimeIdentity,
-        Long
-    ) -> GenesisUltraRuntimeOrchestrationSeed,
+    private val countAgentProfiles: suspend () -> Int,
+    private val countOrchestratorDevices: suspend () -> Int,
     private val countCanonicalMemoryEvents: suspend () -> Int,
     private val isLegacyMemoryConverged: suspend (String) -> Boolean = { false }
 ) {
@@ -102,8 +105,11 @@ internal class GenesisUltraRuntimeBootstrapCoordinator private constructor(
         val convergedBefore = before.isEmpty || isLegacyMemoryConverged(identity.instanceId)
         require(convergedBefore) { "runtime_bootstrap_legacy_identity_conflict" }
 
-        val projection = writeRuntimeProjection(identity, nowMillis)
-        val orchestration = seedOrchestration(identity, nowMillis)
+        val projection = executeDurableBootstrap(identity, nowMillis)
+        val orchestration = GenesisUltraRuntimeOrchestrationSeed(
+            agentProfileCount = countAgentProfiles(),
+            orchestratorDeviceCount = countOrchestratorDevices()
+        )
         val canonicalMemoryEventCount = countCanonicalMemoryEvents()
 
         val after = inspectLegacyCounts()
@@ -127,9 +133,12 @@ internal class GenesisUltraRuntimeBootstrapCoordinator private constructor(
     }
 
     internal companion object {
+        private const val RECOVERY_LIMIT = 64
+
         fun production(
             memoryDatabase: MorimilDatabase,
-            organDatabase: MemoryOrganDatabase
+            organDatabase: MemoryOrganDatabase,
+            protocol: CrossDatabaseOperationCoordinator
         ): GenesisUltraRuntimeBootstrapCoordinator {
             val memoryDao = memoryDatabase.memoryDao()
             val organDao = organDatabase.memoryOrganDao()
@@ -140,57 +149,57 @@ internal class GenesisUltraRuntimeBootstrapCoordinator private constructor(
                         genesisCoreCount = memoryDao.countGenesisCore()
                     )
                 },
-                writeRuntimeProjection = { identity, nowMillis ->
-                    val workspaceId = identity.instanceId
-                    val projectId = "morimil_app:${identity.instanceId}"
-                    memoryDatabase.withTransaction {
-                        memoryDao.upsertWorkspace(
-                            UserWorkspaceEntity(
-                                workspaceId = workspaceId,
-                                displayName = identity.companionName,
-                                genesisSource = "genesis-ultra:${identity.seed.seedId}:${identity.identityDigest}",
-                                localPrimary = true,
-                                optionalRepoOwner = null,
-                                optionalRepoName = null,
-                                optionalRepoPrivate = false,
-                                repoProposalApproved = false,
-                                updatedAtMillis = nowMillis
-                            )
-                        )
-                        memoryDao.upsertProject(
-                            ProjectStateEntity(
-                                projectId = projectId,
-                                title = "Morimil_app",
-                                status = PROJECT_STATUS,
-                                updatedAtMillis = nowMillis
-                            )
-                        )
+                executeDurableBootstrap = { identity, _ ->
+                    val recovery = protocol.recoverBeforeMutation(
+                        identity = identity,
+                        ownerType = RuntimeBootstrapProtocolTypes.OWNER_TYPE,
+                        limit = RECOVERY_LIMIT
+                    )
+                    check(recovery.blockedCount == 0) {
+                        "runtime_bootstrap_protocol_blocked"
+                    }
+                    check(recovery.retryableFailureCount == 0) {
+                        "runtime_bootstrap_protocol_recovery_incomplete"
+                    }
+
+                    val operation = protocol.execute(
+                        identity = identity,
+                        command = RuntimeBootstrapOperationFactory.initialize(identity)
+                    )
+                    check(operation.status == CrossDatabaseOperationStatus.COMMITTED) {
+                        "runtime_bootstrap_protocol_not_committed"
+                    }
+                    check(
+                        operation.localResultSchema ==
+                            RuntimeBootstrapProtocolSchemas.BOOT_001_LOCAL_RESULT
+                    ) { "runtime_bootstrap_protocol_result_schema_invalid" }
+                    val result = JSONObject(
+                        requireNotNull(operation.localResultJson) {
+                            "runtime_bootstrap_protocol_result_missing"
+                        }
+                    )
+                    check(
+                        result.getString("schema") ==
+                            RuntimeBootstrapProtocolSchemas.BOOT_001_LOCAL_RESULT
+                    ) { "runtime_bootstrap_protocol_result_invalid" }
+                    val workspaceId = result.getString("workspace_id")
+                    val projectId = result.getString("project_id")
+                    check(workspaceId == identity.instanceId) {
+                        "runtime_bootstrap_protocol_workspace_mismatch"
+                    }
+                    check(projectId == "morimil_app:${identity.instanceId}") {
+                        "runtime_bootstrap_protocol_project_mismatch"
                     }
                     GenesisUltraRuntimeProjection(
                         workspaceId = workspaceId,
                         projectId = projectId
                     )
                 },
-                seedOrchestration = { identity, nowMillis ->
-                    if (organDao.countAgentProfiles() == 0) {
-                        organDao.insertAgentProfiles(defaultAgents(nowMillis))
-                    }
-                    if (organDao.countOrchestratorDevices() == 0) {
-                        organDao.insertOrchestratorDevices(
-                            defaultDevices(
-                                identity = identity,
-                                nowMillis = nowMillis
-                            )
-                        )
-                    }
-                    GenesisUltraRuntimeOrchestrationSeed(
-                        agentProfileCount = organDao.countAgentProfiles(),
-                        orchestratorDeviceCount = organDao.countOrchestratorDevices()
-                    )
-                },
+                countAgentProfiles = organDao::countAgentProfiles,
+                countOrchestratorDevices = organDao::countOrchestratorDevices,
                 countCanonicalMemoryEvents = {
-          memoryDatabase.genesisUltraMemoryDao().countAll()
-      },
+                    memoryDatabase.genesisUltraMemoryDao().countAll()
+                },
                 isLegacyMemoryConverged = { instanceId ->
                     val state = memoryDatabase.legacyMemoryConvergenceDao().loadState()
                     state?.instanceId == instanceId &&
@@ -204,123 +213,23 @@ internal class GenesisUltraRuntimeBootstrapCoordinator private constructor(
 
         fun forTest(
             inspectLegacyCounts: suspend () -> GenesisUltraRuntimeLegacyCounts,
-            writeRuntimeProjection: suspend (
+            executeDurableBootstrap: suspend (
                 GenesisUltraRuntimeIdentity,
                 Long
             ) -> GenesisUltraRuntimeProjection,
-            seedOrchestration: suspend (
-                GenesisUltraRuntimeIdentity,
-                Long
-            ) -> GenesisUltraRuntimeOrchestrationSeed,
+            countAgentProfiles: suspend () -> Int,
+            countOrchestratorDevices: suspend () -> Int,
             countCanonicalMemoryEvents: suspend () -> Int,
             isLegacyMemoryConverged: suspend (String) -> Boolean = { false }
         ): GenesisUltraRuntimeBootstrapCoordinator {
             return GenesisUltraRuntimeBootstrapCoordinator(
                 inspectLegacyCounts = inspectLegacyCounts,
-                writeRuntimeProjection = writeRuntimeProjection,
-                seedOrchestration = seedOrchestration,
+                executeDurableBootstrap = executeDurableBootstrap,
+                countAgentProfiles = countAgentProfiles,
+                countOrchestratorDevices = countOrchestratorDevices,
                 countCanonicalMemoryEvents = countCanonicalMemoryEvents,
                 isLegacyMemoryConverged = isLegacyMemoryConverged
             )
         }
-
-        private fun defaultAgents(nowMillis: Long): List<AgentProfileEntity> {
-            return listOf(
-                agent(AgentCapabilityPolicy.AGENT_GITHUB, "GitHub Agent", "github", listOf("read_repository", "inspect_branch", "propose_diff"), "medium", nowMillis),
-                agent(AgentCapabilityPolicy.AGENT_ANDROID_BUILD, "Android Build Agent", "android_build", listOf("run_gradle_tests", "run_assemble_debug"), "medium", nowMillis),
-                agent(AgentCapabilityPolicy.AGENT_FILE_AUDIT, "File Audit Agent", "file_audit", listOf("read_allowed_files", "propose_patch"), "medium", nowMillis),
-                agent(AgentCapabilityPolicy.AGENT_RESEARCH, "Research Agent", "research", listOf("research_web", "summarize_sources"), "low", nowMillis),
-                agent(AgentCapabilityPolicy.AGENT_DESIGN, "Design Agent", "design", listOf("inspect_ui", "produce_design_notes"), "low", nowMillis),
-                agent(AgentCapabilityPolicy.AGENT_SECURITY, "Security Agent", "security", listOf("audit_permissions", "audit_risk"), "low", nowMillis),
-                agent(AgentCapabilityPolicy.AGENT_PC_EXECUTOR, "PC Executor Agent", "pc_executor", listOf("prepare_command", "await_human_approval", "report_result"), "high", nowMillis)
-            )
-        }
-
-        private fun agent(
-            agentId: String,
-            displayName: String,
-            role: String,
-            capabilities: List<String>,
-            riskLevel: String,
-            nowMillis: Long
-        ): AgentProfileEntity {
-            return AgentProfileEntity(
-                agentId = agentId,
-                displayName = displayName,
-                role = role,
-                description = "Perfil base Genesis Ultra: $role",
-                capabilitySetJson = JSONArray(capabilities).toString(),
-                allowedToolsetJson = JSONArray(capabilities).toString(),
-                allowedTransportsJson = AgentCapabilityPolicy.encodeJson(
-                    listOf(
-                        AgentCapabilityPolicy.TRANSPORT_WIFI,
-                        AgentCapabilityPolicy.TRANSPORT_BLUETOOTH,
-                        AgentCapabilityPolicy.TRANSPORT_USB,
-                        AgentCapabilityPolicy.TRANSPORT_INTERNET,
-                        AgentCapabilityPolicy.TRANSPORT_MANUAL
-                    )
-                ),
-                riskLevel = riskLevel,
-                requiresHumanApproval = true,
-                status = AgentCapabilityPolicy.STATUS_ACTIVE,
-                createdAtMillis = nowMillis,
-                updatedAtMillis = nowMillis
-            )
-        }
-
-        private fun defaultDevices(
-            identity: GenesisUltraRuntimeIdentity,
-            nowMillis: Long
-        ): List<OrchestratorDeviceEntity> {
-            return listOf(
-                device(
-                    deviceId = identity.activeBody.bodyId,
-                    displayName = "${identity.companionName} Body",
-                    deviceType = identity.activeBody.platformProfile,
-                    transports = listOf(
-                        AgentCapabilityPolicy.TRANSPORT_WIFI,
-                        AgentCapabilityPolicy.TRANSPORT_BLUETOOTH,
-                        AgentCapabilityPolicy.TRANSPORT_MANUAL
-                    ),
-                    authorizationStatus = "authorized",
-                    pairingState = "genesis_ultra_bound",
-                    riskLevel = "low",
-                    nowMillis = nowMillis
-                ),
-                device("personal_pc", "PC principal", "windows_pc", listOf(AgentCapabilityPolicy.TRANSPORT_WIFI, AgentCapabilityPolicy.TRANSPORT_USB, AgentCapabilityPolicy.TRANSPORT_INTERNET), "pending_authorization", "not_paired", "high", nowMillis),
-                device("personal_laptop", "Laptop personal", "laptop", listOf(AgentCapabilityPolicy.TRANSPORT_WIFI, AgentCapabilityPolicy.TRANSPORT_BLUETOOTH, AgentCapabilityPolicy.TRANSPORT_INTERNET), "pending_authorization", "not_paired", "medium", nowMillis),
-                device("personal_tablet", "Tablet personal", "tablet", listOf(AgentCapabilityPolicy.TRANSPORT_WIFI, AgentCapabilityPolicy.TRANSPORT_BLUETOOTH, AgentCapabilityPolicy.TRANSPORT_MANUAL), "pending_authorization", "not_paired", "medium", nowMillis)
-            )
-        }
-
-        private fun device(
-            deviceId: String,
-            displayName: String,
-            deviceType: String,
-            transports: List<String>,
-            authorizationStatus: String,
-            pairingState: String,
-            riskLevel: String,
-            nowMillis: Long
-        ): OrchestratorDeviceEntity {
-            return OrchestratorDeviceEntity(
-                deviceId = deviceId,
-                displayName = displayName,
-                deviceType = deviceType,
-                ownershipScope = "self_body_or_user_device",
-                trustedOwner = "guardian_without_ownership",
-                allowedTransportsJson = AgentCapabilityPolicy.encodeJson(transports),
-                authorizationStatus = authorizationStatus,
-                authorizationRequired = authorizationStatus != "authorized",
-                riskLevel = riskLevel,
-                pairingState = pairingState,
-                lastSeenAtMillis = if (authorizationStatus == "authorized") nowMillis else null,
-                createdAtMillis = nowMillis,
-                updatedAtMillis = nowMillis
-            )
-        }
-
-        private const val PROJECT_STATUS =
-            "genesis_ultra_runtime_ready;memory=phase_2_pending;rest_cycle=phase_2_pending;recalls=phase_2_pending;health=ready"
     }
 }

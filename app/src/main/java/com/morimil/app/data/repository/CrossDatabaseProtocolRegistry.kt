@@ -93,3 +93,20 @@ internal object AgentLifecycleProtocolTypes {
         closedOperations = CLOSED_REGISTRY
     )
 }
+
+internal object RuntimeBootstrapProtocolTypes {
+    const val OWNER_TYPE = "runtime_bootstrap"
+    const val INITIALIZE = "runtime_bootstrap.initialize"
+    const val INITIALIZED_EVENT = "runtime.bootstrap_initialized"
+    const val VERSION = 1
+
+    val CLOSED_REGISTRY = mapOf(
+        INITIALIZE to INITIALIZED_EVENT
+    )
+
+    val REGISTRY = CrossDatabaseProtocolRegistry(
+        ownerType = OWNER_TYPE,
+        version = VERSION,
+        closedOperations = CLOSED_REGISTRY
+    )
+}

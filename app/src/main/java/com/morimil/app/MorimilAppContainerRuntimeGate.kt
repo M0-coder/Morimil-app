@@ -3,12 +3,13 @@ package com.morimil.app
 import com.morimil.app.runtime.GenesisUltraRuntimeBootstrapCoordinator
 import com.morimil.app.runtime.GenesisUltraRuntimeStartupGate
 
-/** Stateless canonical bootstrap backed only by verified Genesis Ultra identity. */
+/** Durable canonical bootstrap backed only by verified Genesis Ultra identity. */
 internal val MorimilAppContainer.genesisUltraRuntimeBootstrapCoordinator:
     GenesisUltraRuntimeBootstrapCoordinator
     get() = GenesisUltraRuntimeBootstrapCoordinator.production(
         memoryDatabase = memoryDatabase,
-        organDatabase = organDatabase
+        organDatabase = organDatabase,
+        protocol = runtimeBootstrapProtocolCoordinator
     )
 
 /** Startup gate backed by canonical identity, memory convergence and Ultra bootstrap. */
@@ -59,6 +60,8 @@ internal val MorimilAppContainer.genesisUltraRuntimeStartupGate:
                 convergence.converge(identity)
                 val vaultRecovery = projectVaultRecovery.recoverPendingOperations()
                 check(vaultRecovery.blockedCount == 0) { "project_vault_outbox_blocked" }
+                // BOOT-001 recovery is owner-scoped inside bootstrap and intentionally
+                // runs only after legacy memory convergence is known durable.
                 bootstrap.bootstrap(identity)
                 Unit
             }
