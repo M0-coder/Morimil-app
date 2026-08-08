@@ -4,7 +4,6 @@ import com.morimil.app.core.orchestration.AgentCapabilityPolicy
 import com.morimil.app.data.genesis.ultra.GenesisUltraRuntimeIdentity
 import com.morimil.app.data.genesis.ultra.GenesisUltraRuntimeIdentityRepository
 import com.morimil.app.data.local.AgentInstanceEntity
-import com.morimil.app.data.local.CrossDatabaseOperationEntity
 import com.morimil.app.data.local.CrossDatabaseOperationStatus
 import com.morimil.app.data.local.DelegatedTaskEntity
 import com.morimil.app.data.local.MemoryOrganDatabase
@@ -43,8 +42,17 @@ class AgentInstanceLifecycleRepository internal constructor(
                     "Debe operar solo dentro de esta boveda, reportar resultados y esperar " +
                     "aprobacion humana antes de ejecutar cambios reales."
             )
-        val ordinal = dao.loadAgentInstancesForVault(vaultId)
-            .count { it.templateAgentId == cleanTemplate } + 1
+        val existingAgents = dao.loadAgentInstancesForVault(vaultId)
+        existingAgents.firstOrNull { existing ->
+            existing.templateAgentId == cleanTemplate &&
+                existing.briefing == cleanBriefing &&
+                hasCommittedOperation(existing.agentInstanceId, AgentLifecycleProtocolTypes.CREATE) { payload ->
+                    payload.optString("agent_instance_id") == existing.agentInstanceId &&
+                        payload.optString("vault_id") == vaultId
+                }
+        }?.let { existing -> return@withVaultLock existing.agentInstanceId }
+
+        val ordinal = existingAgents.count { it.templateAgentId == cleanTemplate } + 1
         val command = AgentLifecycleOperationFactory.create(
             identity = AgentLifecycleOperationFactory.identityOf(identity),
             vault = vault,
@@ -75,6 +83,16 @@ class AgentInstanceLifecycleRepository internal constructor(
             agent.templateAgentId,
             targetDeviceId = null
         )
+        agent.currentTaskId?.let { currentTaskId ->
+            val currentTask = dao.loadDelegatedTask(currentTaskId)
+            if (
+                currentTask != null &&
+                taskMatchesPlan(currentTask, agent, vault, cleanGoal, plan) &&
+                hasCommittedOperation(currentTaskId, AgentLifecycleProtocolTypes.ASSIGN)
+            ) {
+                return@withAgentLock currentTaskId
+            }
+        }
         val command = AgentLifecycleOperationFactory.assign(
             identity = AgentLifecycleOperationFactory.identityOf(identity),
             vault = vault,
@@ -103,22 +121,23 @@ class AgentInstanceLifecycleRepository internal constructor(
         }
         val taskId = agent.currentTaskId ?: return@withAgentLock false
         val task = dao.loadDelegatedTask(taskId) ?: return@withAgentLock false
+        if (task.assignedAgentId != agent.agentInstanceId) return@withAgentLock false
+        val cleanSummary = AgentLifecycleOperationFactory.normalizeSummary(summary)
         if (
-            task.assignedAgentId != agent.agentInstanceId ||
+            task.status == STATUS_AWAITING_REVIEW &&
+            task.resultSummary == cleanSummary &&
+            hasCommittedOperation(agentInstanceId, AgentLifecycleProtocolTypes.SUBMIT_RESULT) { payload ->
+                payload.optString("task_id") == task.taskId &&
+                    payload.optString("result_summary") == cleanSummary
+            }
+        ) {
+            return@withAgentLock true
+        }
+        if (
             task.status != AgentCapabilityPolicy.STATUS_APPROVED ||
             task.approvalId == null
         ) {
             return@withAgentLock false
-        }
-        val cleanSummary = AgentLifecycleOperationFactory.normalizeSummary(summary)
-        if (
-            task.resultSummary == cleanSummary &&
-            task.status == STATUS_AWAITING_REVIEW
-        ) {
-            return@withAgentLock loadSingleOperation(
-                agentInstanceId,
-                AgentLifecycleProtocolTypes.SUBMIT_RESULT
-            )?.status == CrossDatabaseOperationStatus.COMMITTED
         }
         val command = AgentLifecycleOperationFactory.submitResult(
             identity = AgentLifecycleOperationFactory.identityOf(identity),
@@ -143,12 +162,26 @@ class AgentInstanceLifecycleRepository internal constructor(
         if (agent.status == STATUS_RETIRED || agent.status == STATUS_QUARANTINED) {
             return@withAgentLock false
         }
+        val cleanStatus = AgentLifecycleOperationFactory.normalizeReviewStatus(status)
+        val cleanScore = qualityScore.coerceIn(0, 100)
+        val cleanNote = AgentLifecycleOperationFactory.normalizeNote(note)
+        if (
+            agent.status == cleanStatus &&
+            agent.qualityScore == cleanScore &&
+            hasCommittedOperation(agentInstanceId, AgentLifecycleProtocolTypes.EVALUATE) { payload ->
+                payload.optString("status") == cleanStatus &&
+                    payload.optInt("quality_score", -1) == cleanScore &&
+                    payload.optString("note") == cleanNote
+            }
+        ) {
+            return@withAgentLock true
+        }
         val command = AgentLifecycleOperationFactory.evaluate(
             identity = AgentLifecycleOperationFactory.identityOf(identity),
             agent = agent,
-            status = status,
-            qualityScore = qualityScore,
-            note = note
+            status = cleanStatus,
+            qualityScore = cleanScore,
+            note = cleanNote
         )
         protocol.execute(identity, command).status == CrossDatabaseOperationStatus.COMMITTED
     }
@@ -164,11 +197,10 @@ class AgentInstanceLifecycleRepository internal constructor(
         val agent = dao.loadAgentInstance(agentInstanceId) ?: return@withAgentLock false
         val cleanReason = AgentLifecycleOperationFactory.normalizeReason(reason)
         if (agent.status == STATUS_RETIRED) {
-            if (agent.retireReason != cleanReason) return@withAgentLock false
-            return@withAgentLock loadSingleOperation(
-                agentInstanceId,
-                AgentLifecycleProtocolTypes.RETIRE
-            )?.status == CrossDatabaseOperationStatus.COMMITTED
+            return@withAgentLock agent.retireReason == cleanReason &&
+                hasCommittedOperation(agentInstanceId, AgentLifecycleProtocolTypes.RETIRE) { payload ->
+                    payload.optString("reason") == cleanReason
+                }
         }
         if (agent.status == STATUS_QUARANTINED) return@withAgentLock false
         val command = AgentLifecycleOperationFactory.retire(
@@ -190,11 +222,10 @@ class AgentInstanceLifecycleRepository internal constructor(
         val agent = dao.loadAgentInstance(agentInstanceId) ?: return@withAgentLock false
         val cleanReason = AgentLifecycleOperationFactory.normalizeReason(reason)
         if (agent.status == STATUS_QUARANTINED) {
-            if (agent.retireReason != cleanReason) return@withAgentLock false
-            return@withAgentLock loadSingleOperation(
-                agentInstanceId,
-                AgentLifecycleProtocolTypes.QUARANTINE
-            )?.status == CrossDatabaseOperationStatus.COMMITTED
+            return@withAgentLock agent.retireReason == cleanReason &&
+                hasCommittedOperation(agentInstanceId, AgentLifecycleProtocolTypes.QUARANTINE) { payload ->
+                    payload.optString("reason") == cleanReason
+                }
         }
         if (agent.status == STATUS_RETIRED) return@withAgentLock false
         val vault = requireVault(agent.projectVaultId)
@@ -217,11 +248,11 @@ class AgentInstanceLifecycleRepository internal constructor(
         recoverBeforeMutation(identity)
         val agent = dao.loadAgentInstance(agentInstanceId) ?: return@withAgentLock false
         val cleanReason = AgentLifecycleOperationFactory.normalizeReason(reason)
-        if (agent.status == STATUS_PROMOTED && agent.retireReason == cleanReason) {
-            return@withAgentLock loadSingleOperation(
-                agentInstanceId,
-                AgentLifecycleProtocolTypes.PROMOTE
-            )?.status == CrossDatabaseOperationStatus.COMMITTED
+        if (agent.status == STATUS_PROMOTED) {
+            return@withAgentLock agent.retireReason == cleanReason &&
+                hasCommittedOperation(agentInstanceId, AgentLifecycleProtocolTypes.PROMOTE) { payload ->
+                    payload.optString("reason") == cleanReason
+                }
         }
         if (agent.status == STATUS_RETIRED || agent.status == STATUS_QUARANTINED) {
             return@withAgentLock false
@@ -271,21 +302,48 @@ class AgentInstanceLifecycleRepository internal constructor(
         return agent
     }
 
-    private suspend fun loadSingleOperation(
+    private suspend fun taskMatchesPlan(
+        task: DelegatedTaskEntity,
+        agent: AgentInstanceEntity,
+        vault: ProjectVaultEntity,
+        cleanGoal: String,
+        plan: com.morimil.app.core.orchestration.DelegationPlan
+    ): Boolean {
+        val expectedContext =
+            "vault=${vault.displayName}; vault_id=${vault.vaultId}; " +
+                "template_agent=${agent.templateAgentId}; ${plan.contextSummary}"
+        val expectedBlocked = AgentCapabilityPolicy.isImmuneBlocked(plan.immuneDecision)
+        val expectedStatus = if (expectedBlocked) {
+            AgentCapabilityPolicy.STATUS_REJECTED
+        } else {
+            AgentCapabilityPolicy.STATUS_AWAITING_APPROVAL
+        }
+        return task.assignedAgentId == agent.agentInstanceId &&
+            task.goal == cleanGoal &&
+            task.targetDeviceId == plan.targetDeviceId &&
+            task.contextSummary == expectedContext &&
+            task.allowedActionsJson == AgentCapabilityPolicy.encodeJson(plan.allowedActions) &&
+            task.allowedTransportsJson == AgentCapabilityPolicy.encodeJson(plan.allowedTransports) &&
+            task.approvalRequired &&
+            task.status == expectedStatus &&
+            task.riskLevel == plan.riskLevel
+    }
+
+    private suspend fun hasCommittedOperation(
         subjectId: String,
-        operationType: String
-    ): CrossDatabaseOperationEntity? {
-        val operations = operationDao.loadAnyForOwnerSubjectAndOperationType(
+        operationType: String,
+        payloadMatches: (JSONObject) -> Boolean = { true }
+    ): Boolean {
+        return operationDao.loadAnyForOwnerSubjectAndOperationType(
             ownerType = AgentLifecycleProtocolTypes.OWNER_TYPE,
             subjectId = subjectId,
             operationType = operationType
-        )
-        if (operations.size > 1) {
-            throw CrossDatabaseProtocolErrors.permanent(
-                CrossDatabaseProtocolErrors.OWNER_STATE_CONFLICT
-            )
+        ).any { operation ->
+            operation.status == CrossDatabaseOperationStatus.COMMITTED &&
+                runCatching { JSONObject(operation.payloadJson) }
+                    .getOrNull()
+                    ?.let(payloadMatches) == true
         }
-        return operations.singleOrNull()
     }
 
     private fun normalizeTemplate(value: String): String {
