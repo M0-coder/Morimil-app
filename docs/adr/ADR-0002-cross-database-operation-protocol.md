@@ -6,6 +6,7 @@
 - Original decision date: 2026-07-28.
 - COG implemented amendment: 2026-07-31.
 - ORCH owner amendment: integrated by PR `#172`.
+- ORCH-001 convergence amendment: integrated by PR `#180`; it does not add a new XOP operation.
 - AGENT owner amendment: integrated by PR `#174`.
 - BOOT owner amendment: integrated by PR `#176`.
 - RECALL disposition: integrated by PR `#178` as `DERIVED_REBUILD`; it does not become an ADR-0002 XOP owner.
@@ -15,7 +16,8 @@
 - Current protected `main`: resolved externally from `refs/heads/main`.
 - Merge SHA evidence: external GitHub and Morimil Control Tower evidence.
 - Historical COG audited source head: `7bdbda2aa4b7568695ba8e98be54d506d42c99d5`.
-- ORCH audited source head: `0348dccb561e576d17c45e7f8b1e38717332772b`.
+- ORCH-002..004 audited source head: `0348dccb561e576d17c45e7f8b1e38717332772b`.
+- ORCH-001 audited source head: `fe188fdee8eae901434a255051b6fa4f852b929b`.
 - AGENT audited source head: `74e072b911db692041d3716af9d0511b83ad70b7`.
 - BOOT audited source head: `c7710635fa172108cce87b3f7a76d6e037095864`.
 - RECALL audited source head: `fae8a0df3c29775317986877bce2b8eda8593d27`.
@@ -32,6 +34,8 @@ PR_175=MERGED_BY_SQUASH_HISTORICAL
 PR_176=MERGED_BY_SQUASH_HISTORICAL
 PR_177=MERGED_BY_SQUASH_HISTORICAL
 PR_178=MERGED_BY_SQUASH_HISTORICAL
+PR_179=MERGED_BY_SQUASH_HISTORICAL
+PR_180=MERGED_BY_SQUASH_HISTORICAL
 ```
 
 ## Context
@@ -45,7 +49,7 @@ ADR-0001 remains the separate ProjectVault protected reference. ADR-0002 governs
 - AGENT-001 create worker, AGENT-002 assign task, AGENT-003 submit result, AGENT-004 evaluate, AGENT-005 retire/promote, AGENT-006 quarantine/replacement;
 - BOOT-001 durable runtime bootstrap/recovery across MorimilDatabase and MemoryOrganDatabase.
 
-`ORCH-001` remains outside this implemented protocol scope because it is F1 convergence/rebuild work. REST-001/002 remain open. RECALL-001 is now integrated, but deliberately outside the XOP owner set because it is a verified canonical read followed by an atomic rebuildable projection inside `MemoryOrganDatabase`.
+ORCH-001 is integrated F1 convergence but remains outside the XOP operation set: it gates rebuildable local orchestration seed projections directly on committed Genesis Ultra identity and no longer uses legacy birth-completeness authority. REST-001/002 remain open. RECALL-001 is integrated, but deliberately outside the XOP owner set because it is a verified canonical read followed by an atomic rebuildable projection inside `MemoryOrganDatabase`.
 
 ## Authority boundary
 
@@ -56,7 +60,7 @@ Morimil is the continuous Instance. `Morimil-app` is the current Android Body. T
 - `instanceId` comes from committed Genesis Ultra identity;
 - `writerBodyId` and `writerEpoch` describe writer authorization only;
 - writer authorization is not ownership;
-- no database, process, journal row, model, provider, agent worker, BOOT projection, recall projection, or Guardian becomes identity or canonical-memory authority.
+- no database, process, journal row, model, provider, agent worker, BOOT projection, ORCH projection, recall projection, or Guardian becomes identity or canonical-memory authority.
 
 No compatibility write to `genesis_core`, `local_instance_identity`, or `memory_events` is permitted.
 
@@ -64,13 +68,15 @@ No compatibility write to `genesis_core`, `local_instance_identity`, or `memory_
 
 ## Decision
 
-Use one common recoverable operation contract for each bounded owner spanning authoritative state across database boundaries. The journal is `cross_database_operations` in MemoryOrganDatabase v9 for integrated COG, ORCH, AGENT and BOOT owner states.
+Use one common recoverable operation contract for each bounded owner spanning authoritative state across database boundaries. The journal is `cross_database_operations` in MemoryOrganDatabase v9 for integrated COG, ORCH-002..004, AGENT and BOOT owner states.
 
 Owner finalizers are closed typed Kotlin. Executable SQL, reflection targets, callbacks, prompts, provider commands, or arbitrary code are forbidden journal payloads.
 
 ProjectVault remains unchanged and separate.
 
 A bounded derived rebuild does not need an XOP merely because it consumes canonical data. RECALL-001 therefore remains outside the journal owner set: canonical input is verified first, then schedule and graph-link projection finalize atomically in the single MemoryOrgan database. This distinction prevents protocol machinery from becoming a second memory authority.
+
+A bounded local seed projection also does not need an XOP when it creates no cross-database authoritative transition. ORCH-001 therefore remains outside the journal operation set: committed canonical identity is checked first and agent/device seed rows remain disposable local projections.
 
 BOOT is the one integrated owner whose local completion is a saga across both Room files: after exact canonical receipt, `MorimilDatabase` projection preparation is idempotent and replayable; MemoryOrgan projection finalization and XOP `COMMITTED` occur in the owner transaction. This does not make the BOOT journal an identity authority.
 
@@ -104,7 +110,7 @@ COG preserves verified F1-A planning, deterministic proposal/approval/execution/
 
 ORCH-002..004 provide deterministic delegated-task proposal/approval/rejection with exact canonical receipt before task visibility. Approve/reject decisions serialize by `taskId` and use conditional Room transitions as a second defense.
 
-`ORCH-001` still uses the legacy birth-completeness gate and remains a separate F1 convergence item.
+ORCH-001 now uses `GenesisUltraRuntimeIdentityRepository.readCommittedIdentity()` before any local seed. It no longer receives or consults `MemoryRepository.hasCompleteBirth()`. Missing committed identity results in no local mutation; inconsistent committed identity fails closed at the canonical identity boundary. This convergence does not create a new XOP owner operation.
 
 ## AGENT mapping
 
@@ -132,7 +138,7 @@ Common protocol advancement serializes by `operationId`. ORCH additionally seria
 
 ## Integrated evidence
 
-RECALL PR #178 was integrated after all five governed PR-associated workflows succeeded for source head `fae8a0df3c29775317986877bce2b8eda8593d27`: Android CI, Genesis Body Preparation, Reference Checks, CodeQL, and SBOM. Managed API30/API35 runs had zero failures; QA-7 JVM and instrumented ratchets passed. This evidence does not establish RECALL-specific mutation coverage.
+ORCH-001 source head `fe188fdee8eae901434a255051b6fa4f852b929b` passed all five governed PR-associated workflows before PR #180 squash integration: Android CI, Genesis Body Preparation, Reference Checks, CodeQL, and SBOM. Managed API30/API35 compatibility and canonical API30 instrumented coverage passed. Existing mutation evidence remains report-only and does not establish ORCH-specific mutation coverage.
 
 ## Residual hardening
 
@@ -155,12 +161,12 @@ MEMORY_ORGAN_DATABASE=V9
 F1_A_AUTHORITY=PRESERVED
 PROJECT_VAULT=SEPARATE
 COG_001_004=INTEGRATED
+ORCH_001=INTEGRATED
 ORCH_002_004=INTEGRATED
 AGENT_001_006=INTEGRATED
 BOOT_001=INTEGRATED
 RECALL_001=INTEGRATED
 RECALL_BOOT_READINESS=OPEN
-ORCH_001=OPEN
 REST_001_002=OPEN
 HEALTH_CONVERGENCE=OPEN
 F3_3=OPEN

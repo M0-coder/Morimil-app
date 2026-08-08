@@ -2,19 +2,22 @@
 
 # F3.2 — Cross-database operation inventory
 
-- Inventory version: `8`.
+- Inventory version: `9`.
 - Content baseline SHA: `6e0444b698bdc5c557ec3ea83f48d7980da1a36b`.
 - Content baseline parent SHA: `bdbb5b2a040b728508948cd3cfbd8807b40a12f6`.
 - Current protected `main`: resolved externally from `refs/heads/main`.
 - Merge SHA evidence: external GitHub and Morimil Control Tower evidence.
 - Historical COG audited source head: `7bdbda2aa4b7568695ba8e98be54d506d42c99d5`.
-- ORCH audited source head: `0348dccb561e576d17c45e7f8b1e38717332772b`.
+- ORCH-002..004 audited source head: `0348dccb561e576d17c45e7f8b1e38717332772b`.
+- ORCH-001 audited source head: `fe188fdee8eae901434a255051b6fa4f852b929b`.
 - AGENT audited source head: `74e072b911db692041d3716af9d0511b83ad70b7`.
 - BOOT audited source head: `c7710635fa172108cce87b3f7a76d6e037095864`.
 - RECALL audited source head: `fae8a0df3c29775317986877bce2b8eda8593d27`.
 - PR `#176`: merged by squash for BOOT-001.
 - PR `#177`: merged by squash for post-BOOT CURRENT reconciliation.
 - PR `#178`: merged by squash for RECALL-001.
+- PR `#179`: merged by squash for post-RECALL CURRENT reconciliation.
+- PR `#180`: merged by squash for ORCH-001.
 - Tracker: `#88` — open for remaining F3 owners.
 - Protocol: `docs/adr/ADR-0002-cross-database-operation-protocol.md`.
 - Gate: `STOP_S5=CLOSED`.
@@ -31,13 +34,15 @@ PR_175=MERGED_BY_SQUASH_HISTORICAL
 PR_176=MERGED_BY_SQUASH_HISTORICAL
 PR_177=MERGED_BY_SQUASH_HISTORICAL
 PR_178=MERGED_BY_SQUASH_HISTORICAL
+PR_179=MERGED_BY_SQUASH_HISTORICAL
+PR_180=MERGED_BY_SQUASH_HISTORICAL
 ```
 
 ## Authority model
 
 Morimil is the continuous Instance; `Morimil-app` is the current Android Body. The Guardian safeguards without ownership. `instanceId != bodyId` and `agentInstanceId != instanceId` remain mandatory.
 
-Neither the XOP journal nor an owner repository becomes a second identity or canonical-memory authority. Writer Body/epoch authorization is not ownership. BOOT and recall runtime projections remain rebuildable projections and do not become identity authority.
+Neither the XOP journal nor an owner repository becomes a second identity or canonical-memory authority. Writer Body/epoch authorization is not ownership. BOOT, ORCH seed and recall runtime projections remain rebuildable projections and do not become identity authority.
 
 ## Protocol classifications
 
@@ -60,7 +65,7 @@ Neither the XOP journal nor an owner repository becomes a second identity or can
 | `app/src/main/java/com/morimil/app/data/repository/RecallScheduleRepository.kt` | `DERIVED_REBUILD` | RECALL-001 canonical derived rebuild integrated; startup-level recall readiness remains separately open. |
 | `app/src/main/java/com/morimil/app/data/repository/RestCycleRepository.kt` | `REQUIRES_PROTOCOL` | REST-001/002 open. |
 | `app/src/main/java/com/morimil/app/data/repository/CognitiveMigrationRepository.kt` | `INTEGRATED_PROTOCOL` | COG-001 through COG-004 integrated. |
-| `app/src/main/java/com/morimil/app/data/repository/AgentOrchestrationRepository.kt` | `MIXED_DISPOSITION` | ORCH-002 through ORCH-004 integrated; ORCH-001 remains open. |
+| `app/src/main/java/com/morimil/app/data/repository/AgentOrchestrationRepository.kt` | `INTEGRATED_PROTOCOL` | ORCH-002 through ORCH-004 use common XOP; ORCH-001 canonical identity-gated seed convergence is integrated and remains a local projection path rather than a new XOP operation. |
 | `app/src/main/java/com/morimil/app/data/repository/AgentInstanceLifecycleRepository.kt` | `INTEGRATED_PROTOCOL` | AGENT-001 through AGENT-006 integrated. |
 | `app/src/main/java/com/morimil/app/data/repository/MigrationRecordRepository.kt` | `SUPPORT_BOUNDARY` | Typed COG finalization support. |
 
@@ -87,9 +92,12 @@ Neither the XOP journal nor an owner repository becomes a second identity or can
 
 | ID | Entry point | Current state |
 | --- | --- | --- |
+| `ORCH-001` | `seedDefaultOrchestrationIfNeeded` | Integrated F1 convergence: committed Genesis Ultra identity is checked before any local seed; no legacy birth-completeness authority. |
 | `ORCH-002` | `proposeDelegatedTask` | Integrated. |
 | `ORCH-003` | `approveDelegatedTask` | Integrated. |
 | `ORCH-004` | `rejectDelegatedTask` | Integrated. |
+
+ORCH-001 does not add an XOP event. Its profiles/devices are local rebuildable projections gated by committed canonical identity. ORCH-002..004 remain the journaled cross-database owner operations.
 
 ### Agent lifecycle
 
@@ -120,14 +128,21 @@ RECALL does not own a cross-database XOP because its local schedule is a rebuild
 
 | ID | Entry point | Disposition |
 | --- | --- | --- |
-| `ORCH-001` | `seedDefaultOrchestrationIfNeeded` | Open convergence/rebuild work; still uses legacy `hasCompleteBirth()` gate. |
 | `REST-001` | `runLocalRestCycleIfDue`, `approvePlannedRestCycle` | `REQUIRES_PROTOCOL`; open. |
 | `REST-002` | repair-proposal path | `REQUIRES_PROTOCOL`; open. |
 | `MIG-001` | `planMigration`, `markMigrationApproved`, `markMigrationCompleted`, `markMigrationFailed`, `markMigrationRolledBack` | `SUPPORT_BOUNDARY`. |
 
 ## Integrated guarantees
 
-Within COG, ORCH, AGENT and BOOT bounded scopes, common XOP guarantees remain deterministic identities, hidden staging, exact canonical ensure/receipt, owner-scoped recovery, stale-block prevention, atomic owner finalization, typed failures and replay safety.
+Within COG, ORCH-002..004, AGENT and BOOT bounded scopes, common XOP guarantees remain deterministic identities, hidden staging, exact canonical ensure/receipt, owner-scoped recovery, stale-block prevention, atomic owner finalization, typed failures and replay safety.
+
+ORCH-001 separately guarantees:
+
+1. canonical committed identity is consulted before any local seed mutation;
+2. absent identity produces no seed mutation;
+3. inconsistent committed identity fails closed through the canonical identity repository;
+4. no `MemoryRepository.hasCompleteBirth()` dependency remains in orchestration seeding;
+5. agent/device rows remain rebuildable local projection state rather than identity authority.
 
 RECALL-001 separately guarantees:
 
@@ -150,7 +165,7 @@ No compatibility write to `memory_events`, `genesis_core`, or `local_instance_id
 3. `AGENT-001` through `AGENT-006` — integrated.
 4. `BOOT-001` — integrated.
 5. `RECALL-001` — integrated canonical derived rebuild.
-6. `ORCH-001` — next bounded convergence work.
+6. `ORCH-001` — integrated canonical identity-gated seed convergence.
 7. `REST-001` and `REST-002`, then health and recall startup-readiness convergence.
 8. F3.3 only after every F3.2 owner has a recorded disposition and separate authorization.
 

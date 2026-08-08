@@ -9,7 +9,7 @@ class CrossDatabaseOperationProtocolAdrContractTest {
     private val adr by lazy { repositoryFile("docs/adr/ADR-0002-cross-database-operation-protocol.md").readText() }
 
     @Test
-    fun adrIsCurrentAcceptedAndRecordsRecallDerivedDisposition() {
+    fun adrIsCurrentAcceptedAndRecordsOrchRecallDispositions() {
         assertTrue(adr.startsWith("# Document status: CURRENT"))
         assertTrue(adr.contains("Status: Accepted and implemented for COG-001..004, ORCH-002..004, AGENT-001..006, and BOOT-001"))
         listOf(
@@ -19,10 +19,13 @@ class CrossDatabaseOperationProtocolAdrContractTest {
             "MERGE_SHA_EVIDENCE=EXTERNAL",
             COG_AUDITED_SOURCE_HEAD,
             ORCH_AUDITED_SOURCE_HEAD,
+            ORCH_001_AUDITED_SOURCE_HEAD,
             AGENT_AUDITED_SOURCE_HEAD,
             BOOT_AUDITED_SOURCE_HEAD,
             RECALL_AUDITED_SOURCE_HEAD,
             "PR_178=MERGED_BY_SQUASH_HISTORICAL",
+            "PR_179=MERGED_BY_SQUASH_HISTORICAL",
+            "PR_180=MERGED_BY_SQUASH_HISTORICAL",
             "ADR_0002=ACCEPTED_AND_IMPLEMENTED_FOR_COG_ORCH_AGENT_AND_BOOT_BOUNDED_SCOPES",
             "RECALL_DISPOSITION=INTEGRATED_DERIVED_REBUILD_NOT_XOP_OWNER"
         ).forEach { token -> assertTrue("Missing ADR token $token", adr.contains(token)) }
@@ -57,12 +60,13 @@ class CrossDatabaseOperationProtocolAdrContractTest {
     }
 
     @Test
-    fun mappingsIncludeBootAndRecallWithoutAuthorityTransfer() {
+    fun mappingsIncludeOrchSeedBootAndRecallWithoutAuthorityTransfer() {
         listOf(
             "COG-001",
             "COG-002",
             "COG-003",
             "COG-004",
+            "ORCH-001",
             "ORCH-002",
             "ORCH-003",
             "ORCH-004",
@@ -72,6 +76,8 @@ class CrossDatabaseOperationProtocolAdrContractTest {
             "RECALL-001"
         ).forEach { assertTrue("Missing mapping $it", adr.contains(it)) }
         listOf(
+            "GenesisUltraRuntimeIdentityRepository.readCommittedIdentity()",
+            "no longer receives or consults `MemoryRepository.hasCompleteBirth()`",
             "runtime.bootstrap_initialized",
             "future F5 successor Body",
             "same `instanceId`",
@@ -82,11 +88,11 @@ class CrossDatabaseOperationProtocolAdrContractTest {
     }
 
     @Test
-    fun remainingOwnersAndResidualsStayOpen() {
+    fun orchIsIntegratedWhileRemainingOwnersAndResidualsStayOpen() {
         listOf(
             "RECALL_001=INTEGRATED",
             "RECALL_BOOT_READINESS=OPEN",
-            "ORCH_001=OPEN",
+            "ORCH_001=INTEGRATED",
             "REST_001_002=OPEN",
             "HEALTH_CONVERGENCE=OPEN",
             "F3_3=OPEN",
@@ -100,6 +106,7 @@ class CrossDatabaseOperationProtocolAdrContractTest {
         ).forEach { assertTrue("Missing residual $it", adr.contains(it, true)) }
         assertFalse(adr.contains("RECALL_001=OPEN"))
         assertFalse(adr.contains("BOOT_001=OPEN"))
+        assertFalse(adr.contains("ORCH_001=OPEN"))
     }
 
     private fun assertInOrder(text: String, markers: List<String>) {
@@ -121,6 +128,7 @@ class CrossDatabaseOperationProtocolAdrContractTest {
         const val CONTENT_BASELINE_PARENT_SHA = "CONTENT_BASELINE_PARENT_SHA=bdbb5b2a040b728508948cd3cfbd8807b40a12f6"
         const val COG_AUDITED_SOURCE_HEAD = "7bdbda2aa4b7568695ba8e98be54d506d42c99d5"
         const val ORCH_AUDITED_SOURCE_HEAD = "0348dccb561e576d17c45e7f8b1e38717332772b"
+        const val ORCH_001_AUDITED_SOURCE_HEAD = "fe188fdee8eae901434a255051b6fa4f852b929b"
         const val AGENT_AUDITED_SOURCE_HEAD = "74e072b911db692041d3716af9d0511b83ad70b7"
         const val BOOT_AUDITED_SOURCE_HEAD = "c7710635fa172108cce87b3f7a76d6e037095864"
         const val RECALL_AUDITED_SOURCE_HEAD = "fae8a0df3c29775317986877bce2b8eda8593d27"
