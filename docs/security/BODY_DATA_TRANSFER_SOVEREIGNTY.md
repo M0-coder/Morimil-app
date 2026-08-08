@@ -75,9 +75,10 @@ This change does not implement export, restore, Body succession, writer-epoch tr
 - an `include` rule appears;
 - the Android 12+ cloud and D2D policies diverge from complete denial;
 - the legacy full-backup policy stops denying the complete domain set;
-- CURRENT documentation represents OS transfer as Body succession authority.
+- another Android source-set manifest attempts to override the transfer boundary;
+- CURRENT policy represents OS transfer as Body succession authority.
 
-CI must also validate the merged release manifest so manifest-merger behavior cannot silently remove or replace the production attributes.
+The existing CI release build exercises Android manifest merging and resource linking. The contract separately constrains all repository manifest inputs so a release source-set override cannot silently replace these attributes. A future requirement for byte-level or merged-manifest artifact inspection must be added as a distinct quality gate rather than claimed here without evidence.
 
 ## Upgrade rule
 
