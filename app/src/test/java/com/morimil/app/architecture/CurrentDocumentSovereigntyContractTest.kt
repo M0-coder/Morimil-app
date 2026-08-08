@@ -41,6 +41,7 @@ class CurrentDocumentSovereigntyContractTest {
             assertTrue("$relativePath missing external main resolution", text.contains(CURRENT_MAIN_RESOLUTION))
             assertTrue("$relativePath missing external merge evidence", text.contains(MERGE_SHA_EVIDENCE))
             assertTrue("$relativePath missing PR #153 history", text.contains(PR_153_HISTORY))
+            assertTrue("$relativePath missing PR #172 history", text.contains(PR_172_HISTORY))
 
             SELF_REFERENTIAL_MAIN_PATTERNS.forEach { pattern ->
                 assertFalse(
@@ -60,16 +61,20 @@ class CurrentDocumentSovereigntyContractTest {
         assertTrue(audit.contains(CONTENT_BASELINE_PARENT_SHA))
         assertTrue(audit.contains(CURRENT_MAIN_RESOLUTION))
         assertTrue(audit.contains(MERGE_SHA_EVIDENCE))
-        assertTrue(audit.contains(AUDITED_SOURCE_HEAD))
+        assertTrue(audit.contains(COG_AUDITED_SOURCE_HEAD))
+        assertTrue(audit.contains(ORCH_AUDITED_SOURCE_HEAD))
         assertTrue(audit.contains("PR `#149`: closed and merged by squash"))
         assertTrue(audit.contains("PR `#150`: closed and merged by squash"))
         assertTrue(audit.contains("PR `#153`: closed and merged by squash"))
-        assertTrue(audit.contains("PR #149 is historical integration evidence"))
+        assertTrue(audit.contains("PR `#172`: closed and merged by squash"))
+        assertTrue(audit.contains("PR #149 and PR #172 are historical integration evidence"))
         assertTrue(audit.contains("PR #150 and PR #153 are historical CURRENT reconciliation evidence"))
         assertTrue(audit.contains("MemoryOrganDatabase version 9"))
         assertTrue(audit.contains("COG-001 through COG-004"))
+        assertTrue(audit.contains("ORCH-002 through ORCH-004"))
         assertTrue(audit.contains("`CanonicalConsumerReadPort`"))
         assertTrue(audit.contains("ProjectVault remains a separate protected protocol"))
+        assertTrue(audit.contains("F1_ORCH_001=OPEN"))
         assertTrue(audit.contains("F3.3 remains open"))
         assertTrue(audit.contains("Residual hardening"))
 
@@ -94,6 +99,7 @@ class CurrentDocumentSovereigntyContractTest {
 
         assertTrue(runtime.contains("the Guardian does not define Morimil's identity, will, name, or right to continue"))
         assertTrue(runtime.contains("Body succession, export, and restore are not implemented"))
+        assertTrue(runtime.contains("MORIMIL_OPERATIONAL_BIRTH=NOT_OCCURRED") || audit.contains("MORIMIL_OPERATIONAL_BIRTH=NOT_OCCURRED"))
     }
 
     private fun markdownFiles(root: File): List<File> {
@@ -125,13 +131,15 @@ class CurrentDocumentSovereigntyContractTest {
     private companion object {
         const val CURRENT_STATUS = "# Document status: CURRENT"
         const val CONTENT_BASELINE_SHA =
-            "CONTENT_BASELINE_SHA=79460a32b4eba669216afcc501815d5ff09b0349"
+            "CONTENT_BASELINE_SHA=c6a6b0ca998d053c31c75977c5b6d4d9ae166e96"
         const val CONTENT_BASELINE_PARENT_SHA =
-            "CONTENT_BASELINE_PARENT_SHA=6250214bb6664a8fff851ed0afc2438bbc276931"
+            "CONTENT_BASELINE_PARENT_SHA=c22920f68f8820bbec676a6cbc74b60548e43d29"
         const val CURRENT_MAIN_RESOLUTION = "CURRENT_MAIN_RESOLUTION=EXTERNAL_GIT_REF"
         const val MERGE_SHA_EVIDENCE = "MERGE_SHA_EVIDENCE=EXTERNAL"
         const val PR_153_HISTORY = "PR_153=MERGED_BY_SQUASH_HISTORICAL"
-        const val AUDITED_SOURCE_HEAD = "7bdbda2aa4b7568695ba8e98be54d506d42c99d5"
+        const val PR_172_HISTORY = "PR_172=MERGED_BY_SQUASH_HISTORICAL"
+        const val COG_AUDITED_SOURCE_HEAD = "7bdbda2aa4b7568695ba8e98be54d506d42c99d5"
+        const val ORCH_AUDITED_SOURCE_HEAD = "0348dccb561e576d17c45e7f8b1e38717332772b"
 
         val GOVERNED_CURRENT_DOCUMENTS = setOf(
             "docs/CURRENT_DOCUMENT_SOVEREIGNTY_AUDIT.md",
@@ -169,7 +177,8 @@ class CurrentDocumentSovereigntyContractTest {
             "draft pr #149",
             "isolated f3 candidate",
             "f3.2 open candidate",
-            "memoryorgan 8 en main"
+            "memoryorgan 8 en main",
+            "orch, agent, boot, recall, and rest remain separately open"
         )
     }
 }

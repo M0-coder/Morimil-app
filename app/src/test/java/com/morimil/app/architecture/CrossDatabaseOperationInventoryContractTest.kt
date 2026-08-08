@@ -12,18 +12,23 @@ class CrossDatabaseOperationInventoryContractTest {
         val inventory = inventoryFile(repositoryRoot()).readText()
 
         assertTrue(inventory.startsWith("# Document status: CURRENT"))
-        assertTrue(inventory.contains("Inventory version: `4`"))
+        assertTrue(inventory.contains("Inventory version: `5`"))
         assertTrue(inventory.contains(CONTENT_BASELINE_SHA))
         assertTrue(inventory.contains(CONTENT_BASELINE_PARENT_SHA))
         assertTrue(inventory.contains(CURRENT_MAIN_RESOLUTION))
         assertTrue(inventory.contains(MERGE_SHA_EVIDENCE))
-        assertTrue(inventory.contains(AUDITED_SOURCE_HEAD))
+        assertTrue(inventory.contains(COG_AUDITED_SOURCE_HEAD))
+        assertTrue(inventory.contains(ORCH_AUDITED_SOURCE_HEAD))
         assertTrue(inventory.contains("PR `#149`: closed and merged by squash"))
         assertTrue(inventory.contains("PR `#150`: closed and merged by squash"))
         assertTrue(inventory.contains("PR `#153`: closed and merged by squash"))
+        assertTrue(inventory.contains("PR `#172`: closed and merged by squash"))
         assertTrue(inventory.contains("historical CURRENT reconciliation", true))
         assertTrue(inventory.contains("`INTEGRATED_PROTOCOL`"))
+        assertTrue(inventory.contains("`MIXED_DISPOSITION`"))
         assertTrue(inventory.contains("COG-001 through COG-004 integrated in protected main"))
+        assertTrue(inventory.contains("ORCH-002 through ORCH-004 integrated"))
+        assertTrue(inventory.contains("ORCH-001 remains open"))
         assertTrue(inventory.contains("F3.3"))
         assertTrue(inventory.contains("ProjectVault remains a separate protected reference"))
         assertTrue(inventory.contains("## Retired regression literals"))
@@ -57,7 +62,7 @@ class CrossDatabaseOperationInventoryContractTest {
     }
 
     @Test
-    fun integratedCogEntryPointsAndRemainingOwnersAreExplicit() {
+    fun integratedEntryPointsAndRemainingOwnersAreExplicit() {
         val root = repositoryRoot()
         val inventory = inventoryFile(root).readText()
 
@@ -75,6 +80,10 @@ class CrossDatabaseOperationInventoryContractTest {
         listOf("COG-001", "COG-002", "COG-003", "COG-004").forEach { id ->
             assertTrue(inventory.contains("`$id`"))
         }
+        listOf("ORCH-002", "ORCH-003", "ORCH-004").forEach { id ->
+            assertTrue(inventory.contains("`$id`"))
+        }
+        assertTrue(inventory.contains("`AGENT-001` through `AGENT-006` — next bounded owner family"))
         assertTrue(inventory.contains("F3_3", true) || inventory.contains("F3.3"))
         assertTrue(inventory.contains("Room-backed two-coordinator", true))
     }
@@ -116,12 +125,13 @@ class CrossDatabaseOperationInventoryContractTest {
     private companion object {
         const val INVENTORY_PATH = "docs/F3_CROSS_DATABASE_OPERATION_INVENTORY.md"
         const val CONTENT_BASELINE_SHA =
-            "CONTENT_BASELINE_SHA=79460a32b4eba669216afcc501815d5ff09b0349"
+            "CONTENT_BASELINE_SHA=c6a6b0ca998d053c31c75977c5b6d4d9ae166e96"
         const val CONTENT_BASELINE_PARENT_SHA =
-            "CONTENT_BASELINE_PARENT_SHA=6250214bb6664a8fff851ed0afc2438bbc276931"
+            "CONTENT_BASELINE_PARENT_SHA=c22920f68f8820bbec676a6cbc74b60548e43d29"
         const val CURRENT_MAIN_RESOLUTION = "CURRENT_MAIN_RESOLUTION=EXTERNAL_GIT_REF"
         const val MERGE_SHA_EVIDENCE = "MERGE_SHA_EVIDENCE=EXTERNAL"
-        const val AUDITED_SOURCE_HEAD = "7bdbda2aa4b7568695ba8e98be54d506d42c99d5"
+        const val COG_AUDITED_SOURCE_HEAD = "7bdbda2aa4b7568695ba8e98be54d506d42c99d5"
+        const val ORCH_AUDITED_SOURCE_HEAD = "0348dccb561e576d17c45e7f8b1e38717332772b"
         const val BOOTSTRAP_PATH =
             "app/src/main/java/com/morimil/app/runtime/GenesisUltraRuntimeBootstrapCoordinator.kt"
 
@@ -193,7 +203,10 @@ class CrossDatabaseOperationInventoryContractTest {
 
         val STALE_PHRASES = listOf(
             "not integrated",
-            "draft candidate closure"
+            "draft candidate closure",
+            "`ORCH-002` | `proposeDelegatedTask` | `REQUIRES_PROTOCOL`; open",
+            "`ORCH-003` | `approveDelegatedTask` | `REQUIRES_PROTOCOL`; open",
+            "`ORCH-004` | `rejectDelegatedTask` | `REQUIRES_PROTOCOL`; open"
         )
     }
 }

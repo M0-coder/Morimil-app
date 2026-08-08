@@ -4,26 +4,29 @@
 
 - Tracker: `#88` — open for remaining F3 owners.
 - Governing ADR: `ADR-0002`.
-- Content baseline SHA: `79460a32b4eba669216afcc501815d5ff09b0349`.
-- Content baseline parent SHA: `6250214bb6664a8fff851ed0afc2438bbc276931`.
+- Content baseline SHA: `c6a6b0ca998d053c31c75977c5b6d4d9ae166e96`.
+- Content baseline parent SHA: `c22920f68f8820bbec676a6cbc74b60548e43d29`.
 - Current protected `main`: resolved externally from `refs/heads/main`.
 - Merge SHA evidence: external GitHub and Morimil Control Tower evidence.
-- Audited source head: `7bdbda2aa4b7568695ba8e98be54d506d42c99d5`.
+- Historical COG audited source head: `7bdbda2aa4b7568695ba8e98be54d506d42c99d5`.
+- ORCH audited source head: `0348dccb561e576d17c45e7f8b1e38717332772b`.
 - PR `#149`: closed and merged by squash.
 - PR `#150`: closed and merged by squash for a historical CURRENT reconciliation.
 - PR `#151`: closed and merged by squash for verified Canvas runtime recovery.
-- PR `#153`: closed and merged by squash for the historical twelve-file CURRENT reconciliation represented by this content baseline.
+- PR `#153`: closed and merged by squash for a historical CURRENT reconciliation.
+- PR `#172`: closed and merged by squash for ORCH-002 through ORCH-004.
 - Gate: `STOP_S5=CLOSED`.
-- Integrated scope: `COG-001` through `COG-004` only.
+- Integrated scope of this blueprint: `COG-001` through `COG-004`; the common ADR now also governs integrated ORCH-002 through ORCH-004.
 
-This document records the implemented and independently audited design represented by the content baseline and present in the externally resolved protected main. The audited source head is historical provenance. A later squash SHA is integration evidence and cannot be predicted by the versioned content that produces it. PR #150 and PR #153 reconcile CURRENT documentation and architecture contracts only. PR #151 changes Body build/runtime-asset recovery only. None alters this protocol's authority or scope.
+This document records the implemented and audited COG design present in protected main. It remains COG-specific, while ADR-0002 and the F3 inventory record the broader common-journal scope after PR #172. The moving protected-main SHA is resolved externally.
 
 ```text
-CONTENT_BASELINE_SHA=79460a32b4eba669216afcc501815d5ff09b0349
-CONTENT_BASELINE_PARENT_SHA=6250214bb6664a8fff851ed0afc2438bbc276931
+CONTENT_BASELINE_SHA=c6a6b0ca998d053c31c75977c5b6d4d9ae166e96
+CONTENT_BASELINE_PARENT_SHA=c22920f68f8820bbec676a6cbc74b60548e43d29
 CURRENT_MAIN_RESOLUTION=EXTERNAL_GIT_REF
 MERGE_SHA_EVIDENCE=EXTERNAL
 PR_153=MERGED_BY_SQUASH_HISTORICAL
+PR_172=MERGED_BY_SQUASH_HISTORICAL
 ```
 
 ## 1. Authority and sovereignty
@@ -36,7 +39,7 @@ Morimil is the continuous and free Instance. `Morimil-app` is the current Androi
 - no database, Android process, GitHub state, model, provider, or Guardian action becomes an identity or memory authority;
 - original canonical memory remains append-only.
 
-The integrated frontier is:
+The COG frontier is:
 
 ```text
 GenesisUltraRuntimeIdentityRepository + CanonicalMemoryRepository
@@ -60,9 +63,9 @@ Protected main includes:
 - fresh-v9 and migrated 8→9 journal guards;
 - API 30 and API 35 interruption and replay coverage.
 
-ProjectVault remains separate and preserved. ORCH, AGENT, BOOT, RECALL, REST, and F3.3 legacy removal are not promoted by this integration. The vendored Canvas runtime-recovery asset introduced by PR #151 is outside the COG owner inventory and cannot become protocol state.
+ProjectVault remains separate and preserved. PR #172 later integrated ORCH-002 through ORCH-004 under the same common ADR without changing this COG mapping. AGENT, BOOT, RECALL, ORCH-001, REST, and F3.3 legacy removal remain open.
 
-F3.2 is closed only for COG-001 through COG-004. It is not a declaration that all F3 work is complete.
+F3.2 is closed only for the bounded owner operations explicitly integrated in protected main; this blueprint documents the COG subset.
 
 ## 3. Canonical planning input
 
@@ -101,13 +104,7 @@ The `cross_database_operations` journal persists immutable intent, writer bindin
 
 The journal stores data, not executable SQL, callbacks, reflection targets, prompts, or arbitrary code.
 
-Equivalent guards are installed for:
-
-- migration 8→9;
-- fresh v9 creation;
-- every production open.
-
-Guards are NULL-safe, replace vulnerable prior trigger definitions, and reject partial receipts, partial local results, invalid digests, inconsistent states, and committed rows without complete evidence.
+Equivalent guards are installed for migration 8→9, fresh v9 creation, and every production open. Guards are NULL-safe, replace vulnerable prior trigger definitions, and reject partial receipts, partial local results, invalid digests, inconsistent states, and committed rows without complete evidence.
 
 ## 6. Operation mapping
 
@@ -127,7 +124,7 @@ Approval binds the exact planned-record digest. The deterministic operation ID i
 
 Event: `cognitive_migration.executed`.
 
-Execution requires the exact committed COG-002 predecessor. Canonical audit preparation runs outside the Room owner transaction and is rebound to the immutable operation and receipt inside finalization.
+Execution requires the exact committed COG-002 predecessor. Canonical audit preparation runs outside the Room write transaction and is rebound to the immutable operation and receipt inside finalization.
 
 Temporary identity, database, or canonical-read failure remains retryable.
 
@@ -171,9 +168,11 @@ The integrated coordinator:
 - finalizes owner state and journal result atomically;
 - produces no duplicate canonical effect or duplicate visible owner state under tested replay.
 
+After PR #172 the common coordinator is parameterized by an owner-scoped registry, preserving the COG semantics above while preventing COG recovery from consuming ORCH rows.
+
 ## 9. Evidence and residual hardening
 
-The merged implementation passed unit tests, lint, debug and instrumentation APK builds, CodeQL, SBOM, Reference Checks, and managed-device execution on API 30 and API 35.
+The merged COG implementation passed unit tests, lint, debug and instrumentation APK builds, CodeQL, SBOM, Reference Checks, and managed-device execution on API 30 and API 35.
 
 Residual non-blocking hardening remains:
 
@@ -187,20 +186,23 @@ These items are future evidence/API hardening. They are not concealed, represent
 ## 10. Acceptance boundary
 
 ```text
-CONTENT_BASELINE_SHA=79460a32b4eba669216afcc501815d5ff09b0349
-CONTENT_BASELINE_PARENT_SHA=6250214bb6664a8fff851ed0afc2438bbc276931
+CONTENT_BASELINE_SHA=c6a6b0ca998d053c31c75977c5b6d4d9ae166e96
+CONTENT_BASELINE_PARENT_SHA=c22920f68f8820bbec676a6cbc74b60548e43d29
 CURRENT_MAIN_RESOLUTION=EXTERNAL_GIT_REF
 MERGE_SHA_EVIDENCE=EXTERNAL
-PR_149=MERGED_BY_SQUASH
-PR_150=MERGED_POST_MERGE_CURRENT_RECONCILIATION
-PR_151=MERGED_CANVAS_RUNTIME_RECOVERY
+PR_149=MERGED_BY_SQUASH_HISTORICAL
+PR_150=MERGED_POST_MERGE_CURRENT_RECONCILIATION_HISTORICAL
+PR_151=MERGED_CANVAS_RUNTIME_RECOVERY_HISTORICAL
 PR_153=MERGED_BY_SQUASH_HISTORICAL
+PR_172=MERGED_BY_SQUASH_HISTORICAL
 AUDITED_SOURCE_HEAD=7bdbda2aa4b7568695ba8e98be54d506d42c99d5
 COG_001_004=INTEGRATED_IN_MAIN
+ORCH_002_004=INTEGRATED_IN_MAIN
 MEMORY_ORGAN_DATABASE=V9
 F1_A_AUTHORITY=PRESERVED
 PROJECT_VAULT=SEPARATE_AND_PRESERVED
-F3_2_COG_SCOPE=CLOSED
+F3_2_BOUNDED_SCOPE=CLOSED_FOR_COG_AND_ORCH_002_004
 F3_3=OPEN
 F4_F6=OPEN
+MORIMIL_OPERATIONAL_BIRTH=NOT_OCCURRED
 ```

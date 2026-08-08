@@ -18,12 +18,16 @@ class CognitiveMigrationImplementationBlueprintContractTest {
         assertTrue(blueprint.contains(CONTENT_BASELINE_PARENT_SHA))
         assertTrue(blueprint.contains(CURRENT_MAIN_RESOLUTION))
         assertTrue(blueprint.contains(MERGE_SHA_EVIDENCE))
-        assertTrue(blueprint.contains(AUDITED_SOURCE_HEAD))
+        assertTrue(blueprint.contains(COG_AUDITED_SOURCE_HEAD))
+        assertTrue(blueprint.contains(ORCH_AUDITED_SOURCE_HEAD))
         assertTrue(blueprint.contains("PR `#149`: closed and merged by squash"))
         assertTrue(blueprint.contains("PR `#150`: closed and merged by squash"))
         assertTrue(blueprint.contains("PR `#153`: closed and merged by squash"))
+        assertTrue(blueprint.contains("PR `#172`: closed and merged by squash"))
         assertTrue(blueprint.contains("PR_153=MERGED_BY_SQUASH_HISTORICAL"))
+        assertTrue(blueprint.contains("PR_172=MERGED_BY_SQUASH_HISTORICAL"))
         assertTrue(blueprint.contains("COG_001_004=INTEGRATED_IN_MAIN"))
+        assertTrue(blueprint.contains("ORCH_002_004=INTEGRATED_IN_MAIN"))
 
         STALE_PHRASES.forEach { phrase ->
             assertFalse("Blueprint contains stale phrase $phrase", blueprint.contains(phrase, true))
@@ -47,6 +51,8 @@ class CognitiveMigrationImplementationBlueprintContractTest {
         assertTrue(blueprint.contains("does not open a second direct identity or memory authority"))
         assertTrue(blueprint.contains("ProjectVault remains separate and preserved"))
         assertTrue(blueprint.contains("F3.3 legacy removal"))
+        assertTrue(blueprint.contains("ORCH-002 through ORCH-004"))
+        assertTrue(blueprint.contains("ORCH-001"))
         assertTrue(blueprint.contains("F3_3=OPEN"))
     }
 
@@ -91,7 +97,8 @@ class CognitiveMigrationImplementationBlueprintContractTest {
             "postSnapshotId",
             "Room-backed concurrent regression",
             "redundant `rollbackEventHash`",
-            "UPDATE-trigger replacement"
+            "UPDATE-trigger replacement",
+            "owner-scoped registry"
         ).forEach { token ->
             assertTrue("Missing blueprint token $token", blueprint.contains(token, true))
         }
@@ -115,18 +122,20 @@ class CognitiveMigrationImplementationBlueprintContractTest {
 
     private companion object {
         const val CONTENT_BASELINE_SHA =
-            "CONTENT_BASELINE_SHA=79460a32b4eba669216afcc501815d5ff09b0349"
+            "CONTENT_BASELINE_SHA=c6a6b0ca998d053c31c75977c5b6d4d9ae166e96"
         const val CONTENT_BASELINE_PARENT_SHA =
-            "CONTENT_BASELINE_PARENT_SHA=6250214bb6664a8fff851ed0afc2438bbc276931"
+            "CONTENT_BASELINE_PARENT_SHA=c22920f68f8820bbec676a6cbc74b60548e43d29"
         const val CURRENT_MAIN_RESOLUTION = "CURRENT_MAIN_RESOLUTION=EXTERNAL_GIT_REF"
         const val MERGE_SHA_EVIDENCE = "MERGE_SHA_EVIDENCE=EXTERNAL"
-        const val AUDITED_SOURCE_HEAD = "7bdbda2aa4b7568695ba8e98be54d506d42c99d5"
+        const val COG_AUDITED_SOURCE_HEAD = "7bdbda2aa4b7568695ba8e98be54d506d42c99d5"
+        const val ORCH_AUDITED_SOURCE_HEAD = "0348dccb561e576d17c45e7f8b1e38717332772b"
         val STALE_PHRASES = listOf(
             "isolated implementation candidate",
             "draft pr `#149`",
             "not integrated in protected `main`",
             "production_integrated=false",
-            "f3.2 open candidate"
+            "f3.2 open candidate",
+            "orch, agent, boot, recall, rest, and f3.3 legacy removal are not promoted"
         )
     }
 }

@@ -1,14 +1,16 @@
 # Document status: CURRENT
 
-> **Content baseline SHA:** `79460a32b4eba669216afcc501815d5ff09b0349`.
+> **Content baseline SHA:** `c6a6b0ca998d053c31c75977c5b6d4d9ae166e96`.
 >
-> **Content baseline parent SHA:** `6250214bb6664a8fff851ed0afc2438bbc276931`.
+> **Content baseline parent SHA:** `c22920f68f8820bbec676a6cbc74b60548e43d29`.
 >
 > **Current main resolution:** external Git ref `refs/heads/main`.
 >
 > **Merge SHA evidence:** external GitHub and Morimil Control Tower evidence.
 >
-> **Audited source head:** `7bdbda2aa4b7568695ba8e98be54d506d42c99d5`.
+> **Historical COG audited source head:** `7bdbda2aa4b7568695ba8e98be54d506d42c99d5`.
+>
+> **ORCH audited source head:** `0348dccb561e576d17c45e7f8b1e38717332772b`.
 >
 > **PR #149:** closed and merged by squash.
 >
@@ -16,18 +18,21 @@
 >
 > **PR #151:** closed and merged by squash; the verified Canvas runtime-recovery bundle is vendored with provenance.
 >
-> **PR #153:** closed and merged by squash as the historical twelve-file CURRENT reconciliation represented by this content baseline.
+> **PR #153:** closed and merged by squash as the historical twelve-file CURRENT reconciliation.
+>
+> **PR #172:** closed and merged by squash for the audited ORCH-002 through ORCH-004 durable protocol.
 >
 > A versioned document records a known content baseline. The moving SHA of protected `main` is resolved externally and is not predicted by the commit that contains this document.
 
 # Current runtime contract
 
 ```text
-CONTENT_BASELINE_SHA=79460a32b4eba669216afcc501815d5ff09b0349
-CONTENT_BASELINE_PARENT_SHA=6250214bb6664a8fff851ed0afc2438bbc276931
+CONTENT_BASELINE_SHA=c6a6b0ca998d053c31c75977c5b6d4d9ae166e96
+CONTENT_BASELINE_PARENT_SHA=c22920f68f8820bbec676a6cbc74b60548e43d29
 CURRENT_MAIN_RESOLUTION=EXTERNAL_GIT_REF
 MERGE_SHA_EVIDENCE=EXTERNAL
 PR_153=MERGED_BY_SQUASH_HISTORICAL
+PR_172=MERGED_BY_SQUASH_HISTORICAL
 ```
 
 ## Identity and Body boundary
@@ -43,8 +48,7 @@ Morimil is the continuous personal Instance. `Morimil-app` is the current native
 
 ## Pre-birth provisioning boundary
 
-Production onboarding can now resolve the two local cryptographic preparation
-states without invoking Genesis birth:
+Production onboarding can resolve the two local cryptographic preparation states without invoking Genesis birth:
 
 ```text
 BODY_IDENTITY_REQUIRED
@@ -54,25 +58,21 @@ BODY_IDENTITY_REQUIRED
   -> READY_FOR_SIGNED_CANDIDATE
 ```
 
-`GenesisUltraPreBirthProvisioningCoordinator` re-inspects durable state before
-and after each mutation. It cannot accept a Seed, persist a candidate, record
-consent, issue authorization, execute birth, open runtime, or activate motors.
-Provisioning receipts are reconstructable views of authenticated stores and are
-not identity or canonical-memory authorities.
+`GenesisUltraPreBirthProvisioningCoordinator` re-inspects durable state before and after each mutation. It cannot accept a Seed, persist a candidate, record consent, issue authorization, execute birth, open runtime, or activate motors. Provisioning receipts are reconstructable views of authenticated stores and are not identity or canonical-memory authorities.
 
-The real Guardian public key, signed Seed, final witnessed evidence, and the
-user's explicit atomic-execution decision remain required deployment and
-ceremony inputs. `MORIMIL_OPERATIONAL_BIRTH=NOT_OCCURRED` remains unchanged.
+The real Guardian public key, signed Seed, final witnessed evidence, and the user's explicit atomic-execution decision remain required deployment and ceremony inputs. `MORIMIL_OPERATIONAL_BIRTH=NOT_OCCURRED` remains unchanged.
 
 ## Evidence layers
 
 | Layer | State |
 | --- | --- |
-| Externally resolved protected `main` | F1-A, MemoryOrganDatabase v9, ProjectVault, the durable COG-001 through COG-004 protocol, the vendored Canvas runtime-recovery bundle, and the historical CURRENT reconciliations are integrated. |
-| Content baseline | Exact repository state from which this document was prepared and reviewed; it is not a prediction of the containing commit SHA. |
-| Audited source head | Historical reviewed source for PR #149 before squash. |
-| Historical CURRENT reconciliations | PR #150 and PR #153 record prior twelve-file documentation and architecture-contract reconciliations. |
+| Externally resolved protected `main` | F1-A, MemoryOrganDatabase v9, ProjectVault, COG-001 through COG-004, ORCH-002 through ORCH-004, the vendored Canvas runtime-recovery bundle, Body D2D fail-closed policy, and historical CURRENT reconciliations are integrated. |
+| Content baseline | Exact protected-main repository state from which this reconciliation was prepared; it is not a prediction of the containing documentation commit SHA. |
+| Historical COG audited source head | Reviewed source for the COG protocol before its squash integration. |
+| ORCH audited source head | Exact reviewed PR #172 head whose 5/5 CI and artifact evidence preceded squash integration. |
+| Historical CURRENT reconciliations | PR #150 and PR #153 record prior documentation and architecture-contract reconciliations. |
 | Canvas recovery provenance | PR #151 records the recovered runtime asset, deterministic successor bundle, source artifact, and digest evidence. |
+| ORCH integration provenance | PR #172 records exact-head CI, API30/API35 kill/reopen tests, QA-7 ratchets, CodeQL, SBOM, and artifact digest verification. |
 | Historical preparation | ADRs, plans, checkpoints, and candidate reports explain prior decisions but do not override CURRENT semantics. |
 
 ## Persistent stores
@@ -80,11 +80,11 @@ ceremony inputs. `MORIMIL_OPERATIONAL_BIRTH=NOT_OCCURRED` remains unchanged.
 | Store | Version in protected main | Responsibility |
 | --- | ---: | --- |
 | `MorimilDatabase` | `15` | Genesis Ultra birth, canonical identity, canonical memory lineage, and reasoning transcript. |
-| `MemoryOrganDatabase` | `9` | Derived organs, schedules, links, projects, agents, ProjectVault state, migration records, and `cross_database_operations`. |
+| `MemoryOrganDatabase` | `9` | Derived organs, schedules, links, projects, agents, ProjectVault state, migration records, delegated orchestration state, and `cross_database_operations`. |
 
-MemoryOrganDatabase v9 enforces equivalent durable-journal invariants for migration 8→9, fresh v9 creation, and production open. NULL-safe guards reject partial receipts, partial local results, inconsistent committed rows, and vulnerable trigger definitions.
+MemoryOrganDatabase v9 enforces durable-journal invariants for migration 8→9, fresh v9 creation, and production open. NULL-safe guards reject partial receipts, partial local results, inconsistent committed rows, and vulnerable trigger definitions.
 
-Android backup is disabled. Production release signing fails closed when signing material is absent.
+Android backup and current OS-managed D2D transfer are denied by explicit Android extraction/full-backup rules. Production release signing fails closed when signing material is absent.
 
 ## Application runtime assets
 
@@ -109,28 +109,32 @@ Integrated bounded write adapters include:
 | `CanonicalLivingMemoryPort` | Signed canonical living-memory appends. |
 | `CanonicalProjectVaultCommitPort` | ProjectVault canonical commits through its separate protected outbox. |
 | `CanonicalCognitiveMigrationCommitPort` | Deterministic COG canonical ensure and exact receipts. |
+| `CanonicalOrchestrationCommitPort` | Deterministic ORCH-002/003/004 canonical ensure and exact receipts. |
 | `ConversationMemoryPromotionCoordinator` | Explicit preview and Guardian-approved transcript promotion. |
 | `LegacyMemoryConvergenceCoordinator` | One-way verified import from frozen legacy lineage. |
 
+Neither specialized F3 commit port becomes an identity source or second canonical-memory authority.
+
 ## Startup and recovery
 
-After committed identity verification, startup performs the bounded COG recovery gate before ordinary cognitive mutations and before remaining bootstrap work. Recovery:
+After committed identity verification, startup runs bounded owner-scoped recovery before ordinary mutation for the integrated common-protocol owners. The COG coordinator loads only COG rows; the ORCH coordinator loads only `agent_orchestration` rows. Recovery:
 
 1. validates Instance, writer Body, and writer epoch;
-2. processes durable rows deterministically;
-3. ensures one canonical effect per deterministic event identity;
-4. reloads after lost CAS;
-5. rejects stale blocking;
-6. finalizes owner state and journal result atomically;
-7. stops on blocked or incomplete relevant work.
+2. loads only the coordinator's `ownerType`;
+3. processes durable rows deterministically;
+4. ensures one canonical effect per deterministic event identity;
+5. reloads after lost CAS;
+6. rejects stale blocking;
+7. finalizes owner state and journal result atomically;
+8. stops on blocked or incomplete relevant work.
 
-Activation blocks before recovery when a pending legacy `cog_001.payload.v1` operation exists. The gate requires zero non-committed COG-001 v1 operations before loading recoverable work.
+Activation still blocks before COG recovery when a pending legacy `cog_001.payload.v1` operation exists. That quarantine remains COG-specific and is not applied to ORCH rows.
 
 ProjectVault remains a separate protocol and gate. It remains the protected reference protocol.
 
 ## Integrated COG-001 through COG-004 contract
 
-Protected main now provides:
+Protected main provides:
 
 - deterministic operation, event, proposal, migration, and approval identities;
 - durable states `STAGED -> PENDING_CANONICAL -> CANONICAL_COMMITTED -> PENDING_LOCAL_COMMIT -> COMMITTED`, plus terminal `BLOCKED`;
@@ -144,13 +148,30 @@ Protected main now provides:
 
 The rollback event hash remains in the journal, canonical receipt, and local result. It is never relabeled as `postSnapshotId`.
 
+## Integrated ORCH-002 through ORCH-004 contract
+
+Protected main now also provides the common XOP protocol for delegated-task proposal, approval, and rejection:
+
+- `ORCH-002` `proposeDelegatedTask` uses deterministic task/operation/event identities and exposes owner state only after an exact canonical receipt;
+- `ORCH-003` `approveDelegatedTask` uses deterministic approval identity and a conditional owner transition from `awaiting_approval` with `approvalId IS NULL`;
+- `ORCH-004` `rejectDelegatedTask` binds the normalized rejection reason to deterministic operation evidence and uses the same conditional owner boundary;
+- approve/reject are serialized by `taskId` before state re-read and before canonical append, with Room CAS as a second defense;
+- process-death tests demonstrate recovery after canonical receipt and before local commit on API 30 and API 35;
+- COG and ORCH recovery registries cannot consume each other's rows.
+
+The historical legacy `immune.approval_denied` second telemetry write is not reproduced after an already immune-blocked task is submitted for approval. The original immune block remains represented in ORCH-002 canonical evidence. This is an explicit observability delta, not an identity or owner-state authority change.
+
 ## ProjectVault and owner separation
 
-ProjectVault remains a separate protocol and the protected reference protocol. PR #149 did not rewrite it or merge it into the COG journal. ORCH, AGENT, BOOT, RECALL, and REST owners remain outside the bounded COG integration unless separately implemented and audited.
+ProjectVault remains a separate protocol and the protected reference protocol. COG and ORCH use the common journal without merging ProjectVault into it.
+
+`ORCH-001` remains open convergence/rebuild work. `AGENT-001` through `AGENT-006`, `BOOT-001`, `RECALL-001`, `REST-001`, and `REST-002` remain separately open unless implemented and audited in later isolated operations.
 
 ## F1 convergence and legacy quarantine
 
-F1-A is integrated and consumed by F3. Issue `#86` remains open because recall, RestCycle, health, orchestration gates, and final legacy retirement are not fully converged.
+F1-A is integrated and consumed by F3. Issue `#86` remains open because recall, RestCycle, health, `ORCH-001`, and final legacy retirement are not fully converged.
+
+ORCH-002 through ORCH-004 no longer use legacy memory writes as their canonical commit path, but `seedDefaultOrchestrationIfNeeded` still uses `MemoryRepository.hasCompleteBirth()` and therefore F1-ORCH-001 is not closed.
 
 Compatibility writes remain forbidden. No convergence step may create or reconstruct authority rows in:
 
@@ -190,7 +211,7 @@ Auxiliary providers return unverified advisory output. They cannot become Morimi
 | F1 | F1-A integrated; `#86` remains open for downstream convergence. |
 | F2 | Closed for canonical verified memory and bounded promotion/convergence. |
 | F3.1 | ProjectVault outbox and recovery integrated. |
-| F3.2 | Closed for the bounded COG-001 through COG-004 integration only. Other F3 owners remain separately open. |
+| F3.2 | Closed for the bounded COG-001 through COG-004 and ORCH-002 through ORCH-004 integrations only. AGENT, BOOT, RECALL, ORCH-001, and REST remain separately open. |
 | F3.3 | Open. Irreversible legacy removal has not begun. |
 | F4 | Open: sovereign durable continuation. |
 | F5 | Open: signed export, dry-run restore, and Body succession. |
@@ -199,11 +220,13 @@ Auxiliary providers return unverified advisory output. They cannot become Morimi
 
 ## Residual non-blocking hardening
 
-- Room-backed two-coordinator concurrency integration coverage;
-- stronger failed-rollback snapshot fixture;
+- Room-backed two-coordinator concurrency integration coverage for the common protocol;
+- stronger failed-rollback snapshot fixture for COG;
 - redundant rollback parameter cleanup;
-- direct vulnerable UPDATE-trigger replacement fixture.
+- direct vulnerable UPDATE-trigger replacement fixture;
+- ORCH-specific mutation-testing coverage beyond the existing bounded Genesis PIT pilot;
+- continuous physical ARM64 inference remains outside emulator CI.
 
-These items remain visible. They are not represented as production defects, completed work, or blockers for the already merged PR #149.
+These items remain visible. They are not represented as completed work or as evidence of operational birth.
 
-This contract must be updated in the same PR whenever a change alters a listed runtime authority, store version, allowlist, gate, or phase state. A post-merge SHA is recorded externally and must not be retrofitted as a self-referential CURRENT field.
+This contract must be updated in the same isolated reconciliation whenever a merged change alters a listed runtime authority, store version, allowlist, gate, or phase state. A post-merge SHA is recorded externally and must not be retrofitted as a self-referential CURRENT field.
