@@ -24,7 +24,6 @@ internal object RestCycleProtocolSchemas {
     const val REST_001_PAYLOAD = "morimil.rest_cycle.rest_001.payload.v1"
     const val REST_001_EVIDENCE = "morimil.rest_cycle.rest_001.evidence.v1"
     const val REST_001_LOCAL_RESULT = "morimil.rest_cycle.rest_001.local_result.v1"
-    const val REST_001_PREPARATION = "morimil.rest_cycle.rest_001.preparation.v1"
 }
 
 internal object RestCycleOperationFactory {
@@ -59,6 +58,7 @@ internal object RestCycleOperationFactory {
 
     fun execute(
         identity: RestCycleProtocolIdentity,
+        companionName: String,
         migrationId: String,
         mode: RestCycleMode,
         sourceSetDigest: String,
@@ -66,9 +66,11 @@ internal object RestCycleOperationFactory {
         birthRootEventHash: String,
         summary: String,
         sourceEvents: List<RestCycleSourceEvent>,
+        autobiography: AutobiographicalMemoryDraft,
         approvalRequired: Boolean,
         approvalId: String?
     ): CrossDatabaseStageCommand {
+        require(companionName.isNotBlank()) { "rest_cycle_companion_name_empty" }
         require(migrationId.startsWith("rest_") && migrationId.length > 16) {
             "rest_cycle_migration_id_invalid"
         }
@@ -93,11 +95,20 @@ internal object RestCycleOperationFactory {
                 "user_confirmed" to event.userConfirmed
             )
         }
+        val autobiographyProjection = mapOf(
+            "active_goals" to autobiography.activeGoals,
+            "alias" to autobiography.alias,
+            "important_constraints" to autobiography.importantConstraints,
+            "self_summary" to autobiography.selfSummary,
+            "stable_traits" to autobiography.stableTraits
+        )
         val payload = CrossDatabaseOperationIdentity.canonicalJson(
             mapOf(
                 "approval_id" to approvalId,
                 "approval_required" to approvalRequired,
+                "autobiography" to autobiographyProjection,
                 "birth_root_event_hash" to birthRootEventHash,
+                "companion_name" to companionName,
                 "migration_id" to migrationId,
                 "mode" to mode.id,
                 "schema" to RestCycleProtocolSchemas.REST_001_PAYLOAD,
