@@ -12,7 +12,7 @@ class CurrentRuntimeContractTest {
     }
 
     @Test
-    fun contractUsesPostBootBaselineAndStableMainResolution() {
+    fun contractUsesPostRecallBaselineAndStableMainResolution() {
         listOf(
             CONTENT_BASELINE_SHA,
             CONTENT_BASELINE_PARENT_SHA,
@@ -22,7 +22,8 @@ class CurrentRuntimeContractTest {
             ORCH_AUDITED_SOURCE_HEAD,
             AGENT_AUDITED_SOURCE_HEAD,
             BOOT_AUDITED_SOURCE_HEAD,
-            "PR_176=MERGED_BY_SQUASH_HISTORICAL"
+            RECALL_AUDITED_SOURCE_HEAD,
+            "PR_178=MERGED_BY_SQUASH_HISTORICAL"
         ).forEach { token -> assertTrue("Missing runtime token $token", contract.contains(token)) }
 
         assertTrue(contract.contains("| `MorimilDatabase` | `15` |"))
@@ -32,20 +33,21 @@ class CurrentRuntimeContractTest {
     }
 
     @Test
-    fun canonicalAuthorityIncludesBootPortWithoutExpandingIdentityAuthority() {
-        val bootComposition = productionFile("com/morimil/app/MorimilAppContainerRuntimeBootstrapProtocol.kt").readText()
+    fun canonicalAuthorityIncludesRecallAsDerivedConsumerWithoutExpandingIdentityAuthority() {
+        val recall = productionFile("com/morimil/app/data/repository/RecallScheduleRepository.kt").readText()
         assertTrue(contract.contains("GenesisUltraRuntimeIdentityRepository + CanonicalMemoryRepository"))
-        assertTrue(contract.contains("CanonicalCognitiveMigrationCommitPort"))
-        assertTrue(contract.contains("CanonicalOrchestrationCommitPort"))
-        assertTrue(contract.contains("CanonicalAgentLifecycleCommitPort"))
         assertTrue(contract.contains("CanonicalRuntimeBootstrapCommitPort"))
-        assertTrue(contract.contains("No specialized port becomes an identity source"))
-        assertTrue(bootComposition.contains("CanonicalRuntimeBootstrapCommitPort"))
+        assertTrue(contract.contains("No specialized port or derived projection becomes an identity source"))
         assertTrue(contract.contains("writer authorization is not ownership", true))
+        assertTrue(recall.contains("CanonicalConsumerReadPort"))
+        assertTrue(recall.contains("readRecallCandidates"))
+        listOf("loadGenesisCore(", "loadLocalIdentity(", "loadMemoryContext(", "local_instance_pending").forEach {
+            assertFalse("Legacy recall dependency returned: $it", recall.contains(it))
+        }
     }
 
     @Test
-    fun startupRecoveryOrderAndBootPlacementAreCurrent() {
+    fun startupRecoveryOrderAndRecallReadinessAreCurrent() {
         val section = contract.substringAfter("## Startup and recovery")
         val cog = section.indexOf("COG recovery")
         val orch = section.indexOf("ORCH recovery")
@@ -55,31 +57,36 @@ class CurrentRuntimeContractTest {
         val boot = section.indexOf("BOOT-001 bootstrap/recovery")
         assertTrue(cog >= 0 && orch > cog && agent > orch && legacy > agent && vault > legacy && boot > vault)
         assertTrue(contract.contains("BOOT cannot consume COG, ORCH or AGENT journal rows"))
+        assertTrue(contract.contains("BOOT still reports `recallState=WAITING_FOR_CANONICAL_MEMORY_ADAPTER`"))
     }
 
     @Test
-    fun phaseTableClosesBootButKeepsRemainingOwnersOpen() {
-        assertTrue(contract.contains("F3.2 | Closed only for ProjectVault, COG-001..004, ORCH-002..004, AGENT-001..006, and BOOT-001"))
-        listOf("RECALL_001=OPEN", "ORCH_001=OPEN", "REST_001_002=OPEN", "HEALTH_CONVERGENCE=OPEN", "F3.3 | Open").forEach {
-            assertTrue("Missing open-state token $it", contract.contains(it))
-        }
-        assertTrue(contract.contains("BOOT-001 is now converged"))
-        assertFalse(contract.contains("BOOT_001=OPEN"))
+    fun phaseTableIntegratesRecallButKeepsRemainingOwnersOpen() {
+        listOf(
+            "RECALL_001=INTEGRATED",
+            "RECALL_BOOT_READINESS=OPEN",
+            "ORCH_001=OPEN",
+            "REST_001_002=OPEN",
+            "HEALTH_CONVERGENCE=OPEN",
+            "F3_3=OPEN"
+        ).forEach { assertTrue("Missing phase token $it", contract.contains(it)) }
+        assertTrue(contract.contains("F3.2 | Integrated for ProjectVault, COG-001..004, ORCH-002..004, AGENT-001..006, BOOT-001 and RECALL-001 derived rebuild"))
+        assertFalse(contract.contains("RECALL_001=OPEN"))
         assertTrue(contract.contains("MORIMIL_OPERATIONAL_BIRTH=NOT_OCCURRED"))
         assertFalse(contract.contains("F3 complete", ignoreCase = true))
     }
 
     @Test
-    fun bootSovereigntyAndResidualDebtRemainVisible() {
+    fun sovereigntyAndResidualDebtRemainVisible() {
         listOf(
             "instanceId != bodyId",
             "ownership_conferred=false",
             "guardian_role=custodian_witness",
             "future F5 successor Body",
-            "BOOT-specific mutation testing is not established",
-            "AGENT-specific mutation testing is not established",
-            "single-process Android architecture",
-            "physical ARM64 inference"
+            "RECALL-specific mutation testing is not established",
+            "ORCH-specific mutation testing remains unestablished",
+            "physical ARM64 inference",
+            "F5 succession/revocation"
         ).forEach { finding -> assertTrue("Missing residual/invariant $finding", contract.contains(finding, true)) }
     }
 
@@ -95,11 +102,12 @@ class CurrentRuntimeContractTest {
             ?: error("Repository file not found: $relativePath")
 
     private companion object {
-        const val CONTENT_BASELINE_SHA = "CONTENT_BASELINE_SHA=3a995232ce2a515e1ca9b9151f77e63805bad9d3"
-        const val CONTENT_BASELINE_PARENT_SHA = "CONTENT_BASELINE_PARENT_SHA=5918b64ec83e69cbb3d9718943b25d1e1299d698"
+        const val CONTENT_BASELINE_SHA = "CONTENT_BASELINE_SHA=6e0444b698bdc5c557ec3ea83f48d7980da1a36b"
+        const val CONTENT_BASELINE_PARENT_SHA = "CONTENT_BASELINE_PARENT_SHA=bdbb5b2a040b728508948cd3cfbd8807b40a12f6"
         const val COG_AUDITED_SOURCE_HEAD = "7bdbda2aa4b7568695ba8e98be54d506d42c99d5"
         const val ORCH_AUDITED_SOURCE_HEAD = "0348dccb561e576d17c45e7f8b1e38717332772b"
         const val AGENT_AUDITED_SOURCE_HEAD = "74e072b911db692041d3716af9d0511b83ad70b7"
         const val BOOT_AUDITED_SOURCE_HEAD = "c7710635fa172108cce87b3f7a76d6e037095864"
+        const val RECALL_AUDITED_SOURCE_HEAD = "fae8a0df3c29775317986877bce2b8eda8593d27"
     }
 }

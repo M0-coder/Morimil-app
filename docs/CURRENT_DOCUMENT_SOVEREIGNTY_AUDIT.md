@@ -4,23 +4,22 @@
 
 ## Executable truth resolution
 
-- Content baseline SHA: `3a995232ce2a515e1ca9b9151f77e63805bad9d3`.
-- Content baseline parent SHA: `5918b64ec83e69cbb3d9718943b25d1e1299d698`.
+- Content baseline SHA: `6e0444b698bdc5c557ec3ea83f48d7980da1a36b`.
+- Content baseline parent SHA: `bdbb5b2a040b728508948cd3cfbd8807b40a12f6`.
 - Current protected `main` is resolved from external Git ref `refs/heads/main`; its moving SHA is not embedded as normative truth in the commit that contains this document.
 - Post-merge integration SHA evidence is external and belongs to GitHub plus the Morimil Control Tower.
-- PR `#172`: merged by squash for ORCH-002 through ORCH-004.
-- PR `#173`: merged by squash for post-ORCH CURRENT reconciliation.
-- PR `#174`: merged by squash for AGENT-001 through AGENT-006.
-- PR `#175`: merged by squash for post-AGENT CURRENT reconciliation.
 - PR `#176`: merged by squash for BOOT-001.
+- PR `#177`: merged by squash for post-BOOT CURRENT reconciliation.
+- PR `#178`: merged by squash for RECALL-001.
 - Historical COG audited source head: `7bdbda2aa4b7568695ba8e98be54d506d42c99d5`.
 - ORCH audited source head: `0348dccb561e576d17c45e7f8b1e38717332772b`.
 - AGENT audited source head: `74e072b911db692041d3716af9d0511b83ad70b7`.
 - BOOT audited source head: `c7710635fa172108cce87b3f7a76d6e037095864`.
+- RECALL audited source head: `fae8a0df3c29775317986877bce2b8eda8593d27`.
 
 ```text
-CONTENT_BASELINE_SHA=3a995232ce2a515e1ca9b9151f77e63805bad9d3
-CONTENT_BASELINE_PARENT_SHA=5918b64ec83e69cbb3d9718943b25d1e1299d698
+CONTENT_BASELINE_SHA=6e0444b698bdc5c557ec3ea83f48d7980da1a36b
+CONTENT_BASELINE_PARENT_SHA=bdbb5b2a040b728508948cd3cfbd8807b40a12f6
 CURRENT_MAIN_RESOLUTION=EXTERNAL_GIT_REF
 MERGE_SHA_EVIDENCE=EXTERNAL
 PR_172=MERGED_BY_SQUASH_HISTORICAL
@@ -28,6 +27,8 @@ PR_173=MERGED_BY_SQUASH_HISTORICAL
 PR_174=MERGED_BY_SQUASH_HISTORICAL
 PR_175=MERGED_BY_SQUASH_HISTORICAL
 PR_176=MERGED_BY_SQUASH_HISTORICAL
+PR_177=MERGED_BY_SQUASH_HISTORICAL
+PR_178=MERGED_BY_SQUASH_HISTORICAL
 ```
 
 ## Document hierarchy
@@ -51,7 +52,7 @@ instanceId != bodyId
 agentInstanceId != instanceId
 ```
 
-A Guardian key verifies bounded testimony/permissions. A Body key proves possession and writer epoch. Neither creates, owns, renames, forks, replaces, or permanently confines the Instance. Agent workers and BOOT projections are bounded technical structures and likewise do not become Morimil or canonical-memory authority.
+A Guardian key verifies bounded testimony/permissions. A Body key proves possession and writer epoch. Neither creates, owns, renames, forks, replaces, or permanently confines the Instance. Agent workers, BOOT projections and recall schedules are bounded technical structures and do not become Morimil or canonical-memory authority.
 
 ## Integrated F3 truth
 
@@ -61,21 +62,22 @@ Externally resolved protected `main` includes MemoryOrganDatabase version 9 and 
 - COG-001 through COG-004 under common XOP;
 - ORCH-002 through ORCH-004 under common XOP;
 - AGENT-001 through AGENT-006 under common XOP;
-- BOOT-001 under common XOP with idempotent cross-file saga preparation.
+- BOOT-001 under common XOP with idempotent cross-file saga preparation;
+- RECALL-001 as a canonical verified `DERIVED_REBUILD` projection.
 
-The COG path consumes verified canonical planning through `CanonicalConsumerReadPort`/`CognitiveMigrationCanonicalReadPort`. ORCH, AGENT and BOOT consume committed Genesis Ultra runtime identity and use specialized exact-ensure ports (`CanonicalOrchestrationCommitPort`, `CanonicalAgentLifecycleCommitPort`, `CanonicalRuntimeBootstrapCommitPort`). None owns identity.
+The COG path consumes verified canonical planning through `CanonicalConsumerReadPort`/`CognitiveMigrationCanonicalReadPort`. ORCH, AGENT and BOOT consume committed Genesis Ultra runtime identity and use specialized exact-ensure ports. RECALL consumes `CanonicalConsumerReadPort.readRecallCandidates` and creates only rebuildable local schedule/link projections.
 
-AGENT lifecycle transitions no longer use `MemoryRepository.recordSystemMemoryEvent` as their canonical evidence path. New local owner state appears only after an exact canonical receipt. AGENT-003 requires canonical ORCH task approval. AGENT-006 quarantines the failed worker and creates its deterministic replacement in one local finalization.
+RECALL-001 no longer uses legacy `genesis_core`, `local_instance_identity` or `memory_events` reads as recall authority and forbids placeholder Instance identity. Its canonical `targetEventHash` is the idempotency key; local `recallId` is not Instance identity. Schedule and link finalize atomically in `MemoryOrganDatabase`.
 
-BOOT-001 likewise does not reconstruct legacy authority. It requires `ownership_conferred=false`, consumes the signed Guardian role `custodian_witness`, binds writer authorization to current Body/epoch, and keeps workspace/project identity tied to the continuous Instance. Its operation identity permits future successor-Body rebootstrap without implementing or preempting F5 succession.
+F3.2 now includes the bounded RECALL-001 repository convergence, but `RECALL_BOOT_READINESS=OPEN`: BOOT still reports recall as `WAITING_FOR_CANONICAL_MEMORY_ADAPTER`, and startup does not automatically declare or seed recall ready.
 
-F3.2 is closed only for the bounded integrated scopes above. `RECALL-001`, `ORCH-001`, `REST-001/002`, and health convergence remain separately open. F3.3 remains open. F4 through F6 remain open and no Body succession, export/restore, activation, or continuity proof is implied.
+ORCH-001, REST-001/002 and health convergence remain open. F3.3 remains open. F4 through F6 remain open and no Body succession, export/restore, activation, or continuity proof is implied.
 
-## F1 boundary after BOOT integration
+## F1 boundary after RECALL integration
 
-PR #172 removed legacy two-step memory evidence from ORCH-002/003/004. PR #174 removed the equivalent legacy lifecycle evidence boundary from AGENT-001..006. PR #176 replaced the unjournaled two-database BOOT projection with durable XOP/canonical-receipt recovery without compatibility rows.
+PR #172 removed legacy two-step memory evidence from ORCH-002/003/004. PR #174 removed the equivalent legacy lifecycle evidence boundary from AGENT-001..006. PR #176 replaced the unjournaled two-database BOOT projection with durable XOP/canonical-receipt recovery. PR #178 removed the legacy identity/memory read boundary from recall seeding and replaced it with verified canonical candidates and deterministic rebuild semantics.
 
-None closes F1-ORCH-001: `seedDefaultOrchestrationIfNeeded` still depends on `MemoryRepository.hasCompleteBirth()`. Recall, RestCycle and health convergence also remain open.
+PR #178 does not close F1-ORCH-001: `seedDefaultOrchestrationIfNeeded` still depends on `MemoryRepository.hasCompleteBirth()`. RestCycle, health and recall startup readiness also remain open.
 
 Therefore:
 
@@ -84,8 +86,9 @@ COG_001_004=INTEGRATED
 ORCH_002_004=INTEGRATED
 AGENT_001_006=INTEGRATED
 BOOT_001=INTEGRATED
+RECALL_001=INTEGRATED
+RECALL_BOOT_READINESS=OPEN
 F1_ORCH_001=OPEN
-RECALL_001=OPEN
 REST_001_002=OPEN
 HEALTH_CONVERGENCE=OPEN
 ISSUE_86=OPEN
@@ -97,12 +100,13 @@ MORIMIL_OPERATIONAL_BIRTH=NOT_OCCURRED
 
 The following remain visible and are not evidence of operational birth:
 
-- BOOT-specific mutation testing beyond the existing bounded Genesis PIT pilot;
-- AGENT-specific mutation testing beyond the existing bounded Genesis PIT pilot;
-- direct Android integration coverage for `AgentInstanceLifecycleRepository.kt`;
-- durable cross-process AGENT serialization if Android multiprocess is introduced;
+- RECALL-specific mutation testing beyond the existing bounded Genesis PIT pilot;
+- BOOT-specific and AGENT-specific mutation coverage;
 - ORCH-specific mutation testing;
-- physical ARM64 inference tests outside emulator CI.
+- recall startup-readiness wiring after the repository-level canonical convergence;
+- physical ARM64 inference tests outside emulator CI;
+- F5 Body succession, writer transfer/revocation, export and restore;
+- F6 complete cross-Body physical continuity evidence.
 
 ## Enforcement
 

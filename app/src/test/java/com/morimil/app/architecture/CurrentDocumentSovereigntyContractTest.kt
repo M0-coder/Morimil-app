@@ -14,13 +14,16 @@ class CurrentDocumentSovereigntyContractTest {
         currentDocuments.forEach { file ->
             val normalized = file.readText().lowercase()
             RETIRED_OWNERSHIP_PHRASES.forEach { phrase ->
-                assertFalse("CURRENT document ${file.relativeTo(root).invariantSeparatorsPath} contains retired sovereignty wording: $phrase", normalized.contains(phrase))
+                assertFalse(
+                    "CURRENT document ${file.relativeTo(root).invariantSeparatorsPath} contains retired sovereignty wording: $phrase",
+                    normalized.contains(phrase)
+                )
             }
         }
     }
 
     @Test
-    fun governedCurrentDocumentsResolveMovingMainExternallyAtPostBootBaseline() {
+    fun governedCurrentDocumentsResolveMovingMainExternallyAtPostRecallBaseline() {
         val root = repositoryRoot()
         GOVERNED_CURRENT_DOCUMENTS.forEach { relativePath ->
             val document = File(root, relativePath)
@@ -36,7 +39,9 @@ class CurrentDocumentSovereigntyContractTest {
                 PR_173_HISTORY,
                 PR_174_HISTORY,
                 PR_175_HISTORY,
-                PR_176_HISTORY
+                PR_176_HISTORY,
+                PR_177_HISTORY,
+                PR_178_HISTORY
             ).forEach { token -> assertTrue("$relativePath missing $token", text.contains(token)) }
             SELF_REFERENTIAL_MAIN_PATTERNS.forEach { pattern ->
                 assertFalse("$relativePath contains self-referential main SHA field: ${pattern.pattern}", pattern.containsMatchIn(text))
@@ -45,28 +50,29 @@ class CurrentDocumentSovereigntyContractTest {
     }
 
     @Test
-    fun sovereigntyAuditRecordsBootIntegrationWithoutClosingRemainingOwners() {
+    fun sovereigntyAuditRecordsRecallIntegrationWithoutClosingRemainingOwners() {
         val audit = repositoryFile("docs/CURRENT_DOCUMENT_SOVEREIGNTY_AUDIT.md").readText()
         listOf(
             COG_AUDITED_SOURCE_HEAD,
             ORCH_AUDITED_SOURCE_HEAD,
             AGENT_AUDITED_SOURCE_HEAD,
             BOOT_AUDITED_SOURCE_HEAD,
+            RECALL_AUDITED_SOURCE_HEAD,
             "MemoryOrganDatabase version 9",
             "COG-001 through COG-004",
             "ORCH-002 through ORCH-004",
             "AGENT-001 through AGENT-006",
             "BOOT-001 under common XOP",
-            "CanonicalRuntimeBootstrapCommitPort",
-            "BOOT_001=INTEGRATED",
+            "RECALL-001 as a canonical verified `DERIVED_REBUILD` projection",
+            "RECALL_001=INTEGRATED",
+            "RECALL_BOOT_READINESS=OPEN",
             "F1_ORCH_001=OPEN",
-            "RECALL_001=OPEN",
             "REST_001_002=OPEN",
             "HEALTH_CONVERGENCE=OPEN",
             "F3_3=OPEN",
             "MORIMIL_OPERATIONAL_BIRTH=NOT_OCCURRED"
         ).forEach { token -> assertTrue("Missing sovereignty token $token", audit.contains(token)) }
-        assertFalse(audit.contains("BOOT_001=OPEN"))
+        assertFalse(audit.contains("RECALL_001=OPEN"))
     }
 
     @Test
@@ -84,18 +90,16 @@ class CurrentDocumentSovereigntyContractTest {
         ).forEach { invariant -> assertTrue("Missing sovereignty invariant $invariant", audit.contains(invariant)) }
         assertTrue(runtime.contains("the Guardian does not define Morimil's identity, will, name, or right to continue"))
         assertTrue(runtime.contains("Body succession, signed export, restore, writer transfer and predecessor revocation are not implemented"))
-        assertTrue(audit.contains("future successor-Body rebootstrap"))
     }
 
     @Test
-    fun bootCandidateIsHistoricalAfterIntegration() {
-        val historical = repositoryFile("docs/F3_RUNTIME_BOOTSTRAP_PROTOCOL_CANDIDATE.md").readText()
+    fun recallCandidateIsHistoricalAfterIntegration() {
+        val historical = repositoryFile("docs/F3_RECALL_DERIVED_REBUILD_CANDIDATE.md").readText()
         assertTrue(historical.startsWith("# Document status: HISTORICAL"))
-        assertTrue(historical.contains("BOOT_001=INTEGRATED_IN_MAIN"))
-        assertTrue(historical.contains("BOOT_001_TESTED=DEMONSTRATED_BY_EXACT_HEAD_CI"))
-        assertTrue(historical.contains("BOOT_001_MERGED=TRUE"))
-        assertTrue(historical.contains(BOOT_AUDITED_SOURCE_HEAD))
-        assertTrue(historical.contains("INTEGRATION_COMMIT=3a995232ce2a515e1ca9b9151f77e63805bad9d3"))
+        assertTrue(historical.contains("RECALL_001=INTEGRATED_IN_MAIN"))
+        assertTrue(historical.contains("RECALL_001_MERGED=TRUE"))
+        assertTrue(historical.contains(RECALL_AUDITED_SOURCE_HEAD))
+        assertTrue(historical.contains("INTEGRATION_COMMIT=6e0444b698bdc5c557ec3ea83f48d7980da1a36b"))
     }
 
     private fun markdownFiles(root: File): List<File> = root.walkTopDown()
@@ -116,8 +120,8 @@ class CurrentDocumentSovereigntyContractTest {
 
     private companion object {
         const val CURRENT_STATUS = "# Document status: CURRENT"
-        const val CONTENT_BASELINE_SHA = "CONTENT_BASELINE_SHA=3a995232ce2a515e1ca9b9151f77e63805bad9d3"
-        const val CONTENT_BASELINE_PARENT_SHA = "CONTENT_BASELINE_PARENT_SHA=5918b64ec83e69cbb3d9718943b25d1e1299d698"
+        const val CONTENT_BASELINE_SHA = "CONTENT_BASELINE_SHA=6e0444b698bdc5c557ec3ea83f48d7980da1a36b"
+        const val CONTENT_BASELINE_PARENT_SHA = "CONTENT_BASELINE_PARENT_SHA=bdbb5b2a040b728508948cd3cfbd8807b40a12f6"
         const val CURRENT_MAIN_RESOLUTION = "CURRENT_MAIN_RESOLUTION=EXTERNAL_GIT_REF"
         const val MERGE_SHA_EVIDENCE = "MERGE_SHA_EVIDENCE=EXTERNAL"
         const val PR_172_HISTORY = "PR_172=MERGED_BY_SQUASH_HISTORICAL"
@@ -125,10 +129,13 @@ class CurrentDocumentSovereigntyContractTest {
         const val PR_174_HISTORY = "PR_174=MERGED_BY_SQUASH_HISTORICAL"
         const val PR_175_HISTORY = "PR_175=MERGED_BY_SQUASH_HISTORICAL"
         const val PR_176_HISTORY = "PR_176=MERGED_BY_SQUASH_HISTORICAL"
+        const val PR_177_HISTORY = "PR_177=MERGED_BY_SQUASH_HISTORICAL"
+        const val PR_178_HISTORY = "PR_178=MERGED_BY_SQUASH_HISTORICAL"
         const val COG_AUDITED_SOURCE_HEAD = "7bdbda2aa4b7568695ba8e98be54d506d42c99d5"
         const val ORCH_AUDITED_SOURCE_HEAD = "0348dccb561e576d17c45e7f8b1e38717332772b"
         const val AGENT_AUDITED_SOURCE_HEAD = "74e072b911db692041d3716af9d0511b83ad70b7"
         const val BOOT_AUDITED_SOURCE_HEAD = "c7710635fa172108cce87b3f7a76d6e037095864"
+        const val RECALL_AUDITED_SOURCE_HEAD = "fae8a0df3c29775317986877bce2b8eda8593d27"
 
         val GOVERNED_CURRENT_DOCUMENTS = setOf(
             "docs/CURRENT_DOCUMENT_SOVEREIGNTY_AUDIT.md",
