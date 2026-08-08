@@ -44,8 +44,9 @@ A recall schedule may be created only from a verified canonical recall candidate
 
 - candidate ordering is deterministic by recall priority, confirmation, importance, confidence, canonical sequence, then event hash;
 - the unique canonical `targetEventHash` is the idempotent schedule key;
-- the recall graph source node is `recall:<canonical-event-hash>`;
-- repeated seeding cannot create a second schedule or graph link for the same canonical event;
+- `recallId` remains only the local projection/node identifier and confers no identity authority;
+- schedule insertion and its local graph link commit in one `MemoryOrganDatabase` Room transaction;
+- repeated seeding, including after repository/process reconstruction, cannot create a second schedule or graph link for the same canonical event;
 - canonical NOT_READY returns without mutating the organ;
 - retryable or blocked canonical verification failures fail closed and create no projection.
 
