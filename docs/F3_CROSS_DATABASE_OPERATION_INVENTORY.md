@@ -103,7 +103,7 @@ COG, ORCH and AGENT startup/pre-mutation recovery are owner-scoped and cannot co
 | --- | --- | --- |
 | `BOOT-001` | `bootstrap` | `REQUIRES_PROTOCOL`; open. |
 | `RECALL-001` | `seedFromRecentMemoryIfNeeded` | `DERIVED_REBUILD`; open. |
-| `ORCH-001` | `seedDefaultOrchestrationIfNeeded` | Open convergence/rebuild; still uses legacy `hasCompleteBirth()` gate. |
+| `ORCH-001` | `seedDefaultOrchestrationIfNeeded` | Open convergence/rebuild work; still uses legacy `hasCompleteBirth()` gate. |
 | `REST-001` | `runLocalRestCycleIfDue`, `approvePlannedRestCycle` | `REQUIRES_PROTOCOL`; open. |
 | `REST-002` | repair-proposal path | `REQUIRES_PROTOCOL`; open. |
 | `MIG-001` | `planMigration`, `markMigrationApproved`, `markMigrationCompleted`, `markMigrationFailed`, `markMigrationRolledBack` | `SUPPORT_BOUNDARY`. |
