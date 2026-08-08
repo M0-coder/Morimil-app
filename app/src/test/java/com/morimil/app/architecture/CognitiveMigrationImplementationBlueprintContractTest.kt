@@ -11,7 +11,7 @@ class CognitiveMigrationImplementationBlueprintContractTest {
     }
 
     @Test
-    fun blueprintIsCurrentAndUsesPostRecallBaseline() {
+    fun blueprintIsCurrentAndRecordsPostOrchTruth() {
         assertTrue(blueprint.startsWith("# Document status: CURRENT"))
         assertTrue(blueprint.contains("implemented and audited design", true))
         listOf(
@@ -21,11 +21,15 @@ class CognitiveMigrationImplementationBlueprintContractTest {
             "MERGE_SHA_EVIDENCE=EXTERNAL",
             COG_AUDITED_SOURCE_HEAD,
             ORCH_AUDITED_SOURCE_HEAD,
+            ORCH_001_AUDITED_SOURCE_HEAD,
             AGENT_AUDITED_SOURCE_HEAD,
             BOOT_AUDITED_SOURCE_HEAD,
             RECALL_AUDITED_SOURCE_HEAD,
             "PR_178=MERGED_BY_SQUASH_HISTORICAL",
+            "PR_179=MERGED_BY_SQUASH_HISTORICAL",
+            "PR_180=MERGED_BY_SQUASH_HISTORICAL",
             "COG_001_004=INTEGRATED_IN_MAIN",
+            "ORCH_001=INTEGRATED_IN_MAIN",
             "ORCH_002_004=INTEGRATED_IN_MAIN",
             "AGENT_001_006=INTEGRATED_IN_MAIN",
             "BOOT_001=INTEGRATED_IN_MAIN",
@@ -43,11 +47,13 @@ class CognitiveMigrationImplementationBlueprintContractTest {
         assertTrue(blueprint.contains("ProjectVault remains separate"))
         assertTrue(blueprint.contains("PR #176 integrated BOOT-001"))
         assertTrue(blueprint.contains("PR #178 integrated RECALL-001"))
-        listOf("ORCH-001", "REST-001/002", "health convergence", "recall startup-readiness", "F3.3 legacy removal remains open").forEach {
+        assertTrue(blueprint.contains("PR #180 integrated ORCH-001 seed convergence"))
+        listOf("REST-001/002", "health convergence", "recall startup-readiness", "F3.3 legacy removal remains open").forEach {
             assertTrue("Missing remaining scope $it", blueprint.contains(it, true))
         }
         assertFalse(blueprint.contains("RECALL_001=OPEN"))
         assertFalse(blueprint.contains("BOOT_001=OPEN"))
+        assertFalse(blueprint.contains("ORCH_001=OPEN"))
     }
 
     @Test
@@ -107,6 +113,7 @@ class CognitiveMigrationImplementationBlueprintContractTest {
         const val CONTENT_BASELINE_PARENT_SHA = "CONTENT_BASELINE_PARENT_SHA=bdbb5b2a040b728508948cd3cfbd8807b40a12f6"
         const val COG_AUDITED_SOURCE_HEAD = "7bdbda2aa4b7568695ba8e98be54d506d42c99d5"
         const val ORCH_AUDITED_SOURCE_HEAD = "0348dccb561e576d17c45e7f8b1e38717332772b"
+        const val ORCH_001_AUDITED_SOURCE_HEAD = "fe188fdee8eae901434a255051b6fa4f852b929b"
         const val AGENT_AUDITED_SOURCE_HEAD = "74e072b911db692041d3716af9d0511b83ad70b7"
         const val BOOT_AUDITED_SOURCE_HEAD = "c7710635fa172108cce87b3f7a76d6e037095864"
         const val RECALL_AUDITED_SOURCE_HEAD = "fae8a0df3c29775317986877bce2b8eda8593d27"
