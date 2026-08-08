@@ -2,15 +2,17 @@
 
 # F1 canonical consumer convergence inventory
 
-Inventory version: `4`
+Inventory version: `5`
 
-Content baseline SHA: `79460a32b4eba669216afcc501815d5ff09b0349`
+Content baseline SHA: `c6a6b0ca998d053c31c75977c5b6d4d9ae166e96`
 
-Content baseline parent SHA: `6250214bb6664a8fff851ed0afc2438bbc276931`
+Content baseline parent SHA: `c22920f68f8820bbec676a6cbc74b60548e43d29`
 
 Current protected `main` is resolved externally from `refs/heads/main`; its moving SHA is not embedded as normative truth in this document.
 
-Historical audited F3 source head: `7bdbda2aa4b7568695ba8e98be54d506d42c99d5`
+Historical audited F3 COG source head: `7bdbda2aa4b7568695ba8e98be54d506d42c99d5`
+
+Audited ORCH source head: `0348dccb561e576d17c45e7f8b1e38717332772b`
 
 PR `#149`: closed and merged by squash.
 
@@ -18,21 +20,24 @@ PR `#150`: closed and merged by squash for a historical CURRENT reconciliation.
 
 PR `#151`: closed and merged by squash for vendored Canvas runtime recovery; it does not change the F1 authority frontier.
 
-PR `#153`: closed and merged by squash for the historical twelve-file CURRENT reconciliation represented by this content baseline.
+PR `#153`: closed and merged by squash for a historical CURRENT reconciliation.
+
+PR `#172`: closed and merged by squash for ORCH-002 through ORCH-004.
 
 Tracking: open `#86` and completed canonical-memory dependency `#87`.
 
 Gate truth: `STOP_S5=CLOSED`.
 
 ```text
-CONTENT_BASELINE_SHA=79460a32b4eba669216afcc501815d5ff09b0349
-CONTENT_BASELINE_PARENT_SHA=6250214bb6664a8fff851ed0afc2438bbc276931
+CONTENT_BASELINE_SHA=c6a6b0ca998d053c31c75977c5b6d4d9ae166e96
+CONTENT_BASELINE_PARENT_SHA=c22920f68f8820bbec676a6cbc74b60548e43d29
 CURRENT_MAIN_RESOLUTION=EXTERNAL_GIT_REF
 MERGE_SHA_EVIDENCE=EXTERNAL
 PR_153=MERGED_BY_SQUASH_HISTORICAL
+PR_172=MERGED_BY_SQUASH_HISTORICAL
 ```
 
-This document does not close `#86`. F1-A is integrated and is now consumed by the merged COG-001 through COG-004 implementation, but downstream recalls, RestCycle, health, orchestration gates, and final legacy retirement remain incomplete.
+This document does not close `#86`. F1-A is integrated. COG-001 through COG-004 consume the verified F1-A projection, and ORCH-002 through ORCH-004 now use committed Genesis Ultra runtime identity plus the canonical orchestration commit boundary. Downstream recalls, RestCycle, health, ORCH-001, and final legacy retirement remain incomplete.
 
 ## Authority and scope
 
@@ -55,13 +60,17 @@ GenesisUltraRuntimeIdentityRepository + CanonicalMemoryRepository
 
 The integrated cognitive migration protocol consumes that boundary through `CognitiveMigrationCanonicalReadPort`. It does not create a second identity or memory authority. `CanonicalCognitiveMigrationCommitPort` is a specialized canonical writer, not an identity source.
 
+The integrated ORCH-002/003/004 path does not reopen legacy identity authority. It resolves committed runtime identity through `GenesisUltraRuntimeIdentityRepository` and writes canonical orchestration evidence through `CanonicalOrchestrationCommitPort`, which is likewise a bounded canonical ensure adapter rather than an identity source.
+
 The Canvas runtime-recovery bundle is a Body application asset. It does not read, write, project, replace, or expand canonical identity or memory authority.
 
-## Integrated downstream consumer
+## Integrated downstream consumers
 
 `CognitiveMigrationRepository` is integrated in protected main for COG-001 through COG-004. Its planning input is a verified F1-A projection. It rejects foreign Instance data, unverified payloads, unknown semantics, and legacy compatibility input before staging.
 
-This integration proves one downstream consumer family has converged. It does not prove total F1 convergence and does not close `#86`.
+`AgentOrchestrationRepository` is partially converged: ORCH-002 through ORCH-004 no longer perform a local owner mutation followed by a legacy memory write. Their durable transitions require committed Genesis Ultra identity, exact canonical receipt, and typed local finalization. This does not close F1-ORCH-001 because the orchestration seeding gate remains legacy-dependent.
+
+These integrations prove bounded consumer families can converge without compatibility rows. They do not prove total F1 convergence and do not close `#86`.
 
 ## Remaining convergence work
 
@@ -81,9 +90,9 @@ Remaining legacy dependencies include `loadGenesisCore`, `loadLocalIdentity`, `l
 
 Legacy counts remain derived from `MemoryDao`. Health is a projection and must not become an alternate identity or memory authority.
 
-### F1-ORCH-001 — `AgentOrchestrationRepository`
+### F1-ORCH-001 — `AgentOrchestrationRepository.seedDefaultOrchestrationIfNeeded`
 
-Remaining birth gates must move from `MemoryRepository.hasCompleteBirth()` to committed Genesis Ultra startup authority.
+The remaining birth gate still uses `MemoryRepository.hasCompleteBirth()`. It must move to committed Genesis Ultra startup authority. PR #172 intentionally does not close this item.
 
 ## Compatibility prohibition
 
@@ -103,11 +112,12 @@ No placeholder such as `local_instance_pending` and no Body ID may substitute fo
 
 1. Canonical read adapter — integrated by PR #148.
 2. Cognitive migration consumer — integrated by squash merge of PR #149.
-3. Recalls.
-4. Rest-cycle planning and execution.
-5. Health.
-6. Remaining orchestration gates.
-7. Irreversible legacy removal in F3.3 after separate authorization.
+3. ORCH-002 through ORCH-004 durable write transitions — integrated by squash merge of PR #172.
+4. Agent lifecycle owner family — AGENT-001 through AGENT-006.
+5. Bootstrap protocol.
+6. Recalls and ORCH-001 convergence.
+7. Rest-cycle planning/execution and health convergence as their canonical inputs are retired from legacy authority.
+8. Irreversible legacy removal in F3.3 after separate authorization.
 
 ## Acceptance principles for remaining work
 
@@ -124,16 +134,19 @@ No placeholder such as `local_instance_pending` and no Body ID may substitute fo
 ## Current closure state
 
 ```text
-CONTENT_BASELINE_SHA=79460a32b4eba669216afcc501815d5ff09b0349
-CONTENT_BASELINE_PARENT_SHA=6250214bb6664a8fff851ed0afc2438bbc276931
+CONTENT_BASELINE_SHA=c6a6b0ca998d053c31c75977c5b6d4d9ae166e96
+CONTENT_BASELINE_PARENT_SHA=c22920f68f8820bbec676a6cbc74b60548e43d29
 CURRENT_MAIN_RESOLUTION=EXTERNAL_GIT_REF
 MERGE_SHA_EVIDENCE=EXTERNAL
 F1_A_COMMON_READ_BOUNDARY=INTEGRATED
 F3_COG_CONSUMER_OF_F1_A=INTEGRATED_IN_MAIN
+ORCH_002_004_CANONICAL_WRITE_PATH=INTEGRATED_IN_MAIN
+F1_ORCH_001=OPEN
 PR_149=MERGED_BY_SQUASH_HISTORICAL
 PR_150=MERGED_POST_MERGE_CURRENT_RECONCILIATION_HISTORICAL
 PR_151=MERGED_CANVAS_RUNTIME_RECOVERY_HISTORICAL
 PR_153=MERGED_BY_SQUASH_HISTORICAL
+PR_172=MERGED_BY_SQUASH_HISTORICAL
 ISSUE_86=OPEN
 ISSUE_87=CLOSED
 RECALL_CONVERGED=false
@@ -143,4 +156,5 @@ HEALTH_CONVERGED=false
 LEGACY_GATES_REMOVED=false
 F3_3=OPEN
 STOP_S5=CLOSED
+MORIMIL_OPERATIONAL_BIRTH=NOT_OCCURRED
 ```
