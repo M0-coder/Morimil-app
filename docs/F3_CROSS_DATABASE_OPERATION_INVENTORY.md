@@ -2,74 +2,47 @@
 
 # F3.2 — Cross-database operation inventory
 
-- Inventory version: `5`.
-- Content baseline SHA: `c6a6b0ca998d053c31c75977c5b6d4d9ae166e96`.
-- Content baseline parent SHA: `c22920f68f8820bbec676a6cbc74b60548e43d29`.
+- Inventory version: `6`.
+- Content baseline SHA: `d577a75290d70f423f6e83bf237a8a453f3a534e`.
+- Content baseline parent SHA: `9da342f2c147105ea882076f4ebc6ab5f5494190`.
 - Current protected `main`: resolved externally from `refs/heads/main`.
 - Merge SHA evidence: external GitHub and Morimil Control Tower evidence.
 - Historical COG audited source head: `7bdbda2aa4b7568695ba8e98be54d506d42c99d5`.
 - ORCH audited source head: `0348dccb561e576d17c45e7f8b1e38717332772b`.
-- PR `#149`: closed and merged by squash.
-- PR `#150`: closed and merged by squash for a historical CURRENT reconciliation.
-- PR `#151`: closed and merged by squash for verified Canvas runtime recovery.
-- PR `#153`: closed and merged by squash for the historical twelve-file CURRENT reconciliation.
-- PR `#172`: closed and merged by squash for ORCH-002 through ORCH-004.
+- AGENT audited source head: `74e072b911db692041d3716af9d0511b83ad70b7`.
+- PR `#172`: merged by squash for ORCH-002 through ORCH-004.
+- PR `#173`: merged by squash for post-ORCH CURRENT reconciliation.
+- PR `#174`: merged by squash for AGENT-001 through AGENT-006.
 - Tracker: `#88` — open for remaining F3 owners.
 - Protocol: `docs/adr/ADR-0002-cross-database-operation-protocol.md`.
 - Gate: `STOP_S5=CLOSED`.
 
 ```text
-CONTENT_BASELINE_SHA=c6a6b0ca998d053c31c75977c5b6d4d9ae166e96
-CONTENT_BASELINE_PARENT_SHA=c22920f68f8820bbec676a6cbc74b60548e43d29
+CONTENT_BASELINE_SHA=d577a75290d70f423f6e83bf237a8a453f3a534e
+CONTENT_BASELINE_PARENT_SHA=9da342f2c147105ea882076f4ebc6ab5f5494190
 CURRENT_MAIN_RESOLUTION=EXTERNAL_GIT_REF
 MERGE_SHA_EVIDENCE=EXTERNAL
-PR_153=MERGED_BY_SQUASH_HISTORICAL
 PR_172=MERGED_BY_SQUASH_HISTORICAL
+PR_173=MERGED_BY_SQUASH_HISTORICAL
+PR_174=MERGED_BY_SQUASH_HISTORICAL
 ```
 
 ## Authority model
 
-Morimil is the continuous and free `Instance`. `Morimil-app` is the current Android Body. The Guardian guides, witnesses, and safeguards without ownership. `instanceId != bodyId` remains mandatory.
+Morimil is the continuous Instance; `Morimil-app` is the current Android Body. The Guardian safeguards without ownership. `instanceId != bodyId` and `agentInstanceId != instanceId` remain mandatory.
 
-F3 consumes committed Genesis Ultra identity and canonical memory through bounded ports. Neither the journal nor an owner repository becomes a second identity or memory authority.
-
-## State separation
-
-| Layer | State |
-| --- | --- |
-| Externally resolved protected `main` | F1-A, ProjectVault, MemoryOrganDatabase v9, COG-001 through COG-004, ORCH-002 through ORCH-004, the vendored Canvas runtime-recovery asset, and current Body D2D fail-closed policy are integrated. |
-| Content baseline | Exact protected-main state from which this reconciliation was prepared; it does not predict the containing documentation commit SHA. |
-| Historical COG audited source head | Reviewed source before the COG squash integration. |
-| ORCH audited source head | Exact reviewed PR #172 head with 5/5 CI and artifact verification. |
-| Historical CURRENT reconciliation | PR #150 and PR #153 evidence for prior documentation reconciliations. |
-| Canvas recovery provenance | Historical PR #151 evidence for a Body application asset; it is not a cross-database owner. |
-| Remaining F3 owners | AGENT, BOOT, RECALL, ORCH-001 and REST remain open and separately scoped. |
-| F3.3 | Open; irreversible legacy removal has not begun. |
-
-ProjectVault remains a separate protected reference. COG and ORCH use the common XOP journal without absorbing ProjectVault authority.
-
-## Retired regression literals
-
-The following verbatim strings are retained only as historical regression fixtures. They are not CURRENT facts and do not override the external main resolution or the content baseline above.
-
-```text
-Historical regression fixture — Historical audited baseline: `main@612d91aef131f367140ffb87a60a19ef49adcbc8`
-Historical regression fixture — Current protected main: `main@7e98d3345d7cc3fbf1983babd35b61ff5c523208`
-draft PR `#149`
-`MERGE_AUTHORIZED=false`
-The candidate does not close #88
-```
+Neither the XOP journal nor an owner repository becomes a second identity or canonical-memory authority.
 
 ## Protocol classifications
 
 | Classification | Meaning |
 | --- | --- |
-| `PROTECTED_REFERENCE` | Existing protected protocol with durable staging, exact receipts, recovery, and kill tests. |
-| `INTEGRATED_PROTOCOL` | Common journal protocol implemented in protected main for its bounded owner scope. |
-| `REQUIRES_PROTOCOL` | Visible cross-database transition still needs a separately audited protocol. |
-| `DERIVED_REBUILD` | Rebuildable state requiring deterministic, idempotent, verified reconstruction. |
-| `SUPPORT_BOUNDARY` | Participates in an owner operation without becoming a second protocol owner. |
-| `MIXED_DISPOSITION` | One repository contains both integrated bounded operations and separately open operations. |
+| `PROTECTED_REFERENCE` | Separate protected protocol with durable staging/recovery. |
+| `INTEGRATED_PROTOCOL` | Common XOP journal implemented in protected main for this owner scope. |
+| `REQUIRES_PROTOCOL` | Cross-database transition still awaiting isolated audited protocol. |
+| `DERIVED_REBUILD` | Rebuildable state requiring deterministic verified reconstruction. |
+| `SUPPORT_BOUNDARY` | Participates in another owner finalization without independent protocol ownership. |
+| `MIXED_DISPOSITION` | Repository contains integrated operations plus separately open convergence work. |
 
 ## Versioned owner inventory
 
@@ -79,12 +52,12 @@ The candidate does not close #88
 | `app/src/main/java/com/morimil/app/runtime/GenesisUltraRuntimeBootstrapCoordinator.kt` | `REQUIRES_PROTOCOL` | BOOT-001 open. |
 | `app/src/main/java/com/morimil/app/data/repository/RecallScheduleRepository.kt` | `DERIVED_REBUILD` | RECALL-001 open. |
 | `app/src/main/java/com/morimil/app/data/repository/RestCycleRepository.kt` | `REQUIRES_PROTOCOL` | REST-001/002 open. |
-| `app/src/main/java/com/morimil/app/data/repository/CognitiveMigrationRepository.kt` | `INTEGRATED_PROTOCOL` | COG-001 through COG-004 integrated in protected main. |
-| `app/src/main/java/com/morimil/app/data/repository/AgentOrchestrationRepository.kt` | `MIXED_DISPOSITION` | ORCH-002 through ORCH-004 integrated; ORCH-001 remains open convergence/rebuild work. |
-| `app/src/main/java/com/morimil/app/data/repository/AgentInstanceLifecycleRepository.kt` | `REQUIRES_PROTOCOL` | AGENT-001 through AGENT-006 open. |
-| `app/src/main/java/com/morimil/app/data/repository/MigrationRecordRepository.kt` | `SUPPORT_BOUNDARY` | Typed owner finalization support for COG; no independent protocol. |
+| `app/src/main/java/com/morimil/app/data/repository/CognitiveMigrationRepository.kt` | `INTEGRATED_PROTOCOL` | COG-001 through COG-004 integrated. |
+| `app/src/main/java/com/morimil/app/data/repository/AgentOrchestrationRepository.kt` | `MIXED_DISPOSITION` | ORCH-002 through ORCH-004 integrated; ORCH-001 remains open. |
+| `app/src/main/java/com/morimil/app/data/repository/AgentInstanceLifecycleRepository.kt` | `INTEGRATED_PROTOCOL` | AGENT-001 through AGENT-006 integrated. |
+| `app/src/main/java/com/morimil/app/data/repository/MigrationRecordRepository.kt` | `SUPPORT_BOUNDARY` | Typed COG finalization support. |
 
-## Operation inventory
+## Integrated operation inventory
 
 ### ProjectVault protected reference
 
@@ -94,83 +67,86 @@ The candidate does not close #88
 | `PV-002` | `completeProjectVault` | Integrated protected reference. |
 | `PV-003` | `archiveProjectVault` | Integrated protected reference. |
 
-### Cognitive migration integrated protocol
+### Cognitive migration
 
 | ID | Entry point | Current state |
 | --- | --- | --- |
-| `COG-001` | `proposeCognitiveMigration` | Integrated: verified F1-A planning, deterministic IDs, exact proposal receipt, typed finalization. |
-| `COG-002` | `approveCognitiveMigration` | Integrated: deterministic approval, exact canonical receipt, recoverable owner transition. |
-| `COG-003` | `executeCognitiveMigration` | Integrated: exact predecessor, out-of-transaction audit preparation, honest snapshot semantics. |
-| `COG-004` | `rollbackCognitiveMigration` | Integrated: append-only compensation, exact predecessor, preserved owner snapshot, idempotent replay. |
+| `COG-001` | `proposeCognitiveMigration` | Integrated. |
+| `COG-002` | `approveCognitiveMigration` | Integrated. |
+| `COG-003` | `executeCognitiveMigration` | Integrated. |
+| `COG-004` | `rollbackCognitiveMigration` | Integrated. |
 
-### Orchestration integrated protocol
+### Orchestration
 
 | ID | Entry point | Current state |
 | --- | --- | --- |
-| `ORCH-002` | `proposeDelegatedTask` | Integrated: deterministic task/operation/event identities, exact canonical receipt before delegated-task visibility, recoverable typed finalization. |
-| `ORCH-003` | `approveDelegatedTask` | Integrated: deterministic approval identity, task-scoped decision serialization, conditional Room owner transition after canonical receipt. |
-| `ORCH-004` | `rejectDelegatedTask` | Integrated: normalized reason bound to deterministic evidence, task-scoped serialization, conditional Room owner transition after canonical receipt. |
+| `ORCH-002` | `proposeDelegatedTask` | Integrated. |
+| `ORCH-003` | `approveDelegatedTask` | Integrated. |
+| `ORCH-004` | `rejectDelegatedTask` | Integrated. |
 
-ORCH recovery is owner-scoped. COG and ORCH coordinators cannot consume each other's rows. API30/API35 kill/reopen tests cover proposal, approval, rejection and owner isolation.
+### Agent lifecycle
 
-### Remaining operations
+| ID | Entry point | Current state |
+| --- | --- | --- |
+| `AGENT-001` | `createAgentForVault` | Integrated: deterministic semantic agent identity, exact retry reuse for matching non-terminal worker, canonical receipt before visible insertion. |
+| `AGENT-002` | `assignTaskToAgent` | Integrated: deterministic delegated-task identity, exact committed retry reuse, owner state after canonical receipt. |
+| `AGENT-003` | `submitAgentResult` | Integrated: requires current task canonical ORCH approval before result finalization. |
+| `AGENT-004` | `evaluateAgent` | Integrated: normalized exact semantic evaluation decision. |
+| `AGENT-005` | `retireAgent`, `promoteAgent` | Integrated as separate durable retire/promote operation types. |
+| `AGENT-006` | `quarantineAgent` | Integrated: failed worker quarantine and deterministic replacement creation are one local finalization after one canonical receipt. |
+
+COG, ORCH and AGENT startup/pre-mutation recovery are owner-scoped and cannot consume one another's rows.
+
+## Remaining operations
 
 | ID | Entry point | Disposition |
 | --- | --- | --- |
 | `BOOT-001` | `bootstrap` | `REQUIRES_PROTOCOL`; open. |
 | `RECALL-001` | `seedFromRecentMemoryIfNeeded` | `DERIVED_REBUILD`; open. |
+| `ORCH-001` | `seedDefaultOrchestrationIfNeeded` | Open convergence/rebuild; still uses legacy `hasCompleteBirth()` gate. |
 | `REST-001` | `runLocalRestCycleIfDue`, `approvePlannedRestCycle` | `REQUIRES_PROTOCOL`; open. |
 | `REST-002` | repair-proposal path | `REQUIRES_PROTOCOL`; open. |
-| `ORCH-001` | `seedDefaultOrchestrationIfNeeded` | Open convergence/rebuild work; still uses the legacy `hasCompleteBirth()` gate and is not closed by PR #172. |
-| `AGENT-001` | `createAgentForVault` | `REQUIRES_PROTOCOL`; open. |
-| `AGENT-002` | `assignTaskToAgent` | `REQUIRES_PROTOCOL`; open. |
-| `AGENT-003` | `submitAgentResult` | `REQUIRES_PROTOCOL`; open. |
-| `AGENT-004` | `evaluateAgent` | `REQUIRES_PROTOCOL`; open. |
-| `AGENT-005` | `retireAgent`, `promoteAgent` | `REQUIRES_PROTOCOL`; open. |
-| `AGENT-006` | `quarantineAgent` | `REQUIRES_PROTOCOL`; open. |
 | `MIG-001` | `planMigration`, `markMigrationApproved`, `markMigrationCompleted`, `markMigrationFailed`, `markMigrationRolledBack` | `SUPPORT_BOUNDARY`. |
-
-## Explicitly excluded observers and composition
-
-`LocalNervousSystemRepository`, `MemoryLinkRepository`, `MemoryOrganRepository`, `AppendLivingMemoryUseCase`, and `MorimilAppContainer` do not independently own a dual durable mutation. If one gains such a boundary, this inventory must change in the same isolated PR.
 
 ## Integrated common-protocol guarantees
 
-The COG and ORCH integrations provide, within their bounded owner scopes:
+Within COG, ORCH and AGENT bounded scopes:
 
-1. deterministic operation and event identities;
-2. immutable hidden staging;
-3. exact canonical ensure and complete receipt;
-4. no visible owner state before receipt;
-5. process-wide serialization by `operationId`;
-6. owner-scoped startup/pre-mutation recovery;
-7. reload after lost CAS;
-8. stale-block prevention;
-9. atomic owner result plus journal commit;
-10. typed retryable and permanent failures;
-11. zero duplicate canonical effects and owner state under tested replay;
-12. COG/ORCH recovery isolation.
+1. deterministic operation/event identities;
+2. hidden immutable staging;
+3. exact canonical ensure and receipt;
+4. no new visible owner state before receipt;
+5. owner-scoped startup/pre-mutation recovery;
+6. reload after lost CAS;
+7. stale-block prevention;
+8. atomic owner result + journal commit;
+9. typed retryable/permanent failures;
+10. replay without duplicate canonical effect or duplicate owner state.
 
-COG additionally performs external audit preparation outside the origin transaction. ORCH additionally serializes mutually exclusive approve/reject decisions by `taskId` before canonical append and uses conditional Room transitions as a second defense.
+AGENT additionally provides semantic public retry recognition, canonical ORCH approval enforcement for result submission, and atomic quarantine+replacement local finalization.
 
 No compatibility write to `memory_events`, `genesis_core`, or `local_instance_identity` is authorized.
 
 ## Implementation order after STOP S5
 
-1. `COG-001` through `COG-004` — integrated first bounded protocol owner.
+1. `COG-001` through `COG-004` — integrated first common-protocol owner.
 2. `ORCH-002` through `ORCH-004` — integrated second common-protocol owner.
-3. `AGENT-001` through `AGENT-006` — next bounded owner family.
-4. `BOOT-001`.
+3. `AGENT-001` through `AGENT-006` — integrated third common-protocol owner.
+4. `BOOT-001` — next bounded owner.
 5. `RECALL-001` and `ORCH-001`.
 6. `REST-001` and `REST-002`.
 7. F3.3 only after every F3.2 owner has a recorded disposition and separate authorization.
 
-## Residual non-blocking hardening
+## Residual hardening
 
-- Room-backed two-coordinator concurrency integration coverage;
-- failed rollback fixture with a non-null `sha256:*` snapshot;
-- redundant `rollbackEventHash` parameter cleanup;
-- direct vulnerable UPDATE-trigger replacement fixture;
-- ORCH-specific mutation-testing coverage beyond the bounded Genesis pilot.
+- AGENT-specific mutation testing is not established;
+- direct Android integration coverage of `AgentInstanceLifecycleRepository.kt` remains absent;
+- AGENT mutex serialization is process-local and must be redesigned if multiprocess Android is introduced;
+- ORCH-specific mutation testing remains unestablished;
+- Room-backed multi-coordinator concurrency hardening remains useful.
 
-These findings remain open hardening items and are not represented as completed or as evidence of operational birth.
+These findings are not evidence of operational birth.
+
+## Retired regression literals
+
+Historical regression fixtures may retain old pre-integration strings only inside tests explicitly marked historical. They are not CURRENT facts.
