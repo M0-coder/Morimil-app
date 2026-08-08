@@ -1,20 +1,27 @@
 package com.morimil.app.data.repository
 
-import com.morimil.app.core.identity.StableIdDigest
 import com.morimil.app.core.orchestration.AgentCapabilityPolicy
-import com.morimil.app.core.orchestration.DelegationPlan
+import com.morimil.app.data.genesis.ultra.GenesisUltraRuntimeIdentity
+import com.morimil.app.data.genesis.ultra.GenesisUltraRuntimeIdentityRepository
 import com.morimil.app.data.local.AgentInstanceEntity
+import com.morimil.app.data.local.CrossDatabaseOperationEntity
+import com.morimil.app.data.local.CrossDatabaseOperationStatus
 import com.morimil.app.data.local.DelegatedTaskEntity
 import com.morimil.app.data.local.MemoryOrganDatabase
 import com.morimil.app.data.local.ProjectVaultEntity
+import java.text.Normalizer
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import org.json.JSONObject
 
-class AgentInstanceLifecycleRepository(
+class AgentInstanceLifecycleRepository internal constructor(
     organDatabase: MemoryOrganDatabase,
-    private val memoryRepository: MemoryRepository
+    private val identityRepository: GenesisUltraRuntimeIdentityRepository,
+    private val protocol: CrossDatabaseOperationCoordinator
 ) {
     private val dao = organDatabase.memoryOrganDao()
+    private val operationDao = organDatabase.crossDatabaseOperationDao()
 
     val agentInstances: Flow<List<AgentInstanceEntity>> = dao.observeAgentInstances()
 
@@ -23,118 +30,103 @@ class AgentInstanceLifecycleRepository(
         templateAgentId: String = AgentCapabilityPolicy.AGENT_FILE_AUDIT,
         briefing: String? = null,
         nowMillis: Long = System.currentTimeMillis()
-    ): String {
+    ): String = withVaultLock(vaultId) {
+        require(nowMillis >= 0L) { "agent_lifecycle_clock_invalid" }
+        val identity = requireIdentity()
+        recoverBeforeMutation(identity)
         val vault = requireVault(vaultId)
-        val cleanBriefing = briefing?.trim().takeUnless { it.isNullOrBlank() }
-            ?: "Trabajador temporal creado para ${vault.displayName}. Debe operar solo dentro de esta boveda, reportar resultados y esperar aprobacion humana antes de ejecutar cambios reales."
-        val agentInstanceId = buildAgentInstanceId(vaultId, templateAgentId, nowMillis)
-        val instance = AgentInstanceEntity(
-            agentInstanceId = agentInstanceId,
-            projectVaultId = vaultId,
-            templateAgentId = templateAgentId,
-            displayName = buildAgentDisplayName(vault.displayName, templateAgentId),
+        val cleanTemplate = normalizeTemplate(templateAgentId)
+        val cleanBriefing = briefing?.let(AgentLifecycleOperationFactory::normalizeBriefing)
+            ?.takeUnless(String::isBlank)
+            ?: AgentLifecycleOperationFactory.normalizeBriefing(
+                "Trabajador temporal creado para ${vault.displayName}. " +
+                    "Debe operar solo dentro de esta boveda, reportar resultados y esperar " +
+                    "aprobacion humana antes de ejecutar cambios reales."
+            )
+        val ordinal = dao.loadAgentInstancesForVault(vaultId)
+            .count { it.templateAgentId == cleanTemplate } + 1
+        val command = AgentLifecycleOperationFactory.create(
+            identity = AgentLifecycleOperationFactory.identityOf(identity),
+            vault = vault,
+            templateAgentId = cleanTemplate,
             briefing = cleanBriefing,
-            constraintsJson = buildConstraintsJson(vault),
-            status = STATUS_THINKING,
-            qualityScore = 50,
-            errorCount = 0,
-            currentTaskId = null,
-            lastHeartbeatAtMillis = nowMillis,
-            createdAtMillis = nowMillis,
-            updatedAtMillis = nowMillis,
-            retiredAtMillis = null,
-            retireReason = null
+            ordinal = ordinal
         )
-        dao.insertAgentInstance(instance)
-        dao.refreshProjectVaultActiveAgentCount(vaultId, nowMillis)
-        recordAgentEvent(EVENT_AGENT_CREATED, "created", vault, instance, nowMillis, cleanBriefing, 94)
-        recordAgentEvent(EVENT_AGENT_BRIEFED, "briefed", vault, instance, nowMillis, cleanBriefing, 92)
-        return agentInstanceId
+        val committed = protocol.execute(identity, command)
+        require(committed.status == CrossDatabaseOperationStatus.COMMITTED) {
+            "agent_lifecycle_create_not_committed"
+        }
+        committed.subjectId
     }
 
     suspend fun assignTaskToAgent(
         agentInstanceId: String,
         goal: String,
         nowMillis: Long = System.currentTimeMillis()
-    ): String {
-        val instance = requireAgent(agentInstanceId)
-        val vault = requireVault(instance.projectVaultId)
-        val cleanGoal = goal.trim().ifBlank { "Preparar avance verificable para ${vault.displayName}" }
-        val plan = AgentCapabilityPolicy.planDelegation(cleanGoal, instance.templateAgentId, targetDeviceId = null)
-        val immuneBlocked = AgentCapabilityPolicy.isImmuneBlocked(plan.immuneDecision)
-        val taskId = buildProjectTaskId(nowMillis, agentInstanceId, cleanGoal)
-        val task = DelegatedTaskEntity(
-            taskId = taskId,
-            createdBy = "morimil_project_vault",
-            assignedAgentId = agentInstanceId,
-            targetDeviceId = plan.targetDeviceId,
+    ): String = withAgentLock(agentInstanceId) {
+        require(nowMillis >= 0L) { "agent_lifecycle_clock_invalid" }
+        val identity = requireIdentity()
+        recoverBeforeMutation(identity)
+        val agent = requireMutableAgent(agentInstanceId)
+        val vault = requireVault(agent.projectVaultId)
+        val cleanGoal = AgentLifecycleOperationFactory.normalizeGoal(goal)
+        val plan = AgentCapabilityPolicy.planDelegation(
+            cleanGoal,
+            agent.templateAgentId,
+            targetDeviceId = null
+        )
+        val command = AgentLifecycleOperationFactory.assign(
+            identity = AgentLifecycleOperationFactory.identityOf(identity),
+            vault = vault,
+            agent = agent,
             goal = cleanGoal,
-            contextSummary = "vault=${vault.displayName}; vault_id=${vault.vaultId}; template_agent=${instance.templateAgentId}; ${plan.contextSummary}",
-            inputRefsJson = "[]",
-            allowedActionsJson = AgentCapabilityPolicy.encodeJson(plan.allowedActions),
-            allowedTransportsJson = AgentCapabilityPolicy.encodeJson(plan.allowedTransports),
-            approvalRequired = true,
-            approvalId = null,
-            status = if (immuneBlocked) AgentCapabilityPolicy.STATUS_REJECTED else AgentCapabilityPolicy.STATUS_AWAITING_APPROVAL,
-            riskLevel = plan.riskLevel,
-            resultSummary = null,
-            errorSummary = if (immuneBlocked) immuneErrorSummary(plan) else null,
-            createdAtMillis = nowMillis,
-            updatedAtMillis = nowMillis,
-            completedAtMillis = if (immuneBlocked) nowMillis else null
+            plan = plan
         )
-        dao.insertDelegatedTask(task)
-        if (immuneBlocked) {
-            dao.refreshProjectVaultActiveAgentCount(vault.vaultId, nowMillis)
-            recordTaskEvent(EVENT_IMMUNE_TOOL_BLOCKED, "blocked", vault, instance, task, nowMillis, "Sistema inmunologico bloqueo la tarea antes de asignarla.", 100)
-            return taskId
+        val committed = protocol.execute(identity, command)
+        require(committed.status == CrossDatabaseOperationStatus.COMMITTED) {
+            "agent_lifecycle_assign_not_committed"
         }
-        dao.assignAgentInstanceTask(
-            agentInstanceId = agentInstanceId,
-            taskId = taskId,
-            status = STATUS_AWAITING_REVIEW,
-            lastHeartbeatAtMillis = nowMillis,
-            updatedAtMillis = nowMillis
-        )
-        dao.refreshProjectVaultActiveAgentCount(vault.vaultId, nowMillis)
-        recordTaskEvent(EVENT_TASK_ASSIGNED, "assigned", vault, instance, task, nowMillis, "Tarea asignada; requiere aprobacion antes de ejecutar.", 96)
-        return taskId
+        committed.subjectId
     }
 
     suspend fun submitAgentResult(
         agentInstanceId: String,
         summary: String,
         nowMillis: Long = System.currentTimeMillis()
-    ): Boolean {
-        val instance = requireAgent(agentInstanceId)
-        val vault = requireVault(instance.projectVaultId)
-        val cleanSummary = summary.trim().ifBlank { "Resultado pendiente de revision humana." }
-        val taskId = instance.currentTaskId
-        if (taskId != null) {
-            dao.updateDelegatedTaskResult(
-                taskId = taskId,
-                status = STATUS_AWAITING_REVIEW,
-                resultSummary = cleanSummary,
-                updatedAtMillis = nowMillis,
-                completedAtMillis = null
-            )
+    ): Boolean = withAgentLock(agentInstanceId) {
+        require(nowMillis >= 0L) { "agent_lifecycle_clock_invalid" }
+        val identity = identityRepository.readCommittedIdentity() ?: return@withAgentLock false
+        recoverBeforeMutation(identity)
+        val agent = dao.loadAgentInstance(agentInstanceId) ?: return@withAgentLock false
+        if (agent.status == STATUS_RETIRED || agent.status == STATUS_QUARANTINED) {
+            return@withAgentLock false
         }
-        val updated = dao.updateAgentInstanceLifecycle(
-            agentInstanceId = agentInstanceId,
-            status = STATUS_AWAITING_REVIEW,
-            qualityScore = instance.qualityScore,
-            errorCount = instance.errorCount,
-            currentTaskId = taskId,
-            lastHeartbeatAtMillis = nowMillis,
-            updatedAtMillis = nowMillis,
-            retiredAtMillis = null,
-            retireReason = null
-        ) > 0
-        if (updated) {
-            dao.refreshProjectVaultActiveAgentCount(vault.vaultId, nowMillis)
-            recordAgentEvent(EVENT_AGENT_RESULT_SUBMITTED, "result_submitted", vault, instance.copy(status = STATUS_AWAITING_REVIEW), nowMillis, cleanSummary, 95)
+        val taskId = agent.currentTaskId ?: return@withAgentLock false
+        val task = dao.loadDelegatedTask(taskId) ?: return@withAgentLock false
+        if (
+            task.assignedAgentId != agent.agentInstanceId ||
+            task.status != AgentCapabilityPolicy.STATUS_APPROVED ||
+            task.approvalId == null
+        ) {
+            return@withAgentLock false
         }
-        return updated
+        val cleanSummary = AgentLifecycleOperationFactory.normalizeSummary(summary)
+        if (
+            task.resultSummary == cleanSummary &&
+            task.status == STATUS_AWAITING_REVIEW
+        ) {
+            return@withAgentLock loadSingleOperation(
+                agentInstanceId,
+                AgentLifecycleProtocolTypes.SUBMIT_RESULT
+            )?.status == CrossDatabaseOperationStatus.COMMITTED
+        }
+        val command = AgentLifecycleOperationFactory.submitResult(
+            identity = AgentLifecycleOperationFactory.identityOf(identity),
+            agent = agent,
+            task = task,
+            summary = cleanSummary
+        )
+        protocol.execute(identity, command).status == CrossDatabaseOperationStatus.COMMITTED
     }
 
     suspend fun evaluateAgent(
@@ -143,224 +135,163 @@ class AgentInstanceLifecycleRepository(
         qualityScore: Int,
         note: String,
         nowMillis: Long = System.currentTimeMillis()
-    ): Boolean {
-        val instance = requireAgent(agentInstanceId)
-        val vault = requireVault(instance.projectVaultId)
-        val cleanStatus = normalizeReviewStatus(status)
-        val cleanScore = qualityScore.coerceIn(0, 100)
-        val updated = dao.updateAgentInstanceLifecycle(
-            agentInstanceId = agentInstanceId,
-            status = cleanStatus,
-            qualityScore = cleanScore,
-            errorCount = instance.errorCount,
-            currentTaskId = instance.currentTaskId,
-            lastHeartbeatAtMillis = nowMillis,
-            updatedAtMillis = nowMillis,
-            retiredAtMillis = null,
-            retireReason = null
-        ) > 0
-        if (updated) {
-            dao.refreshProjectVaultActiveAgentCount(vault.vaultId, nowMillis)
-            recordAgentEvent(EVENT_AGENT_EVALUATED, "evaluated", vault, instance.copy(status = cleanStatus, qualityScore = cleanScore), nowMillis, note, 94)
+    ): Boolean = withAgentLock(agentInstanceId) {
+        require(nowMillis >= 0L) { "agent_lifecycle_clock_invalid" }
+        val identity = identityRepository.readCommittedIdentity() ?: return@withAgentLock false
+        recoverBeforeMutation(identity)
+        val agent = dao.loadAgentInstance(agentInstanceId) ?: return@withAgentLock false
+        if (agent.status == STATUS_RETIRED || agent.status == STATUS_QUARANTINED) {
+            return@withAgentLock false
         }
-        return updated
+        val command = AgentLifecycleOperationFactory.evaluate(
+            identity = AgentLifecycleOperationFactory.identityOf(identity),
+            agent = agent,
+            status = status,
+            qualityScore = qualityScore,
+            note = note
+        )
+        protocol.execute(identity, command).status == CrossDatabaseOperationStatus.COMMITTED
     }
 
-    suspend fun retireAgent(agentInstanceId: String, reason: String, nowMillis: Long = System.currentTimeMillis()): Boolean {
-        return closeAgent(agentInstanceId, STATUS_RETIRED, EVENT_AGENT_RETIRED, "retired", reason, nowMillis, addError = false)
+    suspend fun retireAgent(
+        agentInstanceId: String,
+        reason: String,
+        nowMillis: Long = System.currentTimeMillis()
+    ): Boolean = withAgentLock(agentInstanceId) {
+        require(nowMillis >= 0L) { "agent_lifecycle_clock_invalid" }
+        val identity = identityRepository.readCommittedIdentity() ?: return@withAgentLock false
+        recoverBeforeMutation(identity)
+        val agent = dao.loadAgentInstance(agentInstanceId) ?: return@withAgentLock false
+        val cleanReason = AgentLifecycleOperationFactory.normalizeReason(reason)
+        if (agent.status == STATUS_RETIRED) {
+            if (agent.retireReason != cleanReason) return@withAgentLock false
+            return@withAgentLock loadSingleOperation(
+                agentInstanceId,
+                AgentLifecycleProtocolTypes.RETIRE
+            )?.status == CrossDatabaseOperationStatus.COMMITTED
+        }
+        if (agent.status == STATUS_QUARANTINED) return@withAgentLock false
+        val command = AgentLifecycleOperationFactory.retire(
+            AgentLifecycleOperationFactory.identityOf(identity),
+            agent,
+            cleanReason
+        )
+        protocol.execute(identity, command).status == CrossDatabaseOperationStatus.COMMITTED
     }
 
-    suspend fun quarantineAgent(agentInstanceId: String, reason: String, nowMillis: Long = System.currentTimeMillis()): Boolean {
-        val failedAgent = requireAgent(agentInstanceId)
-        val quarantined = closeAgent(agentInstanceId, STATUS_QUARANTINED, EVENT_AGENT_QUARANTINED, "quarantined", reason, nowMillis, addError = true)
-        if (quarantined) {
-            createAgentForVault(
-                vaultId = failedAgent.projectVaultId,
-                templateAgentId = failedAgent.templateAgentId,
-                briefing = "Reemplazo especializado tras cuarentena de ${failedAgent.displayName}. No repetir este fallo: ${reason.take(180)}. Mantenerse en memoria de trabajo y reportar solo resultados utiles a Morimil.",
-                nowMillis = nowMillis + 1
+    suspend fun quarantineAgent(
+        agentInstanceId: String,
+        reason: String,
+        nowMillis: Long = System.currentTimeMillis()
+    ): Boolean = withAgentLock(agentInstanceId) {
+        require(nowMillis >= 0L) { "agent_lifecycle_clock_invalid" }
+        val identity = identityRepository.readCommittedIdentity() ?: return@withAgentLock false
+        recoverBeforeMutation(identity)
+        val agent = dao.loadAgentInstance(agentInstanceId) ?: return@withAgentLock false
+        val cleanReason = AgentLifecycleOperationFactory.normalizeReason(reason)
+        if (agent.status == STATUS_QUARANTINED) {
+            if (agent.retireReason != cleanReason) return@withAgentLock false
+            return@withAgentLock loadSingleOperation(
+                agentInstanceId,
+                AgentLifecycleProtocolTypes.QUARANTINE
+            )?.status == CrossDatabaseOperationStatus.COMMITTED
+        }
+        if (agent.status == STATUS_RETIRED) return@withAgentLock false
+        val vault = requireVault(agent.projectVaultId)
+        val command = AgentLifecycleOperationFactory.quarantine(
+            identity = AgentLifecycleOperationFactory.identityOf(identity),
+            vault = vault,
+            agent = agent,
+            reason = cleanReason
+        )
+        protocol.execute(identity, command).status == CrossDatabaseOperationStatus.COMMITTED
+    }
+
+    suspend fun promoteAgent(
+        agentInstanceId: String,
+        reason: String,
+        nowMillis: Long = System.currentTimeMillis()
+    ): Boolean = withAgentLock(agentInstanceId) {
+        require(nowMillis >= 0L) { "agent_lifecycle_clock_invalid" }
+        val identity = identityRepository.readCommittedIdentity() ?: return@withAgentLock false
+        recoverBeforeMutation(identity)
+        val agent = dao.loadAgentInstance(agentInstanceId) ?: return@withAgentLock false
+        val cleanReason = AgentLifecycleOperationFactory.normalizeReason(reason)
+        if (agent.status == STATUS_PROMOTED && agent.retireReason == cleanReason) {
+            return@withAgentLock loadSingleOperation(
+                agentInstanceId,
+                AgentLifecycleProtocolTypes.PROMOTE
+            )?.status == CrossDatabaseOperationStatus.COMMITTED
+        }
+        if (agent.status == STATUS_RETIRED || agent.status == STATUS_QUARANTINED) {
+            return@withAgentLock false
+        }
+        val command = AgentLifecycleOperationFactory.promote(
+            AgentLifecycleOperationFactory.identityOf(identity),
+            agent,
+            cleanReason
+        )
+        protocol.execute(identity, command).status == CrossDatabaseOperationStatus.COMMITTED
+    }
+
+    private suspend fun requireIdentity(): GenesisUltraRuntimeIdentity {
+        return requireNotNull(identityRepository.readCommittedIdentity()) {
+            "Genesis Ultra committed identity is required before agent lifecycle mutation."
+        }
+    }
+
+    private suspend fun recoverBeforeMutation(identity: GenesisUltraRuntimeIdentity) {
+        val recovery = protocol.recoverBeforeMutation(
+            identity = identity,
+            ownerType = AgentLifecycleProtocolTypes.OWNER_TYPE,
+            limit = RECOVERY_LIMIT
+        )
+        if (recovery.blockedCount > 0) {
+            throw CrossDatabaseProtocolErrors.permanent(
+                CrossDatabaseProtocolErrors.OWNER_STATE_CONFLICT
             )
         }
-        return quarantined
-    }
-
-    suspend fun promoteAgent(agentInstanceId: String, reason: String, nowMillis: Long = System.currentTimeMillis()): Boolean {
-        val instance = requireAgent(agentInstanceId)
-        val vault = requireVault(instance.projectVaultId)
-        val updated = dao.updateAgentInstanceLifecycle(
-            agentInstanceId = agentInstanceId,
-            status = STATUS_PROMOTED,
-            qualityScore = maxOf(instance.qualityScore, 90),
-            errorCount = instance.errorCount,
-            currentTaskId = instance.currentTaskId,
-            lastHeartbeatAtMillis = nowMillis,
-            updatedAtMillis = nowMillis,
-            retiredAtMillis = null,
-            retireReason = reason.take(240)
-        ) > 0
-        if (updated) {
-            dao.refreshProjectVaultActiveAgentCount(vault.vaultId, nowMillis)
-            recordAgentEvent(EVENT_AGENT_PROMOTED, "promoted", vault, instance.copy(status = STATUS_PROMOTED, qualityScore = maxOf(instance.qualityScore, 90)), nowMillis, reason, 98)
+        if (recovery.retryableFailureCount > 0) {
+            throw CrossDatabaseProtocolErrors.retryable(
+                CrossDatabaseProtocolErrors.CANONICAL_APPEND_INTERRUPTED
+            )
         }
-        return updated
-    }
-
-    private suspend fun closeAgent(
-        agentInstanceId: String,
-        status: String,
-        eventType: String,
-        action: String,
-        reason: String,
-        nowMillis: Long,
-        addError: Boolean
-    ): Boolean {
-        val instance = requireAgent(agentInstanceId)
-        val vault = requireVault(instance.projectVaultId)
-        val updated = dao.updateAgentInstanceLifecycle(
-            agentInstanceId = agentInstanceId,
-            status = status,
-            qualityScore = instance.qualityScore,
-            errorCount = instance.errorCount + if (addError) 1 else 0,
-            currentTaskId = instance.currentTaskId,
-            lastHeartbeatAtMillis = nowMillis,
-            updatedAtMillis = nowMillis,
-            retiredAtMillis = nowMillis,
-            retireReason = reason.take(240)
-        ) > 0
-        if (updated) {
-            dao.refreshProjectVaultActiveAgentCount(vault.vaultId, nowMillis)
-            recordAgentEvent(eventType, action, vault, instance.copy(status = status), nowMillis, reason, if (addError) 99 else 92)
-        }
-        return updated
     }
 
     private suspend fun requireVault(vaultId: String): ProjectVaultEntity {
         return dao.loadProjectVault(vaultId) ?: error("Project vault not found: $vaultId")
     }
 
-    private suspend fun requireAgent(agentInstanceId: String): AgentInstanceEntity {
-        return dao.loadAgentInstance(agentInstanceId) ?: error("Agent instance not found: $agentInstanceId")
-    }
-
-    private suspend fun recordAgentEvent(
-        eventType: String,
-        action: String,
-        vault: ProjectVaultEntity,
-        agent: AgentInstanceEntity,
-        nowMillis: Long,
-        note: String,
-        importance: Int
-    ) {
-        memoryRepository.recordSystemMemoryEvent(
-            eventType = eventType,
-            body = "Project agent $action: vault=${vault.displayName}; agent=${agent.displayName}; status=${agent.status}; template=${agent.templateAgentId}; note=${note.take(180)}",
-            importance = importance,
-            evidenceJson = JSONObject()
-                .put("schema", "morimil.project_agent_lifecycle.v1")
-                .put("event_type", eventType)
-                .put("action", action)
-                .put("recorded_at_millis", nowMillis)
-                .put("policy", "decision_equals_memory")
-                .put("vault", vault.toEvidenceJson())
-                .put("agent_instance", agent.toEvidenceJson())
-                .put("note", note)
-                .toString()
-        )
-    }
-
-    private suspend fun recordTaskEvent(
-        eventType: String,
-        action: String,
-        vault: ProjectVaultEntity,
-        agent: AgentInstanceEntity,
-        task: DelegatedTaskEntity,
-        nowMillis: Long,
-        note: String,
-        importance: Int
-    ) {
-        memoryRepository.recordSystemMemoryEvent(
-            eventType = eventType,
-            body = "Project task $action: vault=${vault.displayName}; agent=${agent.displayName}; task=${task.taskId}; risk=${task.riskLevel}; goal=${task.goal}",
-            importance = importance,
-            evidenceJson = JSONObject()
-                .put("schema", "morimil.project_task_assignment.v1")
-                .put("event_type", eventType)
-                .put("action", action)
-                .put("recorded_at_millis", nowMillis)
-                .put("policy", "decision_equals_memory")
-                .put("vault", vault.toEvidenceJson())
-                .put("agent_instance", agent.toEvidenceJson())
-                .put("delegated_task", task.toEvidenceJson())
-                .put("note", note)
-                .toString()
-        )
-    }
-
-    private fun ProjectVaultEntity.toEvidenceJson(): JSONObject {
-        return JSONObject()
-            .put("vault_id", vaultId)
-            .put("display_name", displayName)
-            .put("project_type", projectType)
-            .put("status", status)
-            .put("health_status", healthStatus)
-            .put("progress_percent", progressPercent)
-    }
-
-    private fun AgentInstanceEntity.toEvidenceJson(): JSONObject {
-        return JSONObject()
-            .put("agent_instance_id", agentInstanceId)
-            .put("project_vault_id", projectVaultId)
-            .put("template_agent_id", templateAgentId)
-            .put("display_name", displayName)
-            .put("briefing", briefing)
-            .put("constraints_json", constraintsJson)
-            .put("status", status)
-            .put("quality_score", qualityScore)
-            .put("error_count", errorCount)
-            .put("current_task_id", currentTaskId ?: JSONObject.NULL)
-            .put("created_at_millis", createdAtMillis)
-            .put("updated_at_millis", updatedAtMillis)
-    }
-
-    private fun DelegatedTaskEntity.toEvidenceJson(): JSONObject {
-        return JSONObject()
-            .put("task_id", taskId)
-            .put("assigned_agent_id", assignedAgentId)
-            .put("goal", goal)
-            .put("context_summary", contextSummary)
-            .put("allowed_actions_json", allowedActionsJson)
-            .put("allowed_transports_json", allowedTransportsJson)
-            .put("approval_required", approvalRequired)
-            .put("status", status)
-            .put("risk_level", riskLevel)
-    }
-
-    private fun buildConstraintsJson(vault: ProjectVaultEntity): String {
-        return JSONObject()
-            .put("scope", "project_vault_only")
-            .put("vault_id", vault.vaultId)
-            .put("vault_name", vault.displayName)
-            .put("no_autonomous_execution", true)
-            .put("human_approval_required", true)
-            .put("main_memory_owner", "morimil")
-            .toString()
-    }
-
-    private fun buildAgentDisplayName(vaultName: String, templateAgentId: String): String {
-        val role = templateAgentId.removeSuffix("_agent").replace('_', ' ')
-        return "$vaultName $role worker"
-    }
-
-    private fun normalizeReviewStatus(status: String): String {
-        return when (status) {
-            STATUS_WORKING, STATUS_THINKING, STATUS_AWAITING_REVIEW -> status
-            else -> STATUS_AWAITING_REVIEW
+    private suspend fun requireMutableAgent(agentInstanceId: String): AgentInstanceEntity {
+        val agent = dao.loadAgentInstance(agentInstanceId)
+            ?: error("Agent instance not found: $agentInstanceId")
+        require(agent.status != STATUS_RETIRED && agent.status != STATUS_QUARANTINED) {
+            "agent_lifecycle_terminal_agent"
         }
+        return agent
     }
 
-    private fun immuneErrorSummary(plan: DelegationPlan): String {
-        val reasons = plan.immuneReasons.joinToString(separator = ",").ifBlank { plan.immuneDecision }
-        return "immune_policy_blocked:$reasons".take(240)
+    private suspend fun loadSingleOperation(
+        subjectId: String,
+        operationType: String
+    ): CrossDatabaseOperationEntity? {
+        val operations = operationDao.loadAnyForOwnerSubjectAndOperationType(
+            ownerType = AgentLifecycleProtocolTypes.OWNER_TYPE,
+            subjectId = subjectId,
+            operationType = operationType
+        )
+        if (operations.size > 1) {
+            throw CrossDatabaseProtocolErrors.permanent(
+                CrossDatabaseProtocolErrors.OWNER_STATE_CONFLICT
+            )
+        }
+        return operations.singleOrNull()
+    }
+
+    private fun normalizeTemplate(value: String): String {
+        return Normalizer.normalize(value, Normalizer.Form.NFC)
+            .trim()
+            .ifBlank { AgentCapabilityPolicy.AGENT_FILE_AUDIT }
     }
 
     companion object {
@@ -371,30 +302,25 @@ class AgentInstanceLifecycleRepository(
         const val STATUS_RETIRED = "retired"
         const val STATUS_PROMOTED = "promoted"
 
-        private const val EVENT_AGENT_CREATED = "project.agent_created"
-        private const val EVENT_AGENT_BRIEFED = "project.agent_briefed"
-        private const val EVENT_TASK_ASSIGNED = "project.task_assigned"
-        private const val EVENT_AGENT_RESULT_SUBMITTED = "project.agent_result_submitted"
-        private const val EVENT_AGENT_EVALUATED = "project.agent_evaluated"
-        private const val EVENT_AGENT_RETIRED = "project.agent_retired"
-        private const val EVENT_AGENT_QUARANTINED = "project.agent_quarantined"
-        private const val EVENT_AGENT_PROMOTED = "project.agent_promoted"
-        private const val EVENT_IMMUNE_TOOL_BLOCKED = "immune.tool_blocked"
+        private const val RECOVERY_LIMIT = 64
+        private const val MUTEX_STRIPES = 64
+        private val AGENT_MUTEXES = Array(MUTEX_STRIPES) { Mutex() }
+        private val VAULT_MUTEXES = Array(MUTEX_STRIPES) { Mutex() }
 
-        fun buildAgentInstanceId(vaultId: String, templateAgentId: String, nowMillis: Long): String {
-            val suffix = StableIdDigest.shortSha256Hex(
-                namespace = "agent_instance",
-                parts = listOf(vaultId, templateAgentId, nowMillis.toString())
-            )
-            return "agent_instance_${nowMillis}_$suffix"
+        private suspend fun <T> withAgentLock(
+            agentInstanceId: String,
+            block: suspend () -> T
+        ): T {
+            val index = (agentInstanceId.hashCode() and Int.MAX_VALUE) % MUTEX_STRIPES
+            return AGENT_MUTEXES[index].withLock { block() }
         }
 
-        fun buildProjectTaskId(createdAtMillis: Long, agentInstanceId: String, goal: String): String {
-            val suffix = StableIdDigest.shortSha256Hex(
-                namespace = "project_delegated_task",
-                parts = listOf(createdAtMillis.toString(), agentInstanceId, goal)
-            )
-            return "ptask_${createdAtMillis}_$suffix"
+        private suspend fun <T> withVaultLock(
+            vaultId: String,
+            block: suspend () -> T
+        ): T {
+            val index = (vaultId.hashCode() and Int.MAX_VALUE) % MUTEX_STRIPES
+            return VAULT_MUTEXES[index].withLock { block() }
         }
     }
 }
