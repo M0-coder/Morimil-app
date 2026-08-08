@@ -3,7 +3,7 @@ package com.morimil.app.data.repository
 import org.json.JSONArray
 import org.json.JSONObject
 
-object AutobiographicalMemoryConsolidator {
+internal object AutobiographicalMemoryConsolidator {
     fun build(
         alias: String,
         sourceRestCycleRef: String,
@@ -116,7 +116,7 @@ object AutobiographicalMemoryConsolidator {
     }
 }
 
-data class AutobiographicalMemoryDraft(
+internal data class AutobiographicalMemoryDraft(
     val alias: String,
     val selfSummary: String,
     val stableTraits: String,
