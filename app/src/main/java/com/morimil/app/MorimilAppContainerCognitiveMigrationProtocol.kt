@@ -1,8 +1,11 @@
 package com.morimil.app
 
+import com.morimil.app.data.genesis.ultra.CanonicalAgentLifecycleCommitPort
 import com.morimil.app.data.genesis.ultra.CanonicalCognitiveMigrationCommitPort
 import com.morimil.app.data.genesis.ultra.CanonicalCognitiveMigrationReadPort
 import com.morimil.app.data.genesis.ultra.CanonicalOrchestrationCommitPort
+import com.morimil.app.data.repository.AgentLifecycleProtocolFinalizer
+import com.morimil.app.data.repository.AgentLifecycleProtocolTypes
 import com.morimil.app.data.repository.CognitiveMigrationProtocolFinalizer
 import com.morimil.app.data.repository.CrossDatabaseOperationCoordinator
 import com.morimil.app.data.repository.OrchestrationProtocolFinalizer
@@ -47,4 +50,19 @@ internal val MorimilAppContainer.orchestrationProtocolCoordinator:
             OrchestrationProtocolFinalizer(database = organDatabase)
         ),
         protocolRegistry = OrchestrationProtocolTypes.REGISTRY
+    )
+
+internal val MorimilAppContainer.canonicalAgentLifecycleCommitPort:
+    CanonicalAgentLifecycleCommitPort
+    get() = CanonicalAgentLifecycleCommitPort(canonicalMemoryRepository)
+
+internal val MorimilAppContainer.agentLifecycleProtocolCoordinator:
+    CrossDatabaseOperationCoordinator
+    get() = CrossDatabaseOperationCoordinator.production(
+        database = organDatabase,
+        canonicalEnsurePort = canonicalAgentLifecycleCommitPort,
+        finalizers = listOf(
+            AgentLifecycleProtocolFinalizer(database = organDatabase)
+        ),
+        protocolRegistry = AgentLifecycleProtocolTypes.REGISTRY
     )
