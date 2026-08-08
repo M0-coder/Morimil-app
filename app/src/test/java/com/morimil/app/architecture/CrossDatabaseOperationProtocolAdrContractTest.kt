@@ -38,7 +38,17 @@ class CrossDatabaseOperationProtocolAdrContractTest {
         ).forEach { token -> assertTrue("Missing authority/protocol token $token", adr.contains(token, true)) }
 
         val state = adr.substringAfter("## Deterministic identity and state machine")
-        assertInOrder(state, listOf("STAGED", "PENDING_CANONICAL", "CANONICAL_COMMITTED", "PENDING_LOCAL_COMMIT", "COMMITTED", "BLOCKED"))
+        assertInOrder(
+            state,
+            listOf(
+                "STAGED\n",
+                "-> PENDING_CANONICAL",
+                "-> CANONICAL_COMMITTED",
+                "-> PENDING_LOCAL_COMMIT",
+                "-> COMMITTED",
+                "`BLOCKED` is terminal"
+            )
+        )
     }
 
     @Test
