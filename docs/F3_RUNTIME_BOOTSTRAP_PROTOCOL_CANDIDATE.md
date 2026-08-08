@@ -47,7 +47,7 @@ verified Genesis Ultra runtime identity
     -> exact canonical BOOT event ensured
     -> canonical receipt persisted
     -> MorimilDatabase projection prepared idempotently
-    -> MemoryOrganDatabase projection finalized
+    -> MemoryOrganDatabase seed-if-empty finalization
     -> XOP COMMITTED in the same owner transaction
 ```
 
@@ -69,6 +69,19 @@ writer authorization != ownership
 Guardian custody != ownership
 runtime projection != canonical identity
 runtime projection != canonical memory
+```
+
+The verified Genesis Ultra Guardian role consumed by BOOT is exactly:
+
+```text
+guardian_role=custodian_witness
+```
+
+No-ownership is a separate signed invariant, not encoded by renaming that role:
+
+```text
+ownership_conferred=false
+guardian_ownership=forbidden
 ```
 
 The deterministic BOOT subject is scoped to:
@@ -113,12 +126,26 @@ health=ready
 
 ### MemoryOrganDatabase
 
-The current seven default agent profiles and four default devices are ensured
-idempotently after the canonical receipt. Existing rows must match expected
-semantic fields; incompatible collisions fail closed.
+BOOT preserves the pre-candidate ownership boundary instead of absorbing
+ORCH-001:
 
-The active Body remains an authorized device projection. Agent profiles and
-devices do not acquire Instance, memory, lifecycle, or succession authority.
+- when `agent_profiles` is empty, BOOT seeds the current seven Ultra default
+  profiles;
+- when `orchestrator_devices` is empty, BOOT seeds the current four Ultra
+  default devices;
+- when either table is already non-empty, BOOT leaves that table unchanged and
+  records its actual row count;
+- convergence or replacement of pre-existing legacy/noncanonical orchestration
+  seed rows remains ORCH-001 work.
+
+This matters because BOOT-001 closes cross-database crash consistency. It must
+not silently turn into ORCH-001 or overwrite legitimate existing operational
+state.
+
+When the device table is freshly seeded, the active Body is represented as the
+authorized `genesis_ultra_bound` device. Agent profiles and devices remain
+projections and do not acquire Instance, memory, lifecycle, or succession
+authority.
 
 ## Compatibility prohibitions
 
@@ -131,8 +158,8 @@ memory_events
 ```
 
 It does not execute Genesis, import a Seed, provision a Body, activate Morimil,
-retire legacy schemas, enable F3.3, implement RECALL/REST/HEALTH convergence, or
-declare operational birth.
+retire legacy schemas, enable F3.3, implement ORCH-001, RECALL/REST/HEALTH
+convergence, or declare operational birth.
 
 ## Candidate tests
 
@@ -142,7 +169,11 @@ The branch adds or updates tests for:
 - distinct BOOT operation for a successor Body while preserving the same
   Instance workspace/project identity;
 - hard rejection of `ownershipConferred=true`;
+- hard rejection of a Guardian role that does not match the signed
+  `custodian_witness` contract;
 - durable idempotent Android bootstrap;
+- preservation of a pre-existing orchestration seed for separate ORCH-001
+  convergence;
 - database-reopen recovery from `PENDING_LOCAL_COMMIT` after the
   `MorimilDatabase` preparation was already written;
 - owner-scoped architecture and composition ratchets preventing return to direct
