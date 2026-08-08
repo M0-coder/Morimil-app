@@ -97,12 +97,28 @@ class OrchestrationProtocolContractTest {
     }
 
     @Test
-    fun orch001RemainsExplicitlyOutsideThisCandidate() {
+    fun orch001SeedUsesCommittedCanonicalIdentityAndNoLegacyBirthGate() {
         val repository = production("data/repository/AgentOrchestrationRepository.kt")
+        val container = productionRoot("MorimilAppContainer.kt")
         val inventory = repositoryFile("docs/F3_CROSS_DATABASE_OPERATION_INVENTORY.md").readText()
+        val seed = repository.substringAfter("suspend fun seedDefaultOrchestrationIfNeeded")
+            .substringBefore("suspend fun proposeDelegatedTask")
+        val orchestrationComposition = container.substringAfter("val agentOrchestrationRepository")
+            .substringBefore("val agentInstanceLifecycleRepository")
 
-        assertTrue(repository.contains("ORCH-001 remains a separate F1 convergence item"))
-        assertTrue(repository.contains("memoryRepository.hasCompleteBirth()"))
+        val identityRead = seed.indexOf("identityRepository.readCommittedIdentity() ?: return")
+        val agentCount = seed.indexOf("dao.countAgentProfiles()")
+        val deviceCount = seed.indexOf("dao.countOrchestratorDevices()")
+        assertTrue(identityRead >= 0)
+        assertTrue(agentCount > identityRead)
+        assertTrue(deviceCount > identityRead)
+
+        assertFalse(repository.contains("memoryRepository.hasCompleteBirth()"))
+        assertFalse(repository.contains("private val memoryRepository: MemoryRepository"))
+        assertFalse(orchestrationComposition.contains("memoryRepository = memoryRepository"))
+        assertTrue(orchestrationComposition.contains("identityRepository = genesisUltraRuntimeIdentityRepository"))
+
+        // CURRENT documentation still describes protected main until this candidate is merged/reconciled.
         assertTrue(inventory.contains("`ORCH-001`"))
         assertTrue(inventory.contains("Open convergence/rebuild work"))
     }

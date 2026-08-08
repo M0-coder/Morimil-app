@@ -17,7 +17,6 @@ import org.json.JSONArray
 
 class AgentOrchestrationRepository internal constructor(
     organDatabase: MemoryOrganDatabase,
-    private val memoryRepository: MemoryRepository,
     private val identityRepository: GenesisUltraRuntimeIdentityRepository,
     private val protocol: CrossDatabaseOperationCoordinator
 ) {
@@ -29,7 +28,7 @@ class AgentOrchestrationRepository internal constructor(
     val delegatedTasks: Flow<List<DelegatedTaskEntity>> = dao.observeDelegatedTasks()
 
     suspend fun seedDefaultOrchestrationIfNeeded(nowMillis: Long = System.currentTimeMillis()) {
-        if (!memoryRepository.hasCompleteBirth()) return
+        identityRepository.readCommittedIdentity() ?: return
         if (dao.countAgentProfiles() == 0) {
             dao.insertAgentProfiles(defaultAgents(nowMillis))
         }
@@ -48,9 +47,6 @@ class AgentOrchestrationRepository internal constructor(
             "Genesis Ultra committed identity is required before orchestration can create durable tasks."
         }
         recoverBeforeMutation(identity)
-
-        // ORCH-001 remains a separate F1 convergence item. Keep its legacy seeding
-        // behavior bounded here; ORCH-002 itself no longer derives authority from it.
         seedDefaultOrchestrationIfNeeded(nowMillis)
 
         val cleanGoal = OrchestrationOperationFactory.normalizeGoal(goal)
