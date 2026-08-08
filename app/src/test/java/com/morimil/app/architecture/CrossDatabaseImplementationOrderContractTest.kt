@@ -7,7 +7,7 @@ import org.junit.Test
 
 class CrossDatabaseImplementationOrderContractTest {
     @Test
-    fun implementationOrderRecordsFourIntegratedOwnersAndRecallOrchNext() {
+    fun implementationOrderRecordsRecallIntegratedAndOrchNext() {
         val inventory = repositoryFile("docs/F3_CROSS_DATABASE_OPERATION_INVENTORY.md").readText()
         val section = inventory.substringAfter("## Implementation order after STOP S5")
 
@@ -15,23 +15,23 @@ class CrossDatabaseImplementationOrderContractTest {
         val orchestration = section.indexOf("`ORCH-002` through `ORCH-004`")
         val agents = section.indexOf("`AGENT-001` through `AGENT-006`")
         val bootstrap = section.indexOf("`BOOT-001`")
-        val recall = section.indexOf("`RECALL-001` and `ORCH-001`")
+        val recall = section.indexOf("`RECALL-001` — integrated canonical derived rebuild")
+        val orch001 = section.indexOf("`ORCH-001` — next bounded convergence work")
         val rest = section.indexOf("`REST-001` and `REST-002`")
 
-        listOf(cognitive, orchestration, agents, bootstrap, recall, rest).forEach { position ->
+        listOf(cognitive, orchestration, agents, bootstrap, recall, orch001, rest).forEach { position ->
             assertTrue("F3.2 implementation order entry is missing", position >= 0)
         }
         assertTrue(cognitive < orchestration)
         assertTrue(orchestration < agents)
         assertTrue(agents < bootstrap)
         assertTrue(bootstrap < recall)
-        assertTrue(recall < rest)
+        assertTrue(recall < orch001)
+        assertTrue(orch001 < rest)
 
-        assertTrue(section.contains("integrated first common-protocol owner"))
-        assertTrue(section.contains("integrated second common-protocol owner"))
-        assertTrue(section.contains("integrated third common-protocol owner"))
-        assertTrue(section.contains("`BOOT-001` — integrated fourth common-protocol owner"))
-        assertTrue(section.contains("`RECALL-001` and `ORCH-001` — next bounded convergence work"))
+        assertTrue(section.contains("`RECALL-001` — integrated canonical derived rebuild"))
+        assertTrue(section.contains("`ORCH-001` — next bounded convergence work"))
+        assertFalse(section.contains("`RECALL-001` and `ORCH-001` — next bounded convergence work"))
         assertFalse(section.contains("`BOOT-001` — next bounded owner"))
     }
 
