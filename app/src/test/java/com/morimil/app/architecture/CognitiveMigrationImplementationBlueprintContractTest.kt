@@ -51,7 +51,17 @@ class CognitiveMigrationImplementationBlueprintContractTest {
             assertTrue("Missing event $it", blueprint.contains(it))
         }
         val state = blueprint.substringAfter("## 5. Durable journal and state machine")
-        assertInOrder(state, listOf("STAGED", "PENDING_CANONICAL", "CANONICAL_COMMITTED", "PENDING_LOCAL_COMMIT", "COMMITTED", "BLOCKED"))
+        assertInOrder(
+            state,
+            listOf(
+                "STAGED\n",
+                "-> PENDING_CANONICAL",
+                "-> CANONICAL_COMMITTED",
+                "-> PENDING_LOCAL_COMMIT",
+                "-> COMMITTED",
+                "`BLOCKED` is terminal"
+            )
+        )
         assertTrue(blueprint.contains("Clock is metadata only", true))
     }
 
