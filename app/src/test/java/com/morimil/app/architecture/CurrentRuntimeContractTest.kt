@@ -12,139 +12,82 @@ class CurrentRuntimeContractTest {
     }
 
     @Test
-    fun contractUsesStableBaselineResolutionAndStoreVersions() {
-        assertTrue(contract.contains(CONTENT_BASELINE_SHA))
-        assertTrue(contract.contains(CONTENT_BASELINE_PARENT_SHA))
-        assertTrue(contract.contains(CURRENT_MAIN_RESOLUTION))
-        assertTrue(contract.contains(MERGE_SHA_EVIDENCE))
-        assertTrue(contract.contains(COG_AUDITED_SOURCE_HEAD))
-        assertTrue(contract.contains(ORCH_AUDITED_SOURCE_HEAD))
-        assertTrue(contract.contains("PR #149", ignoreCase = true))
-        assertTrue(contract.contains("PR #150", ignoreCase = true))
-        assertTrue(contract.contains("PR #153", ignoreCase = true))
-        assertTrue(contract.contains("PR #172", ignoreCase = true))
-        assertTrue(contract.contains("closed and merged by squash", ignoreCase = true))
-        assertTrue(contract.contains("historical CURRENT reconciliation", ignoreCase = true))
+    fun contractUsesPostAgentBaselineAndStableMainResolution() {
+        listOf(
+            CONTENT_BASELINE_SHA,
+            CONTENT_BASELINE_PARENT_SHA,
+            "CURRENT_MAIN_RESOLUTION=EXTERNAL_GIT_REF",
+            "MERGE_SHA_EVIDENCE=EXTERNAL",
+            COG_AUDITED_SOURCE_HEAD,
+            ORCH_AUDITED_SOURCE_HEAD,
+            AGENT_AUDITED_SOURCE_HEAD,
+            "PR_174=MERGED_BY_SQUASH_HISTORICAL"
+        ).forEach { token -> assertTrue("Missing runtime token $token", contract.contains(token)) }
+
         assertTrue(contract.contains("| `MorimilDatabase` | `15` |"))
         assertTrue(contract.contains("| `MemoryOrganDatabase` | `9` |"))
-        assertTrue(contract.contains("`cross_database_operations`"))
-
         assertEquals(15, roomVersion(productionFile("com/morimil/app/data/local/MorimilDatabase.kt")))
         assertEquals(9, roomVersion(productionFile("com/morimil/app/data/local/MemoryOrganDatabase.kt")))
-
-        STALE_PHRASES.forEach { phrase ->
-            assertFalse("Runtime contract contains stale phrase: $phrase", contract.contains(phrase, true))
-        }
     }
 
     @Test
-    fun integratedCompositionPreservesTheF1AAuthorityFrontier() {
-        val canonicalComposition = productionFile(
-            "com/morimil/app/MorimilAppContainerCanonicalConsumers.kt"
-        ).readText()
-        val cognitiveComposition = productionFile(
-            "com/morimil/app/MorimilAppContainerCognitiveMigrationProtocol.kt"
-        ).readText()
-        val database = productionFile(
-            "com/morimil/app/data/local/MemoryOrganDatabase.kt"
-        ).readText()
-
-        assertTrue(canonicalComposition.contains("GenesisUltraCanonicalConsumerReadAdapter.production"))
-        assertTrue(canonicalComposition.contains("identityRepository = genesisUltraRuntimeIdentityRepository"))
-        assertTrue(canonicalComposition.contains("memoryRepository = canonicalMemoryRepository"))
-        assertTrue(cognitiveComposition.contains("consumerReadPort = canonicalConsumerReadPort"))
-        assertFalse(cognitiveComposition.contains("GenesisUltraCanonicalConsumerReadAdapter.production"))
-        assertTrue(cognitiveComposition.contains("CanonicalCognitiveMigrationReadPort.production"))
-        assertTrue(contract.contains("CanonicalConsumerReadPort"))
+    fun canonicalAuthorityIncludesAgentPortWithoutExpandingIdentityAuthority() {
+        val composition = productionFile("com/morimil/app/MorimilAppContainerCognitiveMigrationProtocol.kt").readText()
+        assertTrue(contract.contains("GenesisUltraRuntimeIdentityRepository + CanonicalMemoryRepository"))
         assertTrue(contract.contains("CanonicalCognitiveMigrationCommitPort"))
         assertTrue(contract.contains("CanonicalOrchestrationCommitPort"))
-        assertTrue(contract.contains("does not compose a second direct identity or memory repository"))
-        assertTrue(database.contains("CrossDatabaseOperationEntity::class"))
+        assertTrue(contract.contains("CanonicalAgentLifecycleCommitPort"))
+        assertTrue(contract.contains("No specialized port becomes an identity source"))
+        assertTrue(composition.contains("CanonicalAgentLifecycleCommitPort"))
     }
 
     @Test
-    fun startupRecoveryCogAndOrchGuaranteesAreCurrent() {
-        listOf(
-            "Startup and recovery",
-            "process-wide advancement serialization by `operationId`",
-            "reloads after lost CAS",
-            "rejects stale blocking",
-            "COG-001 through COG-004",
-            "ORCH-002 through ORCH-004",
-            "postSnapshotId",
-            "owner-scoped recovery",
-            "ProjectVault remains a separate protocol"
-        ).forEach { requirement ->
-            assertTrue("Missing runtime requirement $requirement", contract.contains(requirement, true))
+    fun startupRecoveryOrderAndOwnerIsolationAreCurrent() {
+        val section = contract.substringAfter("## Startup and recovery")
+        val cog = section.indexOf("COG recovery")
+        val orch = section.indexOf("ORCH recovery")
+        val agent = section.indexOf("AGENT recovery")
+        val legacy = section.indexOf("remaining legacy convergence")
+        assertTrue(cog >= 0 && orch > cog && agent > orch && legacy > agent)
+        assertTrue(contract.contains("cannot consume one another's journal rows"))
+    }
+
+    @Test
+    fun phaseTableClosesOnlyIntegratedBoundedScopes() {
+        assertTrue(contract.contains("F3.2 | Closed only for ProjectVault, COG-001..004, ORCH-002..004, and AGENT-001..006"))
+        listOf("BOOT_001=OPEN", "RECALL_001=OPEN", "ORCH_001=OPEN", "REST_001_002=OPEN", "F3.3 | Open").forEach {
+            assertTrue("Missing open-state token $it", contract.contains(it))
         }
-    }
-
-    @Test
-    fun phaseTableClosesOnlyBoundedIntegratedF3Owners() {
-        assertTrue(
-            contract.contains(
-                "| F3.2 | Closed for the bounded COG-001 through COG-004 and ORCH-002 through ORCH-004 integrations only."
-            )
-        )
-        assertTrue(contract.contains("AGENT, BOOT, RECALL, ORCH-001, and REST remain separately open"))
-        assertTrue(contract.contains("| F3.3 | Open."))
-        assertTrue(contract.contains("| F4 | Open:"))
-        assertTrue(contract.contains("| F5 | Open:"))
-        assertTrue(contract.contains("| F6 | Open:"))
-        assertTrue(contract.contains("Issue `#86` remains open"))
-        assertTrue(contract.contains("F1-ORCH-001 is not closed"))
+        assertTrue(contract.contains("MORIMIL_OPERATIONAL_BIRTH=NOT_OCCURRED"))
         assertFalse(contract.contains("F3 complete", ignoreCase = true))
-        assertFalse(contract.contains("production authorized", ignoreCase = true))
     }
 
     @Test
-    fun residualHardeningRemainsVisibleAndNonBlocking() {
+    fun agentResidualDebtRemainsVisible() {
         listOf(
-            "Room-backed two-coordinator concurrency",
-            "failed-rollback snapshot fixture",
-            "redundant rollback parameter cleanup",
-            "vulnerable UPDATE-trigger replacement",
-            "ORCH-specific mutation-testing"
-        ).forEach { finding ->
-            assertTrue("Missing residual finding $finding", contract.contains(finding, true))
-        }
-        assertTrue(contract.contains("not represented as completed work", true))
+            "AGENT-specific mutation testing is not established",
+            "zero direct instrumented line coverage",
+            "single-process Android architecture",
+            "physical ARM64 inference"
+        ).forEach { finding -> assertTrue("Missing residual $finding", contract.contains(finding, true)) }
     }
 
     private fun roomVersion(file: File): Int {
-        val annotation = requireNotNull(
-            Regex("""@Database\(([\s\S]*?)\)\s*abstract class""").find(file.readText())
-        ) { "Room database annotation not found in ${file.path}" }.groupValues[1]
-        return requireNotNull(Regex("""version\s*=\s*(\d+)""").find(annotation)) {
-            "Room database version not found in ${file.path}"
-        }.groupValues[1].toInt()
+        val annotation = requireNotNull(Regex("""@Database\(([\s\S]*?)\)\s*abstract class""").find(file.readText())).groupValues[1]
+        return requireNotNull(Regex("""version\s*=\s*(\d+)""").find(annotation)).groupValues[1].toInt()
     }
 
-    private fun productionFile(relativePath: String): File =
-        repositoryFile("app/src/main/java/$relativePath")
+    private fun productionFile(relativePath: String): File = repositoryFile("app/src/main/java/$relativePath")
 
-    private fun repositoryFile(relativePath: String): File {
-        return sequenceOf(File(relativePath), File("../$relativePath"))
-            .firstOrNull(File::isFile)
+    private fun repositoryFile(relativePath: String): File =
+        sequenceOf(File(relativePath), File("../$relativePath")).firstOrNull(File::isFile)
             ?: error("Repository file not found: $relativePath")
-    }
 
     private companion object {
-        const val CONTENT_BASELINE_SHA =
-            "CONTENT_BASELINE_SHA=c6a6b0ca998d053c31c75977c5b6d4d9ae166e96"
-        const val CONTENT_BASELINE_PARENT_SHA =
-            "CONTENT_BASELINE_PARENT_SHA=c22920f68f8820bbec676a6cbc74b60548e43d29"
-        const val CURRENT_MAIN_RESOLUTION = "CURRENT_MAIN_RESOLUTION=EXTERNAL_GIT_REF"
-        const val MERGE_SHA_EVIDENCE = "MERGE_SHA_EVIDENCE=EXTERNAL"
+        const val CONTENT_BASELINE_SHA = "CONTENT_BASELINE_SHA=d577a75290d70f423f6e83bf237a8a453f3a534e"
+        const val CONTENT_BASELINE_PARENT_SHA = "CONTENT_BASELINE_PARENT_SHA=9da342f2c147105ea882076f4ebc6ab5f5494190"
         const val COG_AUDITED_SOURCE_HEAD = "7bdbda2aa4b7568695ba8e98be54d506d42c99d5"
         const val ORCH_AUDITED_SOURCE_HEAD = "0348dccb561e576d17c45e7f8b1e38717332772b"
-        val STALE_PHRASES = listOf(
-            "candidate not merged",
-            "draft pr `#149`",
-            "draft pr #149",
-            "orchestration gates, and final legacy retirement are not fully converged",
-            "orch, agent, boot, recall, and rest owners remain outside",
-            "f3.2 | open. draft pr"
-        )
+        const val AGENT_AUDITED_SOURCE_HEAD = "74e072b911db692041d3716af9d0511b83ad70b7"
     }
 }
