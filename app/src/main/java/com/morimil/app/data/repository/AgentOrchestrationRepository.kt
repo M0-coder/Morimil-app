@@ -1,21 +1,26 @@
 package com.morimil.app.data.repository
 
-import com.morimil.app.core.identity.StableIdDigest
 import com.morimil.app.core.orchestration.AgentCapabilityPolicy
-import com.morimil.app.core.orchestration.DelegationPlan
+import com.morimil.app.data.genesis.ultra.GenesisUltraRuntimeIdentity
+import com.morimil.app.data.genesis.ultra.GenesisUltraRuntimeIdentityRepository
 import com.morimil.app.data.local.AgentProfileEntity
+import com.morimil.app.data.local.CrossDatabaseOperationEntity
+import com.morimil.app.data.local.CrossDatabaseOperationStatus
 import com.morimil.app.data.local.DelegatedTaskEntity
 import com.morimil.app.data.local.MemoryOrganDatabase
 import com.morimil.app.data.local.OrchestratorDeviceEntity
+import java.text.Normalizer
 import kotlinx.coroutines.flow.Flow
 import org.json.JSONArray
-import org.json.JSONObject
 
-class AgentOrchestrationRepository(
+class AgentOrchestrationRepository internal constructor(
     organDatabase: MemoryOrganDatabase,
-    private val memoryRepository: MemoryRepository
+    private val memoryRepository: MemoryRepository,
+    private val identityRepository: GenesisUltraRuntimeIdentityRepository,
+    private val protocol: CrossDatabaseOperationCoordinator
 ) {
     private val dao = organDatabase.memoryOrganDao()
+    private val operationDao = organDatabase.crossDatabaseOperationDao()
 
     val orchestratorDevices: Flow<List<OrchestratorDeviceEntity>> = dao.observeOrchestratorDevices()
     val agentProfiles: Flow<List<AgentProfileEntity>> = dao.observeAgentProfiles()
@@ -37,232 +42,132 @@ class AgentOrchestrationRepository(
         targetDeviceId: String? = null,
         nowMillis: Long = System.currentTimeMillis()
     ): String {
-        requireCompleteBirth()
-        seedDefaultOrchestrationIfNeeded(nowMillis)
-        val plan = AgentCapabilityPolicy.planDelegation(goal, preferredAgentId, targetDeviceId)
-        val immuneBlocked = AgentCapabilityPolicy.isImmuneBlocked(plan.immuneDecision)
-        val taskId = buildTaskId(nowMillis, plan.assignedAgentId, goal)
-        val task = DelegatedTaskEntity(
-            taskId = taskId,
-            createdBy = "morimil_orchestrator",
-            assignedAgentId = plan.assignedAgentId,
-            targetDeviceId = plan.targetDeviceId,
-            goal = goal.trim().ifBlank { "Preparar trabajo delegado" },
-            contextSummary = plan.contextSummary,
-            inputRefsJson = "[]",
-            allowedActionsJson = AgentCapabilityPolicy.encodeJson(plan.allowedActions),
-            allowedTransportsJson = AgentCapabilityPolicy.encodeJson(plan.allowedTransports),
-            approvalRequired = plan.approvalRequired,
-            approvalId = null,
-            status = if (immuneBlocked) AgentCapabilityPolicy.STATUS_REJECTED else AgentCapabilityPolicy.STATUS_AWAITING_APPROVAL,
-            riskLevel = plan.riskLevel,
-            resultSummary = null,
-            errorSummary = if (immuneBlocked) immuneErrorSummary(plan) else null,
-            createdAtMillis = nowMillis,
-            updatedAtMillis = nowMillis,
-            completedAtMillis = if (immuneBlocked) nowMillis else null
-        )
-        dao.insertDelegatedTask(task)
-        if (immuneBlocked) {
-            recordImmuneToolBlocked(task, plan, nowMillis)
-        } else {
-            recordDelegatedTaskDecision(
-                eventType = EVENT_TASK_PROPOSED,
-                action = "proposed",
-                task = task,
-                nowMillis = nowMillis,
-                importance = 95
-            )
+        val identity = requireNotNull(identityRepository.readCommittedIdentity()) {
+            "Genesis Ultra committed identity is required before orchestration can create durable tasks."
         }
-        return taskId
+        recoverBeforeMutation(identity)
+
+        // ORCH-001 remains a separate F1 convergence item. Keep its legacy seeding
+        // behavior bounded here; ORCH-002 itself no longer derives authority from it.
+        seedDefaultOrchestrationIfNeeded(nowMillis)
+
+        val cleanGoal = OrchestrationOperationFactory.normalizeGoal(goal)
+        val plan = AgentCapabilityPolicy.planDelegation(
+            goal = cleanGoal,
+            preferredAgentId = normalizeOptional(preferredAgentId),
+            targetDeviceId = normalizeOptional(targetDeviceId)
+        )
+        val command = OrchestrationOperationFactory.propose(
+            identity = OrchestrationOperationFactory.identityOf(identity),
+            goal = cleanGoal,
+            plan = plan
+        )
+        val committed = protocol.execute(identity, command)
+        require(committed.status == CrossDatabaseOperationStatus.COMMITTED) {
+            "orchestration_proposal_not_committed"
+        }
+        return committed.subjectId
     }
 
-    suspend fun approveDelegatedTask(taskId: String, nowMillis: Long = System.currentTimeMillis()): Boolean {
-        if (!memoryRepository.hasCompleteBirth()) return false
-        val existingTask = dao.loadDelegatedTask(taskId) ?: return false
-        if (existingTask.errorSummary?.startsWith(IMMUNE_BLOCK_PREFIX) == true) {
-            recordImmuneApprovalDenied(existingTask, nowMillis)
+    suspend fun approveDelegatedTask(
+        taskId: String,
+        nowMillis: Long = System.currentTimeMillis()
+    ): Boolean {
+        val identity = identityRepository.readCommittedIdentity() ?: return false
+        recoverBeforeMutation(identity)
+        val task = dao.loadDelegatedTask(taskId) ?: return false
+        if (task.errorSummary?.startsWith(OrchestrationOperationFactory.IMMUNE_BLOCK_PREFIX) == true) {
             return false
         }
-        val approvalId = "approval_${StableIdDigest.shortSha256Hex("task_approval", listOf(taskId, nowMillis.toString()))}"
-        val updated = dao.approveDelegatedTask(
-            taskId = taskId,
-            approvalId = approvalId,
-            status = AgentCapabilityPolicy.STATUS_APPROVED,
-            updatedAtMillis = nowMillis
-        ) > 0
-        if (updated) {
-            dao.loadDelegatedTask(taskId)?.let { task ->
-                recordDelegatedTaskDecision(
-                    eventType = EVENT_TASK_APPROVED,
-                    action = "approved",
-                    task = task,
-                    nowMillis = nowMillis,
-                    importance = 100
-                )
+        if (task.status == AgentCapabilityPolicy.STATUS_APPROVED && task.approvalId != null) {
+            return protocol.load(task.approvalId)?.status == CrossDatabaseOperationStatus.COMMITTED
+        }
+        if (
+            task.status != AgentCapabilityPolicy.STATUS_AWAITING_APPROVAL ||
+            task.approvalId != null
+        ) {
+            return false
+        }
+
+        val command = OrchestrationOperationFactory.approve(
+            identity = OrchestrationOperationFactory.identityOf(identity),
+            task = task
+        )
+        return protocol.execute(identity, command).status == CrossDatabaseOperationStatus.COMMITTED
+    }
+
+    suspend fun rejectDelegatedTask(
+        taskId: String,
+        reason: String,
+        nowMillis: Long = System.currentTimeMillis()
+    ): Boolean {
+        val identity = identityRepository.readCommittedIdentity() ?: return false
+        recoverBeforeMutation(identity)
+        val task = dao.loadDelegatedTask(taskId) ?: return false
+
+        if (task.status == AgentCapabilityPolicy.STATUS_REJECTED) {
+            if (task.errorSummary?.startsWith(OrchestrationOperationFactory.IMMUNE_BLOCK_PREFIX) == true) {
+                return false
             }
+            return loadSingleOperation(taskId, OrchestrationProtocolTypes.REJECT)?.status ==
+                CrossDatabaseOperationStatus.COMMITTED
         }
-        return updated
-    }
-
-    suspend fun rejectDelegatedTask(taskId: String, reason: String, nowMillis: Long = System.currentTimeMillis()): Boolean {
-        if (!memoryRepository.hasCompleteBirth()) return false
-        val cleanReason = reason.take(240)
-        val updated = dao.rejectDelegatedTask(
-            taskId = taskId,
-            status = AgentCapabilityPolicy.STATUS_REJECTED,
-            errorSummary = cleanReason,
-            updatedAtMillis = nowMillis,
-            completedAtMillis = nowMillis
-        ) > 0
-        if (updated) {
-            dao.loadDelegatedTask(taskId)?.let { task ->
-                recordDelegatedTaskDecision(
-                    eventType = EVENT_TASK_REJECTED,
-                    action = "rejected",
-                    task = task,
-                    nowMillis = nowMillis,
-                    reason = cleanReason,
-                    importance = 95
-                )
-            }
+        if (
+            task.status != AgentCapabilityPolicy.STATUS_AWAITING_APPROVAL ||
+            task.approvalId != null
+        ) {
+            return false
         }
-        return updated
+
+        val command = OrchestrationOperationFactory.reject(
+            identity = OrchestrationOperationFactory.identityOf(identity),
+            task = task,
+            reason = reason
+        )
+        return protocol.execute(identity, command).status == CrossDatabaseOperationStatus.COMMITTED
     }
 
-    private suspend fun requireCompleteBirth() {
-        require(memoryRepository.hasCompleteBirth()) {
-            "Genesis must have a complete local birth before orchestration can create durable tasks."
+    private suspend fun recoverBeforeMutation(identity: GenesisUltraRuntimeIdentity) {
+        val recovery = protocol.recoverBeforeMutation(
+            identity = identity,
+            ownerType = OrchestrationProtocolTypes.OWNER_TYPE,
+            limit = RECOVERY_LIMIT
+        )
+        if (recovery.blockedCount > 0) {
+            throw CrossDatabaseProtocolErrors.permanent(
+                CrossDatabaseProtocolErrors.OWNER_STATE_CONFLICT
+            )
+        }
+        if (recovery.retryableFailureCount > 0) {
+            throw CrossDatabaseProtocolErrors.retryable(
+                CrossDatabaseProtocolErrors.CANONICAL_APPEND_INTERRUPTED
+            )
         }
     }
 
-    private suspend fun recordDelegatedTaskDecision(
-        eventType: String,
-        action: String,
-        task: DelegatedTaskEntity,
-        nowMillis: Long,
-        reason: String? = null,
-        importance: Int
-    ) {
-        memoryRepository.recordSystemMemoryEvent(
-            eventType = eventType,
-            body = buildDecisionBody(action, task, reason),
-            importance = importance,
-            evidenceJson = buildDecisionEvidenceJson(eventType, action, task, nowMillis, reason)
+    private suspend fun loadSingleOperation(
+        taskId: String,
+        operationType: String
+    ): CrossDatabaseOperationEntity? {
+        val operations = operationDao.loadAnyForOwnerSubjectAndOperationType(
+            ownerType = OrchestrationProtocolTypes.OWNER_TYPE,
+            subjectId = taskId,
+            operationType = operationType
         )
+        if (operations.size > 1) {
+            throw CrossDatabaseProtocolErrors.permanent(
+                CrossDatabaseProtocolErrors.OWNER_STATE_CONFLICT
+            )
+        }
+        return operations.singleOrNull()
     }
 
-    private suspend fun recordImmuneToolBlocked(task: DelegatedTaskEntity, plan: DelegationPlan, nowMillis: Long) {
-        memoryRepository.recordSystemMemoryEvent(
-            eventType = EVENT_IMMUNE_TOOL_BLOCKED,
-            body = "Sistema inmunologico bloqueo delegacion: task_id=${task.taskId}; " +
-                "decision=${plan.immuneDecision}; risk=${task.riskLevel}; reasons=${plan.immuneReasons.joinToString(",").take(180)}; goal=${task.goal.take(180)}",
-            importance = 100,
-            evidenceJson = buildImmuneEvidenceJson(task, plan, nowMillis)
-        )
+    private fun normalizeOptional(value: String?): String? {
+        return value?.let { raw -> Normalizer.normalize(raw, Normalizer.Form.NFC) }
     }
-
-    private suspend fun recordImmuneApprovalDenied(task: DelegatedTaskEntity, nowMillis: Long) {
-        memoryRepository.recordSystemMemoryEvent(
-            eventType = EVENT_IMMUNE_APPROVAL_DENIED,
-            body = "Sistema inmunologico rechazo aprobacion de tarea bloqueada: task_id=${task.taskId}; risk=${task.riskLevel}; goal=${task.goal.take(180)}",
-            importance = 100,
-            evidenceJson = JSONObject()
-                .put("schema", "morimil.immune_policy_decision.v1")
-                .put("event_type", EVENT_IMMUNE_APPROVAL_DENIED)
-                .put("recorded_at_millis", nowMillis)
-                .put("policy", "blocked_tasks_cannot_be_approved")
-                .put("delegated_task", task.toEvidenceJson())
-                .toString()
-        )
-    }
-
-    private fun buildDecisionBody(action: String, task: DelegatedTaskEntity, reason: String?): String {
-        val reasonText = reason?.let { "; reason=$it" }.orEmpty()
-        return "Decision de orquestacion: task_${action}; " +
-            "task_id=${task.taskId}; agent=${task.assignedAgentId}; " +
-            "target_device=${task.targetDeviceId ?: "none"}; risk=${task.riskLevel}; " +
-            "approval_required=${task.approvalRequired}; status=${task.status}; " +
-            "goal=${task.goal}$reasonText"
-    }
-
-    private fun buildDecisionEvidenceJson(
-        eventType: String,
-        action: String,
-        task: DelegatedTaskEntity,
-        nowMillis: Long,
-        reason: String?
-    ): String {
-        return JSONObject()
-            .put("schema", "morimil.orchestration_decision.v1")
-            .put("event_type", eventType)
-            .put("action", action)
-            .put("recorded_at_millis", nowMillis)
-            .put("policy", "decision_equals_memory")
-            .put("reason", nullable(reason))
-            .put("delegated_task", task.toEvidenceJson())
-            .toString()
-    }
-
-    private fun buildImmuneEvidenceJson(task: DelegatedTaskEntity, plan: DelegationPlan, nowMillis: Long): String {
-        return JSONObject()
-            .put("schema", "morimil.immune_policy_decision.v1")
-            .put("event_type", EVENT_IMMUNE_TOOL_BLOCKED)
-            .put("recorded_at_millis", nowMillis)
-            .put("policy", "immune_gate_before_tool_or_agent_execution")
-            .put("decision", plan.immuneDecision)
-            .put("reasons", JSONArray(plan.immuneReasons))
-            .put("matched_signals", JSONArray(plan.immuneMatchedSignals))
-            .put("delegated_task", task.toEvidenceJson())
-            .toString()
-    }
-
-    private fun immuneErrorSummary(plan: DelegationPlan): String {
-        val reasons = plan.immuneReasons.joinToString(separator = ",").ifBlank { plan.immuneDecision }
-        return "$IMMUNE_BLOCK_PREFIX:$reasons".take(240)
-    }
-
-    private fun DelegatedTaskEntity.toEvidenceJson(): JSONObject {
-        return JSONObject()
-            .put("task_id", taskId)
-            .put("created_by", createdBy)
-            .put("assigned_agent_id", assignedAgentId)
-            .put("target_device_id", nullable(targetDeviceId))
-            .put("goal", goal)
-            .put("context_summary", contextSummary)
-            .put("input_refs_json", inputRefsJson)
-            .put("allowed_actions_json", allowedActionsJson)
-            .put("allowed_transports_json", allowedTransportsJson)
-            .put("approval_required", approvalRequired)
-            .put("approval_id", nullable(approvalId))
-            .put("status", status)
-            .put("risk_level", riskLevel)
-            .put("result_summary", nullable(resultSummary))
-            .put("error_summary", nullable(errorSummary))
-            .put("created_at_millis", createdAtMillis)
-            .put("updated_at_millis", updatedAtMillis)
-            .put("completed_at_millis", nullable(completedAtMillis))
-    }
-
-    private fun nullable(value: String?): Any = value ?: JSONObject.NULL
-
-    private fun nullable(value: Long?): Any = value ?: JSONObject.NULL
 
     companion object {
-        private const val EVENT_TASK_PROPOSED = "orchestration.task_proposed"
-        private const val EVENT_TASK_APPROVED = "orchestration.task_approved"
-        private const val EVENT_TASK_REJECTED = "orchestration.task_rejected"
-        private const val EVENT_IMMUNE_TOOL_BLOCKED = "immune.tool_blocked"
-        private const val EVENT_IMMUNE_APPROVAL_DENIED = "immune.approval_denied"
-        private const val IMMUNE_BLOCK_PREFIX = "immune_policy_blocked"
-
-        fun buildTaskId(createdAtMillis: Long, agentId: String, goal: String): String {
-            val suffix = StableIdDigest.shortSha256Hex(
-                namespace = "delegated_task",
-                parts = listOf(createdAtMillis.toString(), agentId, goal)
-            )
-            return "dtask_${createdAtMillis}_$suffix"
-        }
+        private const val RECOVERY_LIMIT = 64
 
         private fun defaultAgents(nowMillis: Long): List<AgentProfileEntity> {
             return listOf(
