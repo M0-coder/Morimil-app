@@ -75,7 +75,8 @@ class CrossDatabaseOperationInventoryContractTest {
                     (MORIMIL_DATABASE_PATTERN.containsMatchIn(source) ||
                         MEMORY_REPOSITORY_PATTERN.containsMatchIn(source) ||
                         PROJECT_VAULT_COMMIT_PORT_PATTERN.containsMatchIn(source) ||
-                        CROSS_DATABASE_COORDINATOR_DEPENDENCY_PATTERN.containsMatchIn(source))
+                        CROSS_DATABASE_COORDINATOR_DEPENDENCY_PATTERN.containsMatchIn(source) ||
+                        CANONICAL_CONSUMER_READ_PORT_PATTERN.containsMatchIn(source))
             }
             .map { it.relativeTo(root).invariantSeparatorsPath }
             .toSet()
@@ -104,6 +105,7 @@ class CrossDatabaseOperationInventoryContractTest {
         val MEMORY_REPOSITORY_PATTERN = Regex("\\bMemoryRepository\\b")
         val PROJECT_VAULT_COMMIT_PORT_PATTERN = Regex("\\bProjectVaultCommitPort\\b")
         val CROSS_DATABASE_COORDINATOR_DEPENDENCY_PATTERN = Regex("\\bprivate\\s+val\\s+protocol\\s*:\\s*CrossDatabaseOperationCoordinator\\b")
+        val CANONICAL_CONSUMER_READ_PORT_PATTERN = Regex("\\bCanonicalConsumerReadPort\\b")
 
         val EXPECTED_OWNER_PATHS = setOf(
             "app/src/main/java/com/morimil/app/data/repository/ProjectVaultRepository.kt",
