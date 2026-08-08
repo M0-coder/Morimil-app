@@ -7,7 +7,7 @@ import org.junit.Test
 
 class CrossDatabaseImplementationOrderContractTest {
     @Test
-    fun implementationOrderRecordsRecallIntegratedAndOrchNext() {
+    fun implementationOrderRecordsRecallAndOrchIntegratedBeforeRest() {
         val inventory = repositoryFile("docs/F3_CROSS_DATABASE_OPERATION_INVENTORY.md").readText()
         val section = inventory.substringAfter("## Implementation order after STOP S5")
 
@@ -16,7 +16,7 @@ class CrossDatabaseImplementationOrderContractTest {
         val agents = section.indexOf("`AGENT-001` through `AGENT-006`")
         val bootstrap = section.indexOf("`BOOT-001`")
         val recall = section.indexOf("`RECALL-001` — integrated canonical derived rebuild")
-        val orch001 = section.indexOf("`ORCH-001` — next bounded convergence work")
+        val orch001 = section.indexOf("`ORCH-001` — integrated canonical identity-gated seed convergence")
         val rest = section.indexOf("`REST-001` and `REST-002`")
 
         listOf(cognitive, orchestration, agents, bootstrap, recall, orch001, rest).forEach { position ->
@@ -30,8 +30,8 @@ class CrossDatabaseImplementationOrderContractTest {
         assertTrue(orch001 < rest)
 
         assertTrue(section.contains("`RECALL-001` — integrated canonical derived rebuild"))
-        assertTrue(section.contains("`ORCH-001` — next bounded convergence work"))
-        assertFalse(section.contains("`RECALL-001` and `ORCH-001` — next bounded convergence work"))
+        assertTrue(section.contains("`ORCH-001` — integrated canonical identity-gated seed convergence"))
+        assertFalse(section.contains("`ORCH-001` — next bounded convergence work"))
         assertFalse(section.contains("`BOOT-001` — next bounded owner"))
     }
 
