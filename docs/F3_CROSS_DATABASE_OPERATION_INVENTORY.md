@@ -49,7 +49,8 @@ Neither the XOP journal nor an owner repository becomes a second identity or can
 | Owner path | Classification | Current disposition |
 | --- | --- | --- |
 | `app/src/main/java/com/morimil/app/data/repository/ProjectVaultRepository.kt` | `PROTECTED_REFERENCE` | Integrated and separate. |
-| `app/src/main/java/com/morimil/app/runtime/GenesisUltraRuntimeBootstrapCoordinator.kt` | `REQUIRES_PROTOCOL` | BOOT-001 open. |
+| `app/src/main/java/com/morimil/app/runtime/GenesisUltraRuntimeBootstrapCoordinator.kt` | `REQUIRES_PROTOCOL` | BOOT-001 open; isolated candidate work does not become protected-main truth before merge. |
+| `app/src/main/java/com/morimil/app/data/repository/RuntimeBootstrapProtocolFinalizer.kt` | `SUPPORT_BOUNDARY` | BOOT-001 candidate support boundary; not independently authoritative and not yet integrated in protected main. |
 | `app/src/main/java/com/morimil/app/data/repository/RecallScheduleRepository.kt` | `DERIVED_REBUILD` | RECALL-001 open. |
 | `app/src/main/java/com/morimil/app/data/repository/RestCycleRepository.kt` | `REQUIRES_PROTOCOL` | REST-001/002 open. |
 | `app/src/main/java/com/morimil/app/data/repository/CognitiveMigrationRepository.kt` | `INTEGRATED_PROTOCOL` | COG-001 through COG-004 integrated. |
@@ -101,7 +102,7 @@ COG, ORCH and AGENT startup/pre-mutation recovery are owner-scoped and cannot co
 
 | ID | Entry point | Disposition |
 | --- | --- | --- |
-| `BOOT-001` | `bootstrap` | `REQUIRES_PROTOCOL`; open. |
+| `BOOT-001` | `bootstrap` | `REQUIRES_PROTOCOL`; open on protected main. An isolated candidate may be validated without changing this protected-main disposition before merge. |
 | `RECALL-001` | `seedFromRecentMemoryIfNeeded` | `DERIVED_REBUILD`; open. |
 | `ORCH-001` | `seedDefaultOrchestrationIfNeeded` | Open convergence/rebuild work; still uses legacy `hasCompleteBirth()` gate. |
 | `REST-001` | `runLocalRestCycleIfDue`, `approvePlannedRestCycle` | `REQUIRES_PROTOCOL`; open. |
