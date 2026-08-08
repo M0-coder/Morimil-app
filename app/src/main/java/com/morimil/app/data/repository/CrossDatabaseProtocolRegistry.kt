@@ -110,3 +110,20 @@ internal object RuntimeBootstrapProtocolTypes {
         closedOperations = CLOSED_REGISTRY
     )
 }
+
+internal object RestCycleProtocolTypes {
+    const val OWNER_TYPE = "rest_cycle"
+    const val EXECUTE = "rest_cycle.execute"
+    const val EXECUTED_EVENT = "rest_cycle.local_consolidation"
+    const val VERSION = 1
+
+    val CLOSED_REGISTRY = mapOf(
+        EXECUTE to EXECUTED_EVENT
+    )
+
+    val REGISTRY = CrossDatabaseProtocolRegistry(
+        ownerType = OWNER_TYPE,
+        version = VERSION,
+        closedOperations = CLOSED_REGISTRY
+    )
+}
