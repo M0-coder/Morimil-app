@@ -11,6 +11,8 @@ import com.morimil.app.data.local.MemoryOrganDatabase
 import com.morimil.app.data.local.OrchestratorDeviceEntity
 import java.text.Normalizer
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import org.json.JSONArray
 
 class AgentOrchestrationRepository internal constructor(
@@ -72,59 +74,66 @@ class AgentOrchestrationRepository internal constructor(
     suspend fun approveDelegatedTask(
         taskId: String,
         nowMillis: Long = System.currentTimeMillis()
-    ): Boolean {
-        val identity = identityRepository.readCommittedIdentity() ?: return false
+    ): Boolean = withTaskDecisionLock(taskId) {
+        require(nowMillis >= 0L) { "orchestration_decision_clock_invalid" }
+        val identity = identityRepository.readCommittedIdentity() ?: return@withTaskDecisionLock false
         recoverBeforeMutation(identity)
-        val task = dao.loadDelegatedTask(taskId) ?: return false
+        val task = dao.loadDelegatedTask(taskId) ?: return@withTaskDecisionLock false
         if (task.errorSummary?.startsWith(OrchestrationOperationFactory.IMMUNE_BLOCK_PREFIX) == true) {
-            return false
+            return@withTaskDecisionLock false
         }
         if (task.status == AgentCapabilityPolicy.STATUS_APPROVED && task.approvalId != null) {
-            return protocol.load(task.approvalId)?.status == CrossDatabaseOperationStatus.COMMITTED
-        }
-        if (
-            task.status != AgentCapabilityPolicy.STATUS_AWAITING_APPROVAL ||
-            task.approvalId != null
-        ) {
-            return false
-        }
-
-        val command = OrchestrationOperationFactory.approve(
-            identity = OrchestrationOperationFactory.identityOf(identity),
-            task = task
-        )
-        return protocol.execute(identity, command).status == CrossDatabaseOperationStatus.COMMITTED
-    }
-
-    suspend fun rejectDelegatedTask(
-        taskId: String,
-        reason: String,
-        nowMillis: Long = System.currentTimeMillis()
-    ): Boolean {
-        val identity = identityRepository.readCommittedIdentity() ?: return false
-        recoverBeforeMutation(identity)
-        val task = dao.loadDelegatedTask(taskId) ?: return false
-
-        if (task.status == AgentCapabilityPolicy.STATUS_REJECTED) {
-            if (task.errorSummary?.startsWith(OrchestrationOperationFactory.IMMUNE_BLOCK_PREFIX) == true) {
-                return false
-            }
-            return loadSingleOperation(taskId, OrchestrationProtocolTypes.REJECT)?.status ==
+            return@withTaskDecisionLock protocol.load(task.approvalId)?.status ==
                 CrossDatabaseOperationStatus.COMMITTED
         }
         if (
             task.status != AgentCapabilityPolicy.STATUS_AWAITING_APPROVAL ||
             task.approvalId != null
         ) {
-            return false
+            return@withTaskDecisionLock false
+        }
+
+        val command = OrchestrationOperationFactory.approve(
+            identity = OrchestrationOperationFactory.identityOf(identity),
+            task = task
+        )
+        protocol.execute(identity, command).status == CrossDatabaseOperationStatus.COMMITTED
+    }
+
+    suspend fun rejectDelegatedTask(
+        taskId: String,
+        reason: String,
+        nowMillis: Long = System.currentTimeMillis()
+    ): Boolean = withTaskDecisionLock(taskId) {
+        require(nowMillis >= 0L) { "orchestration_decision_clock_invalid" }
+        val identity = identityRepository.readCommittedIdentity() ?: return@withTaskDecisionLock false
+        recoverBeforeMutation(identity)
+        val task = dao.loadDelegatedTask(taskId) ?: return@withTaskDecisionLock false
+        val cleanReason = OrchestrationOperationFactory.normalizeReason(reason)
+
+        if (task.status == AgentCapabilityPolicy.STATUS_REJECTED) {
+            if (task.errorSummary?.startsWith(OrchestrationOperationFactory.IMMUNE_BLOCK_PREFIX) == true) {
+                return@withTaskDecisionLock false
+            }
+            if (task.errorSummary != cleanReason) return@withTaskDecisionLock false
+            return@withTaskDecisionLock loadSingleOperation(
+                taskId,
+                OrchestrationProtocolTypes.REJECT
+            )?.status == CrossDatabaseOperationStatus.COMMITTED
+        }
+        if (
+            task.status != AgentCapabilityPolicy.STATUS_AWAITING_APPROVAL ||
+            task.approvalId != null
+        ) {
+            return@withTaskDecisionLock false
         }
 
         val command = OrchestrationOperationFactory.reject(
             identity = OrchestrationOperationFactory.identityOf(identity),
             task = task,
-            reason = reason
+            reason = cleanReason
         )
-        return protocol.execute(identity, command).status == CrossDatabaseOperationStatus.COMMITTED
+        protocol.execute(identity, command).status == CrossDatabaseOperationStatus.COMMITTED
     }
 
     private suspend fun recoverBeforeMutation(identity: GenesisUltraRuntimeIdentity) {
@@ -168,6 +177,16 @@ class AgentOrchestrationRepository internal constructor(
 
     companion object {
         private const val RECOVERY_LIMIT = 64
+        private const val DECISION_MUTEX_STRIPES = 64
+        private val DECISION_MUTEXES = Array(DECISION_MUTEX_STRIPES) { Mutex() }
+
+        private suspend fun <T> withTaskDecisionLock(
+            taskId: String,
+            block: suspend () -> T
+        ): T {
+            val index = (taskId.hashCode() and Int.MAX_VALUE) % DECISION_MUTEX_STRIPES
+            return DECISION_MUTEXES[index].withLock { block() }
+        }
 
         private fun defaultAgents(nowMillis: Long): List<AgentProfileEntity> {
             return listOf(
