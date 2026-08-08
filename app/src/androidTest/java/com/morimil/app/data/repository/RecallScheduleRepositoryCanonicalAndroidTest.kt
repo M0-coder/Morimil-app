@@ -39,18 +39,25 @@ class RecallScheduleRepositoryCanonicalAndroidTest {
     }
 
     @Test
-    fun canonicalCandidateCreatesDerivedScheduleOnceWithoutLegacyIdentityFallback() = runBlocking {
+    fun canonicalCandidateCreatesDerivedScheduleOnceAndReplayAfterRepositoryRestartIsIdempotent() = runBlocking {
         val db = openDatabase()
         val now = 1_800_000_000_000L
         val batch = batch(candidate("event-canonical-1", sequence = 7L))
-        val repository = RecallScheduleRepository(
+        val canonicalReadPort = FakeCanonicalReadPort(CanonicalReadResult.Ready(batch))
+        val firstProcess = RecallScheduleRepository(
             organDatabase = db,
-            canonicalReadPort = FakeCanonicalReadPort(CanonicalReadResult.Ready(batch)),
+            canonicalReadPort = canonicalReadPort,
             nowMillis = { now }
         )
 
-        assertEquals(1, repository.seedFromRecentMemoryIfNeeded())
-        assertEquals(0, repository.seedFromRecentMemoryIfNeeded())
+        assertEquals(1, firstProcess.seedFromRecentMemoryIfNeeded())
+
+        val restartedProcess = RecallScheduleRepository(
+            organDatabase = db,
+            canonicalReadPort = canonicalReadPort,
+            nowMillis = { now + 5_000L }
+        )
+        assertEquals(0, restartedProcess.seedFromRecentMemoryIfNeeded())
 
         val recalls = db.memoryOrganDao().loadActiveRecallSchedulesForReconciliation()
         assertEquals(1, recalls.size)
@@ -65,7 +72,7 @@ class RecallScheduleRepositoryCanonicalAndroidTest {
         val link = links.single()
         assertEquals(INSTANCE_ID, link.instanceId)
         assertEquals(BIRTH_ROOT_HASH, link.genesisCoreHash)
-        assertEquals("recall:event-canonical-1", link.sourceId)
+        assertEquals("recall:${recall.recallId}", link.sourceId)
         assertEquals(RecallScheduleRepository.RECALL_NODE_TYPE, link.sourceType)
         assertEquals("event-canonical-1", link.targetId)
         assertEquals(RecallScheduleRepository.CANONICAL_MEMORY_EVENT_NODE_TYPE, link.targetType)
