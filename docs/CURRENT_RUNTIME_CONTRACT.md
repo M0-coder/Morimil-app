@@ -1,8 +1,8 @@
 # Document status: CURRENT
 
-> **Content baseline SHA:** `d577a75290d70f423f6e83bf237a8a453f3a534e`.
+> **Content baseline SHA:** `3a995232ce2a515e1ca9b9151f77e63805bad9d3`.
 >
-> **Content baseline parent SHA:** `9da342f2c147105ea882076f4ebc6ab5f5494190`.
+> **Content baseline parent SHA:** `5918b64ec83e69cbb3d9718943b25d1e1299d698`.
 >
 > **Current main resolution:** external Git ref `refs/heads/main`.
 >
@@ -14,24 +14,28 @@
 >
 > **AGENT audited source head:** `74e072b911db692041d3716af9d0511b83ad70b7`.
 >
-> **PR #172:** merged by squash for ORCH-002 through ORCH-004.
->
-> **PR #173:** merged by squash for post-ORCH CURRENT reconciliation.
+> **BOOT audited source head:** `c7710635fa172108cce87b3f7a76d6e037095864`.
 >
 > **PR #174:** merged by squash for AGENT-001 through AGENT-006.
+>
+> **PR #175:** merged by squash for post-AGENT CURRENT reconciliation.
+>
+> **PR #176:** merged by squash for BOOT-001.
 >
 > A versioned CURRENT document records a known content baseline. The moving SHA of protected `main` is resolved externally and is not predicted by the commit that contains this document.
 
 # Current runtime contract
 
 ```text
-CONTENT_BASELINE_SHA=d577a75290d70f423f6e83bf237a8a453f3a534e
-CONTENT_BASELINE_PARENT_SHA=9da342f2c147105ea882076f4ebc6ab5f5494190
+CONTENT_BASELINE_SHA=3a995232ce2a515e1ca9b9151f77e63805bad9d3
+CONTENT_BASELINE_PARENT_SHA=5918b64ec83e69cbb3d9718943b25d1e1299d698
 CURRENT_MAIN_RESOLUTION=EXTERNAL_GIT_REF
 MERGE_SHA_EVIDENCE=EXTERNAL
 PR_172=MERGED_BY_SQUASH_HISTORICAL
 PR_173=MERGED_BY_SQUASH_HISTORICAL
 PR_174=MERGED_BY_SQUASH_HISTORICAL
+PR_175=MERGED_BY_SQUASH_HISTORICAL
+PR_176=MERGED_BY_SQUASH_HISTORICAL
 ```
 
 ## Identity and Body boundary
@@ -42,8 +46,9 @@ Morimil is the continuous personal Instance. `Morimil-app` is the current native
 - the Guardian guides, witnesses, and safeguards continuity without ownership;
 - the Guardian does not define Morimil's identity, will, name, or right to continue;
 - one Body may hold the active-writer role;
-- Body succession, signed export, restore, and writer transfer are not implemented;
-- reasoning output, a provider, a database, Android, GitHub, an agent worker, or a Guardian cannot create a second identity authority.
+- writer authorization is not ownership;
+- Body succession, signed export, restore, writer transfer and predecessor revocation are not implemented;
+- reasoning output, a provider, a database, Android, GitHub, an agent worker, a BOOT projection, or a Guardian cannot create a second identity authority.
 
 `MORIMIL_OPERATIONAL_BIRTH=NOT_OCCURRED` remains unchanged.
 
@@ -51,7 +56,7 @@ Morimil is the continuous personal Instance. `Morimil-app` is the current native
 
 | Store | Version | Responsibility |
 | --- | ---: | --- |
-| `MorimilDatabase` | `15` | Genesis Ultra birth, canonical identity, canonical memory lineage, reasoning transcript. |
+| `MorimilDatabase` | `15` | Genesis Ultra birth, canonical identity, canonical memory lineage, reasoning transcript and rebuildable runtime workspace/project projection. |
 | `MemoryOrganDatabase` | `9` | Derived organs, projects, agents, delegated tasks, migration records, and `cross_database_operations`. |
 
 Android backup and current OS-managed D2D transfer remain denied by explicit extraction/full-backup rules. Production release signing fails closed when signing material is absent.
@@ -75,6 +80,7 @@ Integrated bounded write adapters include:
 | `CanonicalCognitiveMigrationCommitPort` | Deterministic COG exact canonical ensure. |
 | `CanonicalOrchestrationCommitPort` | Deterministic ORCH-002/003/004 exact canonical ensure. |
 | `CanonicalAgentLifecycleCommitPort` | Deterministic AGENT-001..006 exact canonical ensure. |
+| `CanonicalRuntimeBootstrapCommitPort` | Deterministic BOOT-001 exact canonical ensure. |
 | `ConversationMemoryPromotionCoordinator` | Explicit transcript promotion boundary. |
 | `LegacyMemoryConvergenceCoordinator` | One-way verified legacy import boundary. |
 
@@ -82,7 +88,7 @@ No specialized port becomes an identity source or second canonical-memory author
 
 ## Startup and recovery
 
-After committed identity verification, startup runs owner-scoped recovery before ordinary mutation for the common-protocol owners in this order:
+After committed identity verification, startup runs bounded recovery/convergence in this order:
 
 ```text
 COG recovery
@@ -90,10 +96,12 @@ COG recovery
 -> AGENT recovery
 -> remaining legacy convergence
 -> ProjectVault recovery
--> BOOT-001 current path
+-> BOOT-001 bootstrap/recovery
 ```
 
-Each coordinator loads only its own `ownerType`, verifies Instance, writer Body and writer epoch, ensures exact canonical effects, reloads after lost CAS, rejects stale blocking, and finalizes owner state plus XOP result atomically. COG, ORCH, and AGENT recovery cannot consume one another's journal rows.
+COG, ORCH and AGENT coordinators load only their own `ownerType`, verify Instance, writer Body and writer epoch, ensure exact canonical effects, reload after lost CAS, reject stale blocking, and finalize owner state plus XOP result atomically.
+
+BOOT-001 recovery is owner-scoped inside `GenesisUltraRuntimeBootstrapCoordinator.bootstrap(identity)` and intentionally runs only after legacy memory convergence and ProjectVault recovery are known durable. BOOT cannot consume COG, ORCH or AGENT journal rows.
 
 If a pending legacy `cog_001.payload.v1` operation exists, activation blocks before COG recovery; that quarantine remains COG-specific. The legacy payload cannot be silently finalized under current COG rules.
 
@@ -109,39 +117,48 @@ Protected main provides deterministic task/operation/event identities, exact can
 
 ## Integrated AGENT-001 through AGENT-006
 
-Protected main now also provides the common XOP protocol for the agent lifecycle owner:
-
-- `AGENT-001 createAgentForVault`: semantic/content-addressed agent identity, exact retry reuse only for a matching non-terminal worker, canonical receipt before visible owner insertion;
-- `AGENT-002 assignTaskToAgent`: deterministic task identity chained from semantic predecessor state, exact retry reuse of the already committed matching task;
-- `AGENT-003 submitAgentResult`: accepts only the agent's current delegated task after canonical ORCH approval (`status=approved` and non-null `approvalId`), then finalizes result and lifecycle state atomically;
-- `AGENT-004 evaluateAgent`: binds normalized status, bounded score, note and exact semantic pre-state;
-- `AGENT-005 retireAgent/promoteAgent`: separate durable operation types, serialized by `agentInstanceId`, incompatible terminal retries fail closed;
-- `AGENT-006 quarantineAgent`: quarantines the failed worker and creates its deterministic replacement in the same local finalization after one canonical receipt.
+Protected main provides the common XOP protocol for the agent lifecycle owner. AGENT-003 accepts only the agent's current delegated task after canonical ORCH approval (`status=approved` and non-null `approvalId`). AGENT-006 quarantines the failed worker and creates its deterministic replacement in the same local finalization after one canonical receipt.
 
 Agent instances are bounded workers inside ProjectVault. `agentInstanceId != instanceId`; an agent worker does not become Morimil, own Morimil, or gain independent canonical-memory authority.
 
-The lifecycle owner no longer calls `MemoryRepository.recordSystemMemoryEvent` or writes `memory_events`. Wall clock remains metadata only and does not participate in AGENT operation/task/agent/event identity.
+The lifecycle owner no longer calls `MemoryRepository.recordSystemMemoryEvent` or writes `memory_events`. Wall clock remains metadata only and does not participate in AGENT semantic identity.
 
-The old `project.agent_created` + `project.agent_briefed` pair is represented by one canonical `agent_lifecycle.agent_created` event with briefing evidence. This is an observability shape change, not an authority transfer.
+## Integrated BOOT-001
+
+Protected main now provides a durable runtime-bootstrap XOP rather than independent unjournaled writes across the two encrypted Room databases.
+
+BOOT-001:
+
+- stages deterministic `runtime_bootstrap.initialize` intent scoped to canonical `instanceId`, current active `bodyId` and writer key epoch;
+- requires committed birth, `instanceId != bodyId`, `guardian_role=custodian_witness`, `ownership_conferred=false`, and `active_writer` Body status;
+- obtains and persists an exact canonical `runtime.bootstrap_initialized` receipt before new BOOT projection state;
+- prepares the `MorimilDatabase` workspace/project projection idempotently;
+- seeds default agent/orchestrator projections only when their MemoryOrgan tables are empty, preserving pre-existing state for ORCH-001 convergence;
+- completes MemoryOrgan owner finalization plus XOP `COMMITTED` in the owner transaction;
+- recovers safely after process death between the MorimilDatabase preparation and MemoryOrgan finalization.
+
+The BOOT operation identity deliberately includes Body/epoch while workspace/project identity remains Instance-stable. A future F5 successor Body can therefore rebuild projections for the same `instanceId` under a new writer epoch without making the previous Body the owner of the Instance. BOOT does not itself implement succession, revocation, export or restore.
+
+No BOOT compatibility rows are created in `genesis_core`, `local_instance_identity`, or `memory_events`.
 
 ## ProjectVault and owner separation
 
-ProjectVault remains a separate protected protocol. COG, ORCH, and AGENT use the common journal without absorbing ProjectVault authority.
+ProjectVault remains a separate protected protocol. COG, ORCH, AGENT and BOOT use the common journal without absorbing ProjectVault authority.
 
 Remaining F3.2 work is:
 
 ```text
-BOOT_001=OPEN
 RECALL_001=OPEN
 ORCH_001=OPEN
 REST_001_002=OPEN
+HEALTH_CONVERGENCE=OPEN
 ```
 
 F3.3 irreversible legacy removal remains open and must not begin until every F3.2 owner has an explicit disposition and separate authorization.
 
 ## F1 convergence and legacy quarantine
 
-F1-A is integrated. Issue `#86` remains open because bootstrap, recall, RestCycle, health, ORCH-001, and final legacy retirement are not fully converged.
+F1-A is integrated. Issue `#86` remains open because recall, RestCycle, health, ORCH-001, and final legacy retirement are not fully converged. BOOT-001 is now converged without restoring legacy authority.
 
 Compatibility writes remain forbidden. No convergence step may create or reconstruct authority rows in:
 
@@ -168,10 +185,10 @@ Auxiliary providers return unverified advisory output and cannot become Morimil'
 
 | Phase | Evidence-backed state |
 | --- | --- |
-| F1 | F1-A integrated; `#86` remains open for downstream convergence. |
+| F1 | F1-A and BOOT convergence integrated; `#86` remains open for downstream convergence. |
 | F2 | Closed for canonical verified memory and bounded promotion/convergence. |
 | F3.1 | ProjectVault protected outbox/recovery integrated. |
-| F3.2 | Closed only for ProjectVault, COG-001..004, ORCH-002..004, and AGENT-001..006. BOOT, RECALL, ORCH-001, and REST remain separately open. |
+| F3.2 | Closed only for ProjectVault, COG-001..004, ORCH-002..004, AGENT-001..006, and BOOT-001. RECALL, ORCH-001, REST and health convergence remain separately open. |
 | F3.3 | Open. Irreversible legacy removal has not begun. |
 | F4 | Open: sovereign durable continuation. |
 | F5 | Open: signed export, dry-run restore, Body succession, writer transfer/revocation. |
@@ -180,12 +197,13 @@ Auxiliary providers return unverified advisory output and cannot become Morimil'
 
 ## Validation and residual hardening
 
-AGENT exact-head validation before PR #174 merge recorded 800/800 JVM tests, API30/API35 managed-device success, QA-7 JVM/instrumented ratchets, Reference Checks, CodeQL, SBOM, and independent artifact-digest verification.
+BOOT exact-head validation before PR #176 merge recorded 820/820 JVM tests, API30/API35 managed-device success, QA-7 JVM/instrumented ratchets, Reference Checks, CodeQL, SBOM, and independently matched artifact digests. BOOT-specific managed evidence covered exact canonical receipt reuse/append+reread, clean idempotent bootstrap, preservation of pre-existing orchestration state, and database-reopen recovery from `PENDING_LOCAL_COMMIT` after the MorimilDatabase preparation.
 
 Residual hardening remains visible:
 
-- AGENT-specific mutation testing is not established; the bounded PIT pilot still targets `GenesisManifestVerifierCore`;
-- `AgentInstanceLifecycleRepository.kt` has zero direct instrumented line coverage even though protocol/finalizer kill-reopen coverage exists;
+- BOOT-specific mutation testing is not established; the bounded PIT pilot still targets `GenesisManifestVerifierCore`;
+- AGENT-specific mutation testing is not established;
+- `AgentInstanceLifecycleRepository.kt` still lacks direct Android instrumented line coverage;
 - AGENT process-wide agent/vault mutexes assume the current single-process Android architecture; multiprocess would require durable cross-process serialization;
 - ORCH-specific mutation testing remains unestablished;
 - continuous physical ARM64 inference remains outside emulator CI.
