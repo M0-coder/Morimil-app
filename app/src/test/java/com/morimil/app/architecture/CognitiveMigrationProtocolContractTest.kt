@@ -245,9 +245,9 @@ class CognitiveMigrationProtocolContractTest {
             source("data/repository/CrossDatabaseProtocolRegistry.kt").readText()
         val dao = source("data/local/CrossDatabaseOperationDao.kt").readText()
 
-        assertTrue(runtimeContract.contains("zero non-committed"))
-        assertTrue(runtimeContract.contains("cog_001.payload.v1"))
-        assertTrue(runtimeContract.contains("blocks"))
+        assertTrue(runtimeContract.contains("pending legacy `cog_001.payload.v1` operation exists"))
+        assertTrue(runtimeContract.contains("blocks before COG recovery"))
+        assertTrue(runtimeContract.contains("quarantine remains COG-specific"))
         assertTrue(dao.contains("countNonTerminalByInstanceOwnerAndPayloadSchema"))
         assertTrue(dao.contains("status != 'COMMITTED'"))
         assertTrue(registry.contains("COGNITIVE_MIGRATION_PROTOCOL_REGISTRY"))
