@@ -13,9 +13,11 @@ import com.morimil.app.data.genesis.ultra.GenesisUltraRuntimeGuardian
 import com.morimil.app.data.genesis.ultra.GenesisUltraRuntimeIdentity
 import com.morimil.app.data.genesis.ultra.GenesisUltraRuntimePolicy
 import com.morimil.app.data.genesis.ultra.GenesisUltraRuntimeVerifiedSeed
+import com.morimil.app.data.local.AgentProfileEntity
 import com.morimil.app.data.local.CrossDatabaseOperationStatus
 import com.morimil.app.data.local.MemoryOrganDatabase
 import com.morimil.app.data.local.MorimilDatabase
+import com.morimil.app.data.local.OrchestratorDeviceEntity
 import com.morimil.app.data.repository.CrossDatabaseCanonicalCommand
 import com.morimil.app.data.repository.CrossDatabaseCanonicalEnsurePort
 import com.morimil.app.data.repository.CrossDatabaseCanonicalReceipt
@@ -109,6 +111,67 @@ class GenesisUltraRuntimeBootstrapCoordinatorAndroidTest {
         assertTrue(second.legacyCounts.isEmpty)
         assertEquals(1, canonicalEnsureCalls)
         assertEquals(CrossDatabaseOperationStatus.COMMITTED, operation.status)
+    }
+
+    @Test
+    fun existingOrchestrationSeedIsPreservedForSeparateOrch001Convergence() = runBlocking {
+        val legacyAgent = AgentProfileEntity(
+            agentId = "legacy_agent",
+            displayName = "Legacy Agent",
+            role = "legacy_role",
+            description = "Legacy seed that BOOT must preserve for ORCH-001 convergence.",
+            capabilitySetJson = "[]",
+            allowedToolsetJson = "[]",
+            allowedTransportsJson = "[]",
+            riskLevel = "low",
+            requiresHumanApproval = true,
+            status = "active",
+            createdAtMillis = 1_111L,
+            updatedAtMillis = 1_222L
+        )
+        val legacyDevice = OrchestratorDeviceEntity(
+            deviceId = "legacy_android_body",
+            displayName = "Legacy Android Body",
+            deviceType = "android_phone",
+            ownershipScope = "user_owned",
+            trustedOwner = "legacy_owner_metadata",
+            allowedTransportsJson = "[]",
+            authorizationStatus = "authorized",
+            authorizationRequired = false,
+            riskLevel = "low",
+            pairingState = "paired_local",
+            lastSeenAtMillis = 1_333L,
+            createdAtMillis = 1_111L,
+            updatedAtMillis = 1_333L
+        )
+        val organDao = organDatabase.memoryOrganDao()
+        organDao.insertAgentProfiles(listOf(legacyAgent))
+        organDao.insertOrchestratorDevices(listOf(legacyDevice))
+
+        val identity = validIdentity()
+        var canonicalEnsureCalls = 0
+        val coordinator = GenesisUltraRuntimeBootstrapCoordinator.production(
+            memoryDatabase = memoryDatabase,
+            organDatabase = organDatabase,
+            protocol = bootstrapProtocol {
+                canonicalEnsureCalls += 1
+                receipt(it, sequence = 302L)
+            }
+        )
+
+        val report = coordinator.bootstrap(identity, nowMillis = 30_000L)
+        val agents = organDao.observeAgentProfiles().first()
+        val devices = organDao.observeOrchestratorDevices().first()
+
+        assertEquals(1, agents.size)
+        assertEquals(legacyAgent, agents.single())
+        assertEquals(1, devices.size)
+        assertEquals(legacyDevice, devices.single())
+        assertEquals(1, report.agentProfileCount)
+        assertEquals(1, report.orchestratorDeviceCount)
+        assertEquals(1, canonicalEnsureCalls)
+        assertEquals(0, memoryDatabase.memoryDao().countLocalIdentity())
+        assertEquals(0, memoryDatabase.memoryDao().countGenesisCore())
     }
 
     private fun bootstrapProtocol(
