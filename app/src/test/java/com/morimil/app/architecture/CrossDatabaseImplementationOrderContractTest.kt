@@ -7,12 +7,10 @@ import org.junit.Test
 
 class CrossDatabaseImplementationOrderContractTest {
     @Test
-    fun implementationOrderStartsBoundedAndLeavesRestCycleLast() {
-        val inventory = repositoryFile(
-            "docs/F3_CROSS_DATABASE_OPERATION_INVENTORY.md"
-        ).readText()
-
+    fun implementationOrderRecordsThreeIntegratedOwnersAndBootNext() {
+        val inventory = repositoryFile("docs/F3_CROSS_DATABASE_OPERATION_INVENTORY.md").readText()
         val section = inventory.substringAfter("## Implementation order after STOP S5")
+
         val cognitive = section.indexOf("`COG-001` through `COG-004`")
         val orchestration = section.indexOf("`ORCH-002` through `ORCH-004`")
         val agents = section.indexOf("`AGENT-001` through `AGENT-006`")
@@ -23,39 +21,30 @@ class CrossDatabaseImplementationOrderContractTest {
         listOf(cognitive, orchestration, agents, bootstrap, recall, rest).forEach { position ->
             assertTrue("F3.2 implementation order entry is missing", position >= 0)
         }
-        assertTrue("Cognitive migration must be the first bounded protocol owner", cognitive < orchestration)
-        assertTrue("Orchestration must precede agent lifecycle migration", orchestration < agents)
-        assertTrue("Agent lifecycle must precede bootstrap migration", agents < bootstrap)
-        assertTrue("Bootstrap must precede canonical rebuild projections", bootstrap < recall)
-        assertTrue("RestCycle must remain the final and widest workflow migration", recall < rest)
+        assertTrue(cognitive < orchestration)
+        assertTrue(orchestration < agents)
+        assertTrue(agents < bootstrap)
+        assertTrue(bootstrap < recall)
+        assertTrue(recall < rest)
+
+        assertTrue(section.contains("integrated first common-protocol owner"))
+        assertTrue(section.contains("integrated second common-protocol owner"))
+        assertTrue(section.contains("integrated third common-protocol owner"))
+        assertTrue(section.contains("`BOOT-001` — next bounded owner"))
+        assertFalse(section.contains("`AGENT-001` through `AGENT-006` — next bounded owner family"))
     }
 
     @Test
-    fun inventorySeparatesHistoricalAuditProtectedMainAndDraftCandidate() {
-        val inventory = repositoryFile(
-            "docs/F3_CROSS_DATABASE_OPERATION_INVENTORY.md"
-        ).readText()
-
-        assertTrue(
-            inventory.contains(
-                "Historical audited baseline: `main@612d91aef131f367140ffb87a60a19ef49adcbc8`"
-            )
-        )
-        assertTrue(
-            inventory.contains(
-                "Current protected main: `main@7e98d3345d7cc3fbf1983babd35b61ff5c523208`"
-            )
-        )
-        assertTrue(inventory.contains("draft PR `#149`"))
-        assertTrue(inventory.contains("`STOP_S5=CLOSED`"))
-        assertTrue(inventory.contains("`MERGE_AUTHORIZED=false`"))
-        assertTrue(inventory.contains("The candidate does not close #88"))
-        assertFalse(inventory.contains("STOP S5 remains open through #123 and #124"))
+    fun inventoryKeepsMovingMainExternalAndF33Separate() {
+        val inventory = repositoryFile("docs/F3_CROSS_DATABASE_OPERATION_INVENTORY.md").readText()
+        assertTrue(inventory.contains("CURRENT_MAIN_RESOLUTION=EXTERNAL_GIT_REF"))
+        assertTrue(inventory.contains("MERGE_SHA_EVIDENCE=EXTERNAL"))
+        assertTrue(inventory.contains("STOP_S5=CLOSED"))
+        assertTrue(inventory.contains("F3.3 only after every F3.2 owner has a recorded disposition and separate authorization"))
+        assertFalse(inventory.contains("MORIMIL_OPERATIONAL_BIRTH=OCCURRED"))
     }
 
-    private fun repositoryFile(relativePath: String): File {
-        return sequenceOf(File(relativePath), File("../$relativePath"))
-            .firstOrNull(File::isFile)
+    private fun repositoryFile(relativePath: String): File =
+        sequenceOf(File(relativePath), File("../$relativePath")).firstOrNull(File::isFile)
             ?: error("Repository file not found: $relativePath")
-    }
 }
