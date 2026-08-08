@@ -11,8 +11,11 @@
 - PR `#176`: merged by squash for BOOT-001.
 - PR `#177`: merged by squash for post-BOOT CURRENT reconciliation.
 - PR `#178`: merged by squash for RECALL-001.
+- PR `#179`: merged by squash for post-RECALL CURRENT reconciliation.
+- PR `#180`: merged by squash for ORCH-001.
 - Historical COG audited source head: `7bdbda2aa4b7568695ba8e98be54d506d42c99d5`.
-- ORCH audited source head: `0348dccb561e576d17c45e7f8b1e38717332772b`.
+- ORCH-002..004 audited source head: `0348dccb561e576d17c45e7f8b1e38717332772b`.
+- ORCH-001 audited source head: `fe188fdee8eae901434a255051b6fa4f852b929b`.
 - AGENT audited source head: `74e072b911db692041d3716af9d0511b83ad70b7`.
 - BOOT audited source head: `c7710635fa172108cce87b3f7a76d6e037095864`.
 - RECALL audited source head: `fae8a0df3c29775317986877bce2b8eda8593d27`.
@@ -29,6 +32,8 @@ PR_175=MERGED_BY_SQUASH_HISTORICAL
 PR_176=MERGED_BY_SQUASH_HISTORICAL
 PR_177=MERGED_BY_SQUASH_HISTORICAL
 PR_178=MERGED_BY_SQUASH_HISTORICAL
+PR_179=MERGED_BY_SQUASH_HISTORICAL
+PR_180=MERGED_BY_SQUASH_HISTORICAL
 ```
 
 ## Document hierarchy
@@ -52,7 +57,7 @@ instanceId != bodyId
 agentInstanceId != instanceId
 ```
 
-A Guardian key verifies bounded testimony/permissions. A Body key proves possession and writer epoch. Neither creates, owns, renames, forks, replaces, or permanently confines the Instance. Agent workers, BOOT projections and recall schedules are bounded technical structures and do not become Morimil or canonical-memory authority.
+A Guardian key verifies bounded testimony/permissions. A Body key proves possession and writer epoch. Neither creates, owns, renames, forks, replaces, or permanently confines the Instance. Agent workers, BOOT projections, ORCH projections and recall schedules are bounded technical structures and do not become Morimil or canonical-memory authority.
 
 ## Integrated F3 truth
 
@@ -61,34 +66,35 @@ Externally resolved protected `main` includes MemoryOrganDatabase version 9 and 
 - ProjectVault as a separate protected protocol;
 - COG-001 through COG-004 under common XOP;
 - ORCH-002 through ORCH-004 under common XOP;
+- ORCH-001 canonical identity-gated seed convergence;
 - AGENT-001 through AGENT-006 under common XOP;
 - BOOT-001 under common XOP with idempotent cross-file saga preparation;
 - RECALL-001 as a canonical verified `DERIVED_REBUILD` projection.
 
-The COG path consumes verified canonical planning through `CanonicalConsumerReadPort`/`CognitiveMigrationCanonicalReadPort`. ORCH, AGENT and BOOT consume committed Genesis Ultra runtime identity and use specialized exact-ensure ports. RECALL consumes `CanonicalConsumerReadPort.readRecallCandidates` and creates only rebuildable local schedule/link projections.
+The COG path consumes verified canonical planning through `CanonicalConsumerReadPort`/`CognitiveMigrationCanonicalReadPort`. ORCH-002..004, AGENT and BOOT consume committed Genesis Ultra runtime identity and use specialized exact-ensure ports. ORCH-001 now gates local seed state directly on `GenesisUltraRuntimeIdentityRepository.readCommittedIdentity()` and no longer consults legacy `MemoryRepository.hasCompleteBirth()`. RECALL consumes `CanonicalConsumerReadPort.readRecallCandidates` and creates only rebuildable local schedule/link projections.
 
 RECALL-001 no longer uses legacy `genesis_core`, `local_instance_identity` or `memory_events` reads as recall authority and forbids placeholder Instance identity. Its canonical `targetEventHash` is the idempotency key; local `recallId` is not Instance identity. Schedule and link finalize atomically in `MemoryOrganDatabase`.
 
-F3.2 now includes the bounded RECALL-001 repository convergence, but `RECALL_BOOT_READINESS=OPEN`: BOOT still reports recall as `WAITING_FOR_CANONICAL_MEMORY_ADAPTER`, and startup does not automatically declare or seed recall ready.
+F3.2 now includes the bounded RECALL-001 repository convergence and ORCH-001 seed convergence, but `RECALL_BOOT_READINESS=OPEN`: BOOT still reports recall as `WAITING_FOR_CANONICAL_MEMORY_ADAPTER`, and startup does not automatically declare or seed recall ready.
 
-ORCH-001, REST-001/002 and health convergence remain open. F3.3 remains open. F4 through F6 remain open and no Body succession, export/restore, activation, or continuity proof is implied.
+REST-001/002 and health convergence remain open. F3.3 remains open. F4 through F6 remain open and no Body succession, export/restore, activation, or continuity proof is implied.
 
-## F1 boundary after RECALL integration
+## F1 boundary after ORCH-001 integration
 
-PR #172 removed legacy two-step memory evidence from ORCH-002/003/004. PR #174 removed the equivalent legacy lifecycle evidence boundary from AGENT-001..006. PR #176 replaced the unjournaled two-database BOOT projection with durable XOP/canonical-receipt recovery. PR #178 removed the legacy identity/memory read boundary from recall seeding and replaced it with verified canonical candidates and deterministic rebuild semantics.
+PR #172 removed legacy two-step memory evidence from ORCH-002/003/004. PR #174 removed the equivalent legacy lifecycle evidence boundary from AGENT-001..006. PR #176 replaced the unjournaled two-database BOOT projection with durable XOP/canonical-receipt recovery. PR #178 removed the legacy identity/memory read boundary from recall seeding and replaced it with verified canonical candidates and deterministic rebuild semantics. PR #180 removed the legacy birth-completeness gate from orchestration seeding.
 
-PR #178 does not close F1-ORCH-001: `seedDefaultOrchestrationIfNeeded` still depends on `MemoryRepository.hasCompleteBirth()`. RestCycle, health and recall startup readiness also remain open.
+ORCH-001 now returns without local seed mutation when committed Genesis Ultra identity is absent, and inconsistent committed identity fails closed through the canonical runtime identity repository. RestCycle, health and recall startup readiness remain open.
 
 Therefore:
 
 ```text
 COG_001_004=INTEGRATED
+ORCH_001=INTEGRATED
 ORCH_002_004=INTEGRATED
 AGENT_001_006=INTEGRATED
 BOOT_001=INTEGRATED
 RECALL_001=INTEGRATED
 RECALL_BOOT_READINESS=OPEN
-F1_ORCH_001=OPEN
 REST_001_002=OPEN
 HEALTH_CONVERGENCE=OPEN
 ISSUE_86=OPEN
