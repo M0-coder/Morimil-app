@@ -1,14 +1,25 @@
-# Document status: PROPOSAL
+# Document status: HISTORICAL
 
 # F1 / F3 — RECALL-001 canonical derived rebuild
 
-Baseline: `main@bdbb5b2a040b728508948cd3cfbd8807b40a12f6`.
+Historical implementation baseline: `main@bdbb5b2a040b728508948cd3cfbd8807b40a12f6`.
 
-This document records candidate implementation evidence only. It does not change CURRENT truth until a separately authorized merge is completed and reconciled.
+Validated source head: `fae8a0df3c29775317986877bce2b8eda8593d27`.
 
-## Scope
+Integrated by squash through PR `#178` as commit `6e0444b698bdc5c557ec3ea83f48d7980da1a36b`.
 
-`RecallScheduleRepository.seedFromRecentMemoryIfNeeded` moves from legacy runtime reads to the shared verified canonical consumer boundary.
+```text
+RECALL_001=INTEGRATED_IN_MAIN
+RECALL_001_TESTED=DEMONSTRATED_BY_PR_INTEGRATION_REF_CI
+RECALL_001_MERGED=TRUE
+INTEGRATION_COMMIT=6e0444b698bdc5c557ec3ea83f48d7980da1a36b
+```
+
+This file is retained as historical implementation evidence. CURRENT truth is governed by `docs/CURRENT_RUNTIME_CONTRACT.md`, `docs/F1_CANONICAL_CONSUMER_CONVERGENCE.md`, and `docs/F3_CROSS_DATABASE_OPERATION_INVENTORY.md`.
+
+## Integrated scope
+
+`RecallScheduleRepository.seedFromRecentMemoryIfNeeded` moved from legacy runtime reads to the shared verified canonical consumer boundary.
 
 ```text
 OWNER=RECALL-001
@@ -52,26 +63,12 @@ A recall schedule may be created only from a verified canonical recall candidate
 
 ## Legacy reconciliation boundary
 
-`MemoryOrganReconciliation` must not invalidate canonical recall projections by comparing their target hashes against the legacy `memory_events` hash set. Canonical recall sources use `source=canonical_memory_event`; legacy recalls retain legacy orphan checking until their own retirement.
+`MemoryOrganReconciliation` does not invalidate canonical recall projections by comparing their target hashes against the legacy `memory_events` hash set. Canonical recall sources use `source=canonical_memory_event`; legacy recalls retain legacy orphan checking until their own retirement.
 
-This does not converge RestCycle, health, ORCH-001, or F3.3.
+This integration does not converge RestCycle, health, ORCH-001, or F3.3.
 
-## Required evidence before merge consideration
+## Validation evidence at integration
 
-```text
-architecture=PASS
-compile=PASS
-unit_tests=PASS
-instrumented_API30=PASS
-instrumented_API35=PASS
-coverage_ratchet=PASS
-static_analysis=PASS
-CI_required_workflows=PASS
-security_fail_closed=PASS
-reproducibility_no_regression=PASS
-mutation_truth=no_false_claim
-technical_debt=no_hidden_scope_escape
-exact_head_evidence=REQUIRED
-```
+The PR-associated integration-ref validation for source head `fae8a0df3c29775317986877bce2b8eda8593d27` completed successfully across Android CI, Genesis Body Preparation, Reference Checks, CodeQL, and SBOM. Managed-device tests passed on API 30 and API 35 with zero failures; QA-7 JVM and instrumented ratchets passed. Mutation testing remained truthfully report-only and did not establish RECALL-specific mutation coverage.
 
 Operational birth remains `NOT_OCCURRED`.
