@@ -72,6 +72,16 @@ class OrchestrationProtocolContractTest {
     }
 
     @Test
+    fun taskDecisionMutexRemainsValidOnlyInSingleProcessBody() {
+        val repository = production("data/repository/AgentOrchestrationRepository.kt")
+        val manifest = repositoryFile("app/src/main/AndroidManifest.xml").readText()
+
+        assertTrue(repository.contains("DECISION_MUTEXES"))
+        assertTrue(repository.contains("withTaskDecisionLock(taskId)"))
+        assertFalse(manifest.contains("android:process"))
+    }
+
+    @Test
     fun compositionAndStartupRecoveryWireOnlyTheOrchestrationProtocol() {
         val composition = productionRoot("MorimilAppContainerOrchestrationProtocol.kt")
         val container = productionRoot("MorimilAppContainer.kt")
