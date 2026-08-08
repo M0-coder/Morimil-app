@@ -17,7 +17,8 @@ class RecallCanonicalDerivedRebuildContractTest {
             "readRecallCandidates",
             "canonical_recall_schedule_v1",
             "canonical_memory_event",
-            "canonicalRecallNodeId",
+            "organDatabase.withTransaction",
+            "sourceId = \"recall:$id\"",
             "batch.instanceId",
             "batch.snapshot.birthRootEventHash"
         ).forEach { token ->
