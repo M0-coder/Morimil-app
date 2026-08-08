@@ -30,6 +30,34 @@ class BodyDataTransferSovereigntyContractTest {
     }
 
     @Test
+    fun releaseSourceSetsCannotOverrideTheTransferBoundary() {
+        val sourceRoot = repositoryFile("app/src")
+        val manifests = sourceRoot
+            .walkTopDown()
+            .filter { file -> file.isFile && file.name == "AndroidManifest.xml" }
+            .filterNot { file -> file.invariantSeparatorsPath.endsWith("/main/AndroidManifest.xml") }
+            .toList()
+
+        manifests.forEach { manifest ->
+            val applicationNodes = parse(manifest, namespaceAware = true).getElementsByTagName("application")
+            for (index in 0 until applicationNodes.length) {
+                val application = applicationNodes.item(index) as Element
+                listOf(
+                    "allowBackup",
+                    "fullBackupContent",
+                    "dataExtractionRules",
+                    "backupAgent"
+                ).forEach { attribute ->
+                    assertFalse(
+                        "${manifest.invariantSeparatorsPath} must not override android:$attribute",
+                        application.hasAttributeNS(ANDROID_NAMESPACE, attribute)
+                    )
+                }
+            }
+        }
+    }
+
+    @Test
     fun android12AndLaterRulesDenyCloudAndDeviceTransferForEveryDomain() {
         val document = parse(repositoryFile(DATA_EXTRACTION_RULES))
         assertEquals("data-extraction-rules", document.documentElement.tagName)
@@ -48,19 +76,25 @@ class BodyDataTransferSovereigntyContractTest {
     }
 
     @Test
-    fun currentRuntimeContractRejectsOsTransferAsBodySuccessionAuthority() {
-        val contract = repositoryFile("docs/CURRENT_RUNTIME_CONTRACT.md").readText()
+    fun currentPolicyRejectsOsTransferAsBodySuccessionAuthority() {
+        val policy = repositoryFile("docs/security/BODY_DATA_TRANSFER_SOVEREIGNTY.md").readText()
 
-        assertTrue(contract.contains("Android 12+ device-to-device transfer", ignoreCase = true))
-        assertTrue(contract.contains("F5 sovereign succession protocol", ignoreCase = true))
-        assertTrue(contract.contains("OS-managed transfer is not Body succession authority", ignoreCase = true))
+        assertTrue(policy.contains("# Document status: CURRENT"))
+        assertTrue(policy.contains("OS_MANAGED_D2D_TRANSFER=DENIED"))
+        assertTrue(policy.contains("OS_MANAGED_TRANSFER_IS_BODY_SUCCESSION_AUTHORITY=FALSE"))
+        assertTrue(policy.contains("F5_SOVEREIGN_SUCCESSION_PROTOCOL=REQUIRED"))
+        assertTrue(policy.contains("MORIMIL_OPERATIONAL_BIRTH=NOT_OCCURRED"))
     }
 
     private fun assertDenyAll(root: Element, sectionName: String) {
         val sections = root.getElementsByTagName(sectionName)
         assertEquals("Expected exactly one <$sectionName> section", 1, sections.length)
         val section = sections.item(0) as Element
-        assertEquals("<$sectionName> must not contain include rules", 0, section.getElementsByTagName("include").length)
+        assertEquals(
+            "<$sectionName> must not contain include rules",
+            0,
+            section.getElementsByTagName("include").length
+        )
         assertExactExclusions(section)
     }
 
@@ -87,8 +121,8 @@ class BodyDataTransferSovereigntyContractTest {
 
     private fun repositoryFile(relativePath: String): File {
         return sequenceOf(File(relativePath), File("../$relativePath"))
-            .firstOrNull(File::isFile)
-            ?: error("Repository file not found: $relativePath")
+            .firstOrNull { candidate -> candidate.exists() }
+            ?: error("Repository path not found: $relativePath")
     }
 
     private companion object {
