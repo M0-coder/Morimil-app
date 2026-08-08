@@ -83,7 +83,7 @@ class OrchestrationProtocolContractTest {
 
     @Test
     fun compositionAndStartupRecoveryWireOnlyTheOrchestrationProtocol() {
-        val composition = productionRoot("MorimilAppContainerOrchestrationProtocol.kt")
+        val composition = productionRoot("MorimilAppContainerCognitiveMigrationProtocol.kt")
         val container = productionRoot("MorimilAppContainer.kt")
         val runtimeGate = productionRoot("MorimilAppContainerRuntimeGate.kt")
 
