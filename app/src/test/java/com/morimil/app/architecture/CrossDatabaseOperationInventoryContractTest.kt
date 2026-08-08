@@ -8,10 +8,10 @@ import org.junit.Test
 
 class CrossDatabaseOperationInventoryContractTest {
     @Test
-    fun inventoryRecordsPostBootCurrentSemantics() {
+    fun inventoryRecordsPostRecallCurrentSemantics() {
         val inventory = inventoryFile(repositoryRoot()).readText()
         assertTrue(inventory.startsWith("# Document status: CURRENT"))
-        assertTrue(inventory.contains("Inventory version: `7`"))
+        assertTrue(inventory.contains("Inventory version: `8`"))
         listOf(
             CONTENT_BASELINE_SHA,
             CONTENT_BASELINE_PARENT_SHA,
@@ -21,16 +21,15 @@ class CrossDatabaseOperationInventoryContractTest {
             ORCH_AUDITED_SOURCE_HEAD,
             AGENT_AUDITED_SOURCE_HEAD,
             BOOT_AUDITED_SOURCE_HEAD,
-            "PR_176=MERGED_BY_SQUASH_HISTORICAL"
+            RECALL_AUDITED_SOURCE_HEAD,
+            "PR_178=MERGED_BY_SQUASH_HISTORICAL"
         ).forEach { token -> assertTrue("Missing inventory token $token", inventory.contains(token)) }
 
-        assertTrue(inventory.contains("GenesisUltraRuntimeBootstrapCoordinator.kt` | `INTEGRATED_PROTOCOL`"))
-        assertTrue(inventory.contains("RuntimeBootstrapProtocolFinalizer.kt` | `SUPPORT_BOUNDARY`"))
-        assertTrue(inventory.contains("BOOT-001 integrated"))
-        assertTrue(inventory.contains("`BOOT-001` | `bootstrap` | Integrated:"))
-        assertTrue(inventory.contains("`RECALL-001` and `ORCH-001` — next bounded convergence work"))
+        assertTrue(inventory.contains("RecallScheduleRepository.kt` | `DERIVED_REBUILD` | RECALL-001 canonical derived rebuild integrated"))
+        assertTrue(inventory.contains("`RECALL-001` | `seedFromRecentMemoryIfNeeded` | Integrated derived rebuild:"))
+        assertTrue(inventory.contains("`ORCH-001` — next bounded convergence work"))
         assertTrue(inventory.contains("ORCH-001") && inventory.contains("open"))
-        assertFalse(inventory.contains("BOOT-001 open"))
+        assertFalse(inventory.substringAfter("## Remaining operations").substringBefore("## Integrated guarantees").contains("RECALL-001"))
     }
 
     @Test
@@ -45,7 +44,7 @@ class CrossDatabaseOperationInventoryContractTest {
     }
 
     @Test
-    fun integratedBootAndRemainingOwnersAreExplicit() {
+    fun integratedRecallAndRemainingOwnersAreExplicit() {
         val root = repositoryRoot()
         val inventory = inventoryFile(root).readText()
         REQUIRED_ENTRY_POINTS.forEach { (path, entryPoints) ->
@@ -55,14 +54,14 @@ class CrossDatabaseOperationInventoryContractTest {
                 assertTrue(inventory.contains("`$entryPoint`"))
             }
         }
-        listOf("COG-001", "ORCH-002", "AGENT-001", "AGENT-006", "BOOT-001").forEach {
+        listOf("COG-001", "ORCH-002", "AGENT-001", "AGENT-006", "BOOT-001", "RECALL-001").forEach {
             assertTrue("Missing integrated owner $it", inventory.contains("`$it`"))
         }
-        listOf("RECALL-001", "ORCH-001", "REST-001", "REST-002").forEach {
+        listOf("ORCH-001", "REST-001", "REST-002").forEach {
             assertTrue("Missing remaining owner $it", inventory.contains("`$it`"))
         }
+        assertTrue(inventory.contains("RECALL_BOOT_READINESS") || inventory.contains("startup-level recall readiness"))
         assertTrue(inventory.contains("F3.3"))
-        assertFalse(inventory.substringAfter("## Remaining operations").substringBefore("## Integrated common-protocol guarantees").contains("BOOT-001"))
     }
 
     private fun discoverBoundaryCandidates(root: File): Set<String> {
@@ -91,12 +90,13 @@ class CrossDatabaseOperationInventoryContractTest {
 
     private companion object {
         const val INVENTORY_PATH = "docs/F3_CROSS_DATABASE_OPERATION_INVENTORY.md"
-        const val CONTENT_BASELINE_SHA = "CONTENT_BASELINE_SHA=3a995232ce2a515e1ca9b9151f77e63805bad9d3"
-        const val CONTENT_BASELINE_PARENT_SHA = "CONTENT_BASELINE_PARENT_SHA=5918b64ec83e69cbb3d9718943b25d1e1299d698"
+        const val CONTENT_BASELINE_SHA = "CONTENT_BASELINE_SHA=6e0444b698bdc5c557ec3ea83f48d7980da1a36b"
+        const val CONTENT_BASELINE_PARENT_SHA = "CONTENT_BASELINE_PARENT_SHA=bdbb5b2a040b728508948cd3cfbd8807b40a12f6"
         const val COG_AUDITED_SOURCE_HEAD = "7bdbda2aa4b7568695ba8e98be54d506d42c99d5"
         const val ORCH_AUDITED_SOURCE_HEAD = "0348dccb561e576d17c45e7f8b1e38717332772b"
         const val AGENT_AUDITED_SOURCE_HEAD = "74e072b911db692041d3716af9d0511b83ad70b7"
         const val BOOT_AUDITED_SOURCE_HEAD = "c7710635fa172108cce87b3f7a76d6e037095864"
+        const val RECALL_AUDITED_SOURCE_HEAD = "fae8a0df3c29775317986877bce2b8eda8593d27"
         const val BOOTSTRAP_PATH = "app/src/main/java/com/morimil/app/runtime/GenesisUltraRuntimeBootstrapCoordinator.kt"
         const val BOOTSTRAP_FINALIZER_PATH = "app/src/main/java/com/morimil/app/data/repository/RuntimeBootstrapProtocolFinalizer.kt"
 
