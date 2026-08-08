@@ -1,6 +1,5 @@
 package com.morimil.app.data.repository
 
-import com.morimil.app.data.local.MemoryEventEntity
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -43,29 +42,19 @@ class RestCyclePolicyTest {
         memoryKind: String,
         importance: Int,
         userConfirmed: Boolean = false
-    ): MemoryEventEntity {
-        return MemoryEventEntity(
-            genesisCoreId = "primary_genesis",
-            genesisCoreHash = "sha256:genesis",
-            previousEventHash = null,
-            eventHash = "sha256:$memoryKind:$importance:$userConfirmed",
-            hashAlgorithm = "sha256",
-            canonicalization = "morimil.memory_event_hash.v3",
-            signatureAlgorithm = "unsigned_runtime_v1",
-            eventSignature = null,
+    ): RestCycleSourceEvent {
+        return RestCycleSourceEvent(
+            eventHash = "evsha256:${"a".repeat(64)}",
             eventType = "test.event",
             actor = "user",
             source = "test",
-            contextTag = "test",
-            privacyVisibility = "private_local",
             memoryKind = memoryKind,
             tagsJson = "[]",
-            evidenceJson = "{}",
-            confidence = 90,
-            userConfirmed = userConfirmed,
             body = "test memory",
             importance = importance,
-            createdAtMillis = 123L
+            confidence = 90,
+            userConfirmed = userConfirmed,
+            observedAtMillis = 123L
         )
     }
 }
