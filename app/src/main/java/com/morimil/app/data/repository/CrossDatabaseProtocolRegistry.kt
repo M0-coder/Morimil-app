@@ -55,3 +55,41 @@ internal object OrchestrationProtocolTypes {
         closedOperations = CLOSED_REGISTRY
     )
 }
+
+internal object AgentLifecycleProtocolTypes {
+    const val OWNER_TYPE = "agent_instance_lifecycle"
+
+    const val CREATE = "agent_lifecycle.create_agent"
+    const val ASSIGN = "agent_lifecycle.assign_task"
+    const val SUBMIT_RESULT = "agent_lifecycle.submit_result"
+    const val EVALUATE = "agent_lifecycle.evaluate_agent"
+    const val RETIRE = "agent_lifecycle.retire_agent"
+    const val PROMOTE = "agent_lifecycle.promote_agent"
+    const val QUARANTINE = "agent_lifecycle.quarantine_agent"
+
+    const val CREATED_EVENT = "agent_lifecycle.agent_created"
+    const val ASSIGNED_EVENT = "agent_lifecycle.task_assigned"
+    const val RESULT_EVENT = "agent_lifecycle.result_submitted"
+    const val EVALUATED_EVENT = "agent_lifecycle.agent_evaluated"
+    const val RETIRED_EVENT = "agent_lifecycle.agent_retired"
+    const val PROMOTED_EVENT = "agent_lifecycle.agent_promoted"
+    const val QUARANTINED_EVENT = "agent_lifecycle.agent_quarantined"
+
+    const val VERSION = 1
+
+    val CLOSED_REGISTRY = mapOf(
+        CREATE to CREATED_EVENT,
+        ASSIGN to ASSIGNED_EVENT,
+        SUBMIT_RESULT to RESULT_EVENT,
+        EVALUATE to EVALUATED_EVENT,
+        RETIRE to RETIRED_EVENT,
+        PROMOTE to PROMOTED_EVENT,
+        QUARANTINE to QUARANTINED_EVENT
+    )
+
+    val REGISTRY = CrossDatabaseProtocolRegistry(
+        ownerType = OWNER_TYPE,
+        version = VERSION,
+        closedOperations = CLOSED_REGISTRY
+    )
+}
