@@ -95,7 +95,7 @@ COG recovery
 
 Each coordinator loads only its own `ownerType`, verifies Instance, writer Body and writer epoch, ensures exact canonical effects, reloads after lost CAS, rejects stale blocking, and finalizes owner state plus XOP result atomically. COG, ORCH, and AGENT recovery cannot consume one another's journal rows.
 
-The pending legacy `cog_001.payload.v1` quarantine remains COG-specific.
+If a pending legacy `cog_001.payload.v1` operation exists, activation blocks before COG recovery; that quarantine remains COG-specific. The legacy payload cannot be silently finalized under current COG rules.
 
 ## Integrated COG-001 through COG-004
 
