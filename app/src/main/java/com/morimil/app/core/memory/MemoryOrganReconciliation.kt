@@ -20,7 +20,11 @@ class MemoryOrganReconciliation {
             link.referencesMissingMemoryEvent(validMemoryEventHashes)
         }
         val orphanedRecalls = recalls.filter { recall ->
-            recall.targetEventHash !in validMemoryEventHashes
+            // Canonical recall projections are built only from the verified append-only
+            // canonical read boundary. A legacy memory_events hash set is not allowed to
+            // invalidate that independent canonical evidence.
+            recall.source != CANONICAL_MEMORY_SOURCE &&
+                recall.targetEventHash !in validMemoryEventHashes
         }
         val orphanedCapsules = capsules.filter { capsule ->
             val sourceEventHash = capsule.sourceEventHash
@@ -72,6 +76,7 @@ class MemoryOrganReconciliation {
 
     companion object {
         private const val MEMORY_EVENT_NODE_TYPE = "memory_event"
+        private const val CANONICAL_MEMORY_SOURCE = "canonical_memory_event"
     }
 }
 
