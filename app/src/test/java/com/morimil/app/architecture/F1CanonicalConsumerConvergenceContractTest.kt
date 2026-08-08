@@ -7,21 +7,26 @@ import org.junit.Test
 
 class F1CanonicalConsumerConvergenceContractTest {
     @Test
-    fun inventoryRecordsMergedCogConsumerWithoutClosingIssue86() {
+    fun inventoryRecordsMergedCogAndOrchConsumersWithoutClosingIssue86() {
         val inventory = inventoryFile().readText()
 
         assertTrue(inventory.startsWith("# Document status: CURRENT"))
-        assertTrue(inventory.contains("Inventory version: `4`"))
+        assertTrue(inventory.contains("Inventory version: `5`"))
         assertTrue(inventory.contains(CONTENT_BASELINE_SHA))
         assertTrue(inventory.contains(CONTENT_BASELINE_PARENT_SHA))
         assertTrue(inventory.contains(CURRENT_MAIN_RESOLUTION))
         assertTrue(inventory.contains(MERGE_SHA_EVIDENCE))
-        assertTrue(inventory.contains(AUDITED_SOURCE_HEAD))
+        assertTrue(inventory.contains(COG_AUDITED_SOURCE_HEAD))
+        assertTrue(inventory.contains(ORCH_AUDITED_SOURCE_HEAD))
         assertTrue(inventory.contains("PR `#149`: closed and merged by squash"))
         assertTrue(inventory.contains("PR `#150`: closed and merged by squash"))
         assertTrue(inventory.contains("PR `#153`: closed and merged by squash"))
+        assertTrue(inventory.contains("PR `#172`: closed and merged by squash"))
         assertTrue(inventory.contains("PR_153=MERGED_BY_SQUASH_HISTORICAL"))
+        assertTrue(inventory.contains("PR_172=MERGED_BY_SQUASH_HISTORICAL"))
         assertTrue(inventory.contains("F3_COG_CONSUMER_OF_F1_A=INTEGRATED_IN_MAIN"))
+        assertTrue(inventory.contains("ORCH_002_004_CANONICAL_WRITE_PATH=INTEGRATED_IN_MAIN"))
+        assertTrue(inventory.contains("F1_ORCH_001=OPEN"))
         assertTrue(inventory.contains("ISSUE_86=OPEN"))
         assertTrue(inventory.contains("This document does not close `#86`"))
 
@@ -45,6 +50,7 @@ class F1CanonicalConsumerConvergenceContractTest {
         assertTrue(inventory.contains("CognitiveMigrationCanonicalReadPort"))
         assertTrue(inventory.contains("does not create a second identity or memory authority"))
         assertTrue(inventory.contains("CanonicalCognitiveMigrationCommitPort"))
+        assertTrue(inventory.contains("CanonicalOrchestrationCommitPort"))
         assertTrue(canonicalComposition.contains("GenesisUltraCanonicalConsumerReadAdapter.production"))
         assertTrue(canonicalComposition.contains("identityRepository = genesisUltraRuntimeIdentityRepository"))
         assertTrue(canonicalComposition.contains("memoryRepository = canonicalMemoryRepository"))
@@ -71,6 +77,7 @@ class F1CanonicalConsumerConvergenceContractTest {
         ).forEach { token ->
             assertTrue("Missing remaining convergence token $token", inventory.contains(token))
         }
+        assertTrue(inventory.contains("PR #172 intentionally does not close this item"))
     }
 
     @Test
@@ -97,17 +104,19 @@ class F1CanonicalConsumerConvergenceContractTest {
 
     private companion object {
         const val CONTENT_BASELINE_SHA =
-            "CONTENT_BASELINE_SHA=79460a32b4eba669216afcc501815d5ff09b0349"
+            "CONTENT_BASELINE_SHA=c6a6b0ca998d053c31c75977c5b6d4d9ae166e96"
         const val CONTENT_BASELINE_PARENT_SHA =
-            "CONTENT_BASELINE_PARENT_SHA=6250214bb6664a8fff851ed0afc2438bbc276931"
+            "CONTENT_BASELINE_PARENT_SHA=c22920f68f8820bbec676a6cbc74b60548e43d29"
         const val CURRENT_MAIN_RESOLUTION = "CURRENT_MAIN_RESOLUTION=EXTERNAL_GIT_REF"
         const val MERGE_SHA_EVIDENCE = "MERGE_SHA_EVIDENCE=EXTERNAL"
-        const val AUDITED_SOURCE_HEAD = "7bdbda2aa4b7568695ba8e98be54d506d42c99d5"
+        const val COG_AUDITED_SOURCE_HEAD = "7bdbda2aa4b7568695ba8e98be54d506d42c99d5"
+        const val ORCH_AUDITED_SOURCE_HEAD = "0348dccb561e576d17c45e7f8b1e38717332772b"
         val STALE_PHRASES = listOf(
             "draft f3 candidate",
             "pr_149=draft_validation_only",
             "candidate not merged",
-            "f3.2 open candidate"
+            "f3.2 open candidate",
+            "one downstream consumer family has converged"
         )
     }
 }
