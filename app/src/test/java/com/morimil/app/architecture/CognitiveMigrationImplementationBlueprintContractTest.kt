@@ -11,7 +11,7 @@ class CognitiveMigrationImplementationBlueprintContractTest {
     }
 
     @Test
-    fun blueprintIsCurrentAndUsesPostBootBaseline() {
+    fun blueprintIsCurrentAndUsesPostRecallBaseline() {
         assertTrue(blueprint.startsWith("# Document status: CURRENT"))
         assertTrue(blueprint.contains("implemented and audited design", true))
         listOf(
@@ -23,11 +23,14 @@ class CognitiveMigrationImplementationBlueprintContractTest {
             ORCH_AUDITED_SOURCE_HEAD,
             AGENT_AUDITED_SOURCE_HEAD,
             BOOT_AUDITED_SOURCE_HEAD,
-            "PR_176=MERGED_BY_SQUASH_HISTORICAL",
+            RECALL_AUDITED_SOURCE_HEAD,
+            "PR_178=MERGED_BY_SQUASH_HISTORICAL",
             "COG_001_004=INTEGRATED_IN_MAIN",
             "ORCH_002_004=INTEGRATED_IN_MAIN",
             "AGENT_001_006=INTEGRATED_IN_MAIN",
-            "BOOT_001=INTEGRATED_IN_MAIN"
+            "BOOT_001=INTEGRATED_IN_MAIN",
+            "RECALL_001=INTEGRATED_IN_MAIN",
+            "RECALL_BOOT_READINESS=OPEN"
         ).forEach { token -> assertTrue("Missing blueprint token $token", blueprint.contains(token)) }
     }
 
@@ -39,9 +42,11 @@ class CognitiveMigrationImplementationBlueprintContractTest {
         assertTrue(identityAuthority >= 0 && commonBoundary > identityAuthority && specializedBoundary > commonBoundary)
         assertTrue(blueprint.contains("ProjectVault remains separate"))
         assertTrue(blueprint.contains("PR #176 integrated BOOT-001"))
-        listOf("RECALL-001", "ORCH-001", "REST-001/002", "health convergence", "F3.3 legacy removal remains open").forEach {
+        assertTrue(blueprint.contains("PR #178 integrated RECALL-001"))
+        listOf("ORCH-001", "REST-001/002", "health convergence", "recall startup-readiness", "F3.3 legacy removal remains open").forEach {
             assertTrue("Missing remaining scope $it", blueprint.contains(it, true))
         }
+        assertFalse(blueprint.contains("RECALL_001=OPEN"))
         assertFalse(blueprint.contains("BOOT_001=OPEN"))
     }
 
@@ -98,11 +103,12 @@ class CognitiveMigrationImplementationBlueprintContractTest {
             ?: error("Repository file not found: $relativePath")
 
     private companion object {
-        const val CONTENT_BASELINE_SHA = "CONTENT_BASELINE_SHA=3a995232ce2a515e1ca9b9151f77e63805bad9d3"
-        const val CONTENT_BASELINE_PARENT_SHA = "CONTENT_BASELINE_PARENT_SHA=5918b64ec83e69cbb3d9718943b25d1e1299d698"
+        const val CONTENT_BASELINE_SHA = "CONTENT_BASELINE_SHA=6e0444b698bdc5c557ec3ea83f48d7980da1a36b"
+        const val CONTENT_BASELINE_PARENT_SHA = "CONTENT_BASELINE_PARENT_SHA=bdbb5b2a040b728508948cd3cfbd8807b40a12f6"
         const val COG_AUDITED_SOURCE_HEAD = "7bdbda2aa4b7568695ba8e98be54d506d42c99d5"
         const val ORCH_AUDITED_SOURCE_HEAD = "0348dccb561e576d17c45e7f8b1e38717332772b"
         const val AGENT_AUDITED_SOURCE_HEAD = "74e072b911db692041d3716af9d0511b83ad70b7"
         const val BOOT_AUDITED_SOURCE_HEAD = "c7710635fa172108cce87b3f7a76d6e037095864"
+        const val RECALL_AUDITED_SOURCE_HEAD = "fae8a0df3c29775317986877bce2b8eda8593d27"
     }
 }
