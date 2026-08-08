@@ -1,6 +1,5 @@
 package com.morimil.app.data.repository
 
-import com.morimil.app.data.local.MemoryEventEntity
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -8,16 +7,16 @@ object AutobiographicalMemoryConsolidator {
     fun build(
         alias: String,
         sourceRestCycleEventHash: String,
-        events: List<MemoryEventEntity>,
+        events: List<RestCycleSourceEvent>,
         generatedAtMillis: Long
     ): AutobiographicalMemoryDraft {
         val prioritized = events
             .filter { event -> event.memoryKind != "chat_noise" }
             .sortedWith(
-                compareByDescending<MemoryEventEntity> { it.userConfirmed }
+                compareByDescending<RestCycleSourceEvent> { it.userConfirmed }
                     .thenByDescending { it.importance }
                     .thenByDescending { it.confidence }
-                    .thenByDescending { it.createdAtMillis }
+                    .thenByDescending { it.observedAtMillis }
             )
 
         val identity = select(prioritized, limit = 4) { it.memoryKind == "identity" }
@@ -81,7 +80,7 @@ object AutobiographicalMemoryConsolidator {
             .put("learning_count", learning.size)
             .put("correction_count", corrections.size)
             .put("project_signal_count", projects.size)
-            .put("policy", "append_signed_event_before_snapshot_update")
+            .put("policy", "canonical_rest_event_before_snapshot_update")
             .put("open_doubt_policy", "future_memory_doubt_layer")
             .put("source_event_hashes", JSONArray(sourceHashes))
             .toString()
@@ -104,16 +103,16 @@ object AutobiographicalMemoryConsolidator {
     }
 
     private fun select(
-        events: List<MemoryEventEntity>,
+        events: List<RestCycleSourceEvent>,
         limit: Int,
-        predicate: (MemoryEventEntity) -> Boolean
-    ): List<MemoryEventEntity> {
+        predicate: (RestCycleSourceEvent) -> Boolean
+    ): List<RestCycleSourceEvent> {
         return events.filter(predicate).take(limit)
     }
 
     private fun StringBuilder.appendSection(
         title: String,
-        events: List<MemoryEventEntity>,
+        events: List<RestCycleSourceEvent>,
         limit: Int
     ) {
         appendLine("[$title]")
