@@ -24,6 +24,7 @@ class CrossDatabaseOperationInventoryContractTest {
         ).forEach { token -> assertTrue("Missing inventory token $token", inventory.contains(token)) }
 
         assertTrue(inventory.contains("AgentInstanceLifecycleRepository.kt` | `INTEGRATED_PROTOCOL`"))
+        assertTrue(inventory.contains("RuntimeBootstrapProtocolFinalizer.kt` | `SUPPORT_BOUNDARY`"))
         assertTrue(inventory.contains("AGENT-001 through AGENT-006 integrated"))
         assertTrue(inventory.contains("`BOOT-001` — next bounded owner"))
         assertTrue(inventory.contains("ORCH-001") && inventory.contains("open"))
@@ -92,6 +93,7 @@ class CrossDatabaseOperationInventoryContractTest {
         const val ORCH_AUDITED_SOURCE_HEAD = "0348dccb561e576d17c45e7f8b1e38717332772b"
         const val AGENT_AUDITED_SOURCE_HEAD = "74e072b911db692041d3716af9d0511b83ad70b7"
         const val BOOTSTRAP_PATH = "app/src/main/java/com/morimil/app/runtime/GenesisUltraRuntimeBootstrapCoordinator.kt"
+        const val BOOTSTRAP_FINALIZER_PATH = "app/src/main/java/com/morimil/app/data/repository/RuntimeBootstrapProtocolFinalizer.kt"
 
         val MEMORY_ORGAN_DATABASE_PATTERN = Regex("\\bMemoryOrganDatabase\\b")
         val MORIMIL_DATABASE_PATTERN = Regex("\\bMorimilDatabase\\b")
@@ -102,6 +104,7 @@ class CrossDatabaseOperationInventoryContractTest {
         val EXPECTED_OWNER_PATHS = setOf(
             "app/src/main/java/com/morimil/app/data/repository/ProjectVaultRepository.kt",
             BOOTSTRAP_PATH,
+            BOOTSTRAP_FINALIZER_PATH,
             "app/src/main/java/com/morimil/app/data/repository/RecallScheduleRepository.kt",
             "app/src/main/java/com/morimil/app/data/repository/RestCycleRepository.kt",
             "app/src/main/java/com/morimil/app/data/repository/CognitiveMigrationRepository.kt",
