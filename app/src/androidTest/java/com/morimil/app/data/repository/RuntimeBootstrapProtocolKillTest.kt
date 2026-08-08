@@ -213,7 +213,7 @@ class RuntimeBootstrapProtocolKillTest {
                 keyEpochId = "guardian_epoch",
                 publicKeyRef = digest("guardian_key"),
                 status = "active",
-                role = "custodian_without_ownership",
+                role = "custodian_witness",
                 anchorDigest = digest("guardian_anchor")
             ),
             seed = GenesisUltraRuntimeVerifiedSeed(
