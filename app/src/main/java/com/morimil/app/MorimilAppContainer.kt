@@ -244,7 +244,9 @@ class MorimilAppContainer(context: Context) {
     val agentOrchestrationRepository: AgentOrchestrationRepository by lazy {
         AgentOrchestrationRepository(
             organDatabase = organDatabase,
-            memoryRepository = memoryRepository
+            memoryRepository = memoryRepository,
+            identityRepository = genesisUltraRuntimeIdentityRepository,
+            protocol = orchestrationProtocolCoordinator
         )
     }
 
@@ -286,9 +288,9 @@ class MorimilAppContainer(context: Context) {
     val reasoningKernel: ReasoningKernel by lazy {
         ReasoningKernel(
             contextReader = RepositoryReasoningContextReader(
-      canonicalMemoryRepository = canonicalMemoryRepository,
-      memoryOrganRepository = memoryOrganRepository
-  ),
+                canonicalMemoryRepository = canonicalMemoryRepository,
+                memoryOrganRepository = memoryOrganRepository
+            ),
             intrinsicCoordinator = MorimilNormalIntrinsicRuntimeV0.createCoordinator(),
             temporaryExternalProvider = ReasoningClientTemporaryExternalProvider(reasoningClient)
         )

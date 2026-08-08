@@ -241,6 +241,8 @@ class CognitiveMigrationProtocolContractTest {
             File(repositoryRoot(), "docs/CURRENT_RUNTIME_CONTRACT.md").readText()
         val coordinator =
             source("data/repository/CrossDatabaseOperationCoordinator.kt").readText()
+        val registry =
+            source("data/repository/CrossDatabaseProtocolRegistry.kt").readText()
         val dao = source("data/local/CrossDatabaseOperationDao.kt").readText()
 
         assertTrue(runtimeContract.contains("zero non-committed"))
@@ -248,10 +250,13 @@ class CognitiveMigrationProtocolContractTest {
         assertTrue(runtimeContract.contains("blocks"))
         assertTrue(dao.contains("countNonTerminalByInstanceOwnerAndPayloadSchema"))
         assertTrue(dao.contains("status != 'COMMITTED'"))
-        val gate = coordinator.indexOf("requireNoPendingCog001V1(identity.instanceId)")
-        val load = coordinator.indexOf("store.loadRecoverableForInstance")
+        assertTrue(registry.contains("COGNITIVE_MIGRATION_PROTOCOL_REGISTRY"))
+        assertTrue(registry.contains("morimil.cognitive_migration.cog_001.payload.v1"))
+        val gate = coordinator.indexOf("requireNoBlockedRecoveryPayloads(identity.instanceId)")
+        val load = coordinator.indexOf("store.loadRecoverableForOwner")
         assertTrue(gate >= 0)
         assertTrue(load > gate)
+        assertTrue(coordinator.contains("ownerType = protocolRegistry.ownerType"))
     }
 
     private fun source(relative: String): File {

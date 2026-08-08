@@ -18,6 +18,7 @@ internal val MorimilAppContainer.genesisUltraRuntimeStartupGate:
         val convergence = legacyMemoryConvergenceCoordinator
         val cognitiveRead = canonicalCognitiveMigrationReadPort
         val cognitiveRecovery = cognitiveMigrationProtocolCoordinator
+        val orchestrationRecovery = orchestrationProtocolCoordinator
         val projectVaultRecovery = projectVaultRepository
         val bootstrap = genesisUltraRuntimeBootstrapCoordinator
         return GenesisUltraRuntimeStartupGate.production(
@@ -33,6 +34,16 @@ internal val MorimilAppContainer.genesisUltraRuntimeStartupGate:
                 }
                 check(cognitiveReport.retryableFailureCount == 0) {
                     "cognitive_migration_protocol_recovery_incomplete"
+                }
+                val orchestrationReport = orchestrationRecovery.recoverAtStartup(
+                    identity = identity,
+                    limit = 200
+                )
+                check(orchestrationReport.blockedCount == 0) {
+                    "orchestration_protocol_blocked"
+                }
+                check(orchestrationReport.retryableFailureCount == 0) {
+                    "orchestration_protocol_recovery_incomplete"
                 }
                 convergence.converge(identity)
                 val vaultRecovery = projectVaultRecovery.recoverPendingOperations()
