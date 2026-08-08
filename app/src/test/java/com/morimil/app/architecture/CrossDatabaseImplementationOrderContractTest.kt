@@ -7,7 +7,7 @@ import org.junit.Test
 
 class CrossDatabaseImplementationOrderContractTest {
     @Test
-    fun implementationOrderRecordsThreeIntegratedOwnersAndBootNext() {
+    fun implementationOrderRecordsFourIntegratedOwnersAndRecallOrchNext() {
         val inventory = repositoryFile("docs/F3_CROSS_DATABASE_OPERATION_INVENTORY.md").readText()
         val section = inventory.substringAfter("## Implementation order after STOP S5")
 
@@ -30,8 +30,9 @@ class CrossDatabaseImplementationOrderContractTest {
         assertTrue(section.contains("integrated first common-protocol owner"))
         assertTrue(section.contains("integrated second common-protocol owner"))
         assertTrue(section.contains("integrated third common-protocol owner"))
-        assertTrue(section.contains("`BOOT-001` — next bounded owner"))
-        assertFalse(section.contains("`AGENT-001` through `AGENT-006` — next bounded owner family"))
+        assertTrue(section.contains("`BOOT-001` — integrated fourth common-protocol owner"))
+        assertTrue(section.contains("`RECALL-001` and `ORCH-001` — next bounded convergence work"))
+        assertFalse(section.contains("`BOOT-001` — next bounded owner"))
     }
 
     @Test
