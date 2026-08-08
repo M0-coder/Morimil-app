@@ -20,8 +20,8 @@ internal interface RuntimeBootstrapMemoryProjectionStore {
 }
 
 internal interface RuntimeBootstrapOrganProjectionStore {
-    suspend fun ensureAgentProfiles(agents: List<AgentProfileEntity>)
-    suspend fun ensureOrchestratorDevices(devices: List<OrchestratorDeviceEntity>)
+    suspend fun seedAgentProfilesIfEmpty(agents: List<AgentProfileEntity>): Int
+    suspend fun seedOrchestratorDevicesIfEmpty(devices: List<OrchestratorDeviceEntity>): Int
 }
 
 private class RoomRuntimeBootstrapMemoryProjectionStore(
@@ -113,76 +113,24 @@ private class RoomRuntimeBootstrapOrganProjectionStore(
 ) : RuntimeBootstrapOrganProjectionStore {
     private val dao = database.memoryOrganDao()
 
-    override suspend fun ensureAgentProfiles(agents: List<AgentProfileEntity>) {
-        agents.forEach { expected ->
-            val existing = loadAgent(expected.agentId)
-            if (existing == null) {
-                dao.insertAgentProfiles(listOf(expected))
-            } else {
-                permanentCheck(existing == expected.semantics())
-            }
-            permanentCheck(loadAgent(expected.agentId) == expected.semantics())
-        }
-        permanentCheck(dao.countAgentProfiles() >= agents.size)
+    override suspend fun seedAgentProfilesIfEmpty(agents: List<AgentProfileEntity>): Int {
+        val before = dao.countAgentProfiles()
+        if (before > 0) return before
+        dao.insertAgentProfiles(agents)
+        val after = dao.countAgentProfiles()
+        permanentCheck(after == agents.size)
+        return after
     }
 
-    override suspend fun ensureOrchestratorDevices(devices: List<OrchestratorDeviceEntity>) {
-        devices.forEach { expected ->
-            val existing = loadDevice(expected.deviceId)
-            if (existing == null) {
-                dao.insertOrchestratorDevices(listOf(expected))
-            } else {
-                permanentCheck(existing == expected.semantics())
-            }
-            permanentCheck(loadDevice(expected.deviceId) == expected.semantics())
-        }
-        permanentCheck(dao.countOrchestratorDevices() >= devices.size)
-    }
-
-    private fun loadAgent(agentId: String): AgentProfileSemantics? {
-        return database.openHelper.writableDatabase.query(
-            "SELECT agentId, displayName, role, description, capabilitySetJson, " +
-                "allowedToolsetJson, allowedTransportsJson, riskLevel, requiresHumanApproval, status " +
-                "FROM agent_profiles WHERE agentId = ? LIMIT 1",
-            arrayOf(agentId)
-        ).use { cursor ->
-            if (!cursor.moveToFirst()) return@use null
-            AgentProfileSemantics(
-                agentId = cursor.string("agentId"),
-                displayName = cursor.string("displayName"),
-                role = cursor.string("role"),
-                description = cursor.string("description"),
-                capabilitySetJson = cursor.string("capabilitySetJson"),
-                allowedToolsetJson = cursor.string("allowedToolsetJson"),
-                allowedTransportsJson = cursor.string("allowedTransportsJson"),
-                riskLevel = cursor.string("riskLevel"),
-                requiresHumanApproval = cursor.boolean("requiresHumanApproval"),
-                status = cursor.string("status")
-            )
-        }
-    }
-
-    private fun loadDevice(deviceId: String): DeviceSemantics? {
-        return database.openHelper.writableDatabase.query(
-            "SELECT deviceId, displayName, deviceType, ownershipScope, trustedOwner, " +
-                "allowedTransportsJson, authorizationStatus, authorizationRequired, riskLevel, pairingState " +
-                "FROM orchestrator_devices WHERE deviceId = ? LIMIT 1",
-            arrayOf(deviceId)
-        ).use { cursor ->
-            if (!cursor.moveToFirst()) return@use null
-            DeviceSemantics(
-                deviceId = cursor.string("deviceId"),
-                displayName = cursor.string("displayName"),
-                deviceType = cursor.string("deviceType"),
-                ownershipScope = cursor.string("ownershipScope"),
-                trustedOwner = cursor.string("trustedOwner"),
-                allowedTransportsJson = cursor.string("allowedTransportsJson"),
-                authorizationStatus = cursor.string("authorizationStatus"),
-                authorizationRequired = cursor.boolean("authorizationRequired"),
-                riskLevel = cursor.string("riskLevel"),
-                pairingState = cursor.string("pairingState")
-            )
-        }
+    override suspend fun seedOrchestratorDevicesIfEmpty(
+        devices: List<OrchestratorDeviceEntity>
+    ): Int {
+        val before = dao.countOrchestratorDevices()
+        if (before > 0) return before
+        dao.insertOrchestratorDevices(devices)
+        val after = dao.countOrchestratorDevices()
+        permanentCheck(after == devices.size)
+        return after
     }
 }
 
@@ -237,17 +185,21 @@ internal class RuntimeBootstrapProtocolFinalizer private constructor(
             CrossDatabaseProtocolErrors.FINALIZATION_PREPARATION_CONFLICT
         )
 
-        organStore.ensureAgentProfiles(plan.agentProfiles)
-        organStore.ensureOrchestratorDevices(plan.orchestratorDevices)
+        // Preserve pre-existing orchestration state. ORCH-001 owns convergence of
+        // legacy/noncanonical seed rows; BOOT only reproduces the old "seed if empty"
+        // behavior behind a durable receipt and must not silently overwrite that state.
+        val agentProfileCount = organStore.seedAgentProfilesIfEmpty(plan.agentProfiles)
+        val orchestratorDeviceCount =
+            organStore.seedOrchestratorDevicesIfEmpty(plan.orchestratorDevices)
 
         val json = CrossDatabaseOperationIdentity.canonicalJson(
             mapOf(
-                "agent_profile_count" to plan.agentProfiles.size,
+                "agent_profile_count" to agentProfileCount,
                 "canonical_event_hash" to receipt.eventHash,
                 "canonical_event_id" to receipt.eventId,
                 "canonical_provenance_digest" to receipt.provenanceDigest,
                 "canonical_sequence" to receipt.sequence,
-                "orchestrator_device_count" to plan.orchestratorDevices.size,
+                "orchestrator_device_count" to orchestratorDeviceCount,
                 "owner_status" to OWNER_STATUS,
                 "project_id" to plan.project.projectId,
                 "schema" to RuntimeBootstrapProtocolSchemas.BOOT_001_LOCAL_RESULT,
@@ -457,62 +409,6 @@ private data class ProjectSemantics(
     val title: String,
     val status: String
 )
-
-private data class AgentProfileSemantics(
-    val agentId: String,
-    val displayName: String,
-    val role: String,
-    val description: String,
-    val capabilitySetJson: String,
-    val allowedToolsetJson: String,
-    val allowedTransportsJson: String,
-    val riskLevel: String,
-    val requiresHumanApproval: Boolean,
-    val status: String
-)
-
-private data class DeviceSemantics(
-    val deviceId: String,
-    val displayName: String,
-    val deviceType: String,
-    val ownershipScope: String,
-    val trustedOwner: String,
-    val allowedTransportsJson: String,
-    val authorizationStatus: String,
-    val authorizationRequired: Boolean,
-    val riskLevel: String,
-    val pairingState: String
-)
-
-private fun AgentProfileEntity.semantics(): AgentProfileSemantics {
-    return AgentProfileSemantics(
-        agentId = agentId,
-        displayName = displayName,
-        role = role,
-        description = description,
-        capabilitySetJson = capabilitySetJson,
-        allowedToolsetJson = allowedToolsetJson,
-        allowedTransportsJson = allowedTransportsJson,
-        riskLevel = riskLevel,
-        requiresHumanApproval = requiresHumanApproval,
-        status = status
-    )
-}
-
-private fun OrchestratorDeviceEntity.semantics(): DeviceSemantics {
-    return DeviceSemantics(
-        deviceId = deviceId,
-        displayName = displayName,
-        deviceType = deviceType,
-        ownershipScope = ownershipScope,
-        trustedOwner = trustedOwner,
-        allowedTransportsJson = allowedTransportsJson,
-        authorizationStatus = authorizationStatus,
-        authorizationRequired = authorizationRequired,
-        riskLevel = riskLevel,
-        pairingState = pairingState
-    )
-}
 
 private fun JSONObject.nullableString(key: String): String? {
     return if (isNull(key)) null else getString(key)
