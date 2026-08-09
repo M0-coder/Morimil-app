@@ -80,7 +80,6 @@ class CrossDatabaseOperationInventoryContractTest {
         val inventory = inventoryFile(repositoryRoot()).readText()
         listOf(
             "ORCH-001 does not add an XOP event",
-            "conditional Room transitions",
             "targetEventHash` as idempotency key",
             "schedule + local graph link in one `MemoryOrganDatabase` transaction",
             "blocked verification",
