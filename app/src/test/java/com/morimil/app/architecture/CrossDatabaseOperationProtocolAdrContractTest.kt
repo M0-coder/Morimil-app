@@ -9,7 +9,7 @@ class CrossDatabaseOperationProtocolAdrContractTest {
     private val adr by lazy { repositoryFile("docs/adr/ADR-0002-cross-database-operation-protocol.md").readText() }
 
     @Test
-    fun adrIsCurrentAcceptedAndRecordsRest002ProposalDisposition() {
+    fun adrIsCurrentAcceptedAndRecordsPostRestReadinessDisposition() {
         assertTrue(adr.startsWith("# Document status: CURRENT"))
         assertTrue(adr.contains("Status: Accepted and implemented for COG-001..004, ORCH-002..004, AGENT-001..006, BOOT-001, REST-001, and REST-002 proposal convergence"))
         listOf(
@@ -25,17 +25,28 @@ class CrossDatabaseOperationProtocolAdrContractTest {
             RECALL_AUDITED_SOURCE_HEAD,
             REST_001_AUDITED_SOURCE_HEAD,
             REST_002_AUDITED_SOURCE_HEAD,
-            "PR_181=MERGED_BY_SQUASH_HISTORICAL",
-            "PR_182=MERGED_BY_SQUASH_HISTORICAL",
-            "PR_183=MERGED_BY_SQUASH_HISTORICAL",
+            BOOTSTRAP_HEALTH_AUDITED_SOURCE_HEAD,
+            REST_BOOT_001_AUDITED_SOURCE_HEAD,
             "PR_184=MERGED_BY_SQUASH_HISTORICAL",
+            "PR_186=MERGED_BY_SQUASH_HISTORICAL",
+            "PR_187=MERGED_BY_SQUASH_HISTORICAL",
+            "PR_188=MERGED_BY_SQUASH_HISTORICAL",
             "ADR_0002=ACCEPTED_AND_IMPLEMENTED_FOR_COG_ORCH_AGENT_BOOT_REST001_AND_REST002_PROPOSAL_BOUNDED_SCOPES",
             "RECALL_DISPOSITION=INTEGRATED_DERIVED_REBUILD_NOT_XOP_OWNER",
             "REST_001=INTEGRATED",
             "REST_002=INTEGRATED",
             "REST_REPAIR_PROPOSAL_CONVERGED=true",
-            "REST_REPAIR_EXECUTION_IMPLEMENTED=false"
+            "REST_REPAIR_EXECUTION_IMPLEMENTED=false",
+            "REST_BOOT_READINESS=INTEGRATED",
+            "RECALL_BOOT_READINESS=OPEN",
+            "BOOTSTRAP_HEALTH_DERIVATION=INTEGRATED",
+            "HEALTH_CONVERGENCE=OPEN",
+            "HEALTH_CONVERGED=false",
+            "HEALTH_STATE=WAITING_FOR_DEPENDENCIES",
+            "TRACKER_88=OPEN_FOR_HEALTH_RECALL_READINESS_AND_LEGACY_RETIREMENT"
         ).forEach { token -> assertTrue("Missing ADR token $token", adr.contains(token)) }
+        assertFalse(adr.contains("REST_BOOT_READINESS=OPEN"))
+        assertFalse(adr.contains("HEALTH_CONVERGENCE=INTEGRATED"))
         assertFalse(adr.contains("REST_002=OPEN"))
     }
 
@@ -113,25 +124,28 @@ class CrossDatabaseOperationProtocolAdrContractTest {
     }
 
     @Test
-    fun restProposalIsIntegratedWhileReadinessAndResidualsStayOpen() {
+    fun restReadinessIsIntegratedWhileHealthLegacyAndRecallResidualsStayOpen() {
         listOf(
             "RECALL_001=INTEGRATED",
-            "REST_BOOT_READINESS=OPEN",
+            "REST_BOOT_READINESS=INTEGRATED",
             "RECALL_BOOT_READINESS=OPEN",
             "ORCH_001=INTEGRATED",
             "REST_001=INTEGRATED",
             "REST_002=INTEGRATED",
             "REST_REPAIR_PROPOSAL_CONVERGED=true",
             "REST_REPAIR_EXECUTION_IMPLEMENTED=false",
+            "BOOTSTRAP_HEALTH_DERIVATION=INTEGRATED",
             "HEALTH_CONVERGENCE=OPEN",
-            "F3_3=OPEN",
-            "TRACKER_88=OPEN_FOR_HEALTH_READINESS_AND_LEGACY_RETIREMENT"
+            "HEALTH_CONVERGED=false",
+            "HEALTH_STATE=WAITING_FOR_DEPENDENCIES",
+            "F3_3=OPEN"
         ).forEach { assertTrue("Missing state $it", adr.contains(it)) }
         listOf(
+            "LocalNervousSystemRepository.recordHealthCheckIfDegraded",
             "REST-specific mutation testing",
             "RECALL-specific mutation testing",
             "BOOT/AGENT-specific mutation testing",
-            "REST and recall startup-readiness wiring remain open",
+            "RECALL startup-readiness wiring remains open",
             "physical ARM64"
         ).forEach { assertTrue("Missing residual $it", adr.contains(it, true)) }
         assertFalse(adr.contains("REST_001_002=OPEN"))
@@ -156,8 +170,8 @@ class CrossDatabaseOperationProtocolAdrContractTest {
             ?: error("Repository file not found: $relativePath")
 
     private companion object {
-        const val CONTENT_BASELINE_SHA = "CONTENT_BASELINE_SHA=e05ae7a08b1a88d2fbc0d4f2dff8ff06d282c908"
-        const val CONTENT_BASELINE_PARENT_SHA = "CONTENT_BASELINE_PARENT_SHA=9585e94a690d4f00d591f81d14e56aedefda3341"
+        const val CONTENT_BASELINE_SHA = "CONTENT_BASELINE_SHA=32a183e7821de49a4958c52d75693c43ee99b2e1"
+        const val CONTENT_BASELINE_PARENT_SHA = "CONTENT_BASELINE_PARENT_SHA=0e06cd99c72db66a72d6f36345a2dae6d63c4c1f"
         const val COG_AUDITED_SOURCE_HEAD = "7bdbda2aa4b7568695ba8e98be54d506d42c99d5"
         const val ORCH_AUDITED_SOURCE_HEAD = "0348dccb561e576d17c45e7f8b1e38717332772b"
         const val ORCH_001_AUDITED_SOURCE_HEAD = "fe188fdee8eae901434a255051b6fa4f852b929b"
@@ -166,5 +180,7 @@ class CrossDatabaseOperationProtocolAdrContractTest {
         const val RECALL_AUDITED_SOURCE_HEAD = "fae8a0df3c29775317986877bce2b8eda8593d27"
         const val REST_001_AUDITED_SOURCE_HEAD = "3661450325237fcadb86098ec16ee45cd039bc0b"
         const val REST_002_AUDITED_SOURCE_HEAD = "2ecca3f48d5e0ef27bd927da3986292daf7f7e2c"
+        const val BOOTSTRAP_HEALTH_AUDITED_SOURCE_HEAD = "f1697227241459f316bd562756e15ae3ce02c90d"
+        const val REST_BOOT_001_AUDITED_SOURCE_HEAD = "dd7a92a011fd4c453775df6ec307638b05313ec9"
     }
 }
