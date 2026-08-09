@@ -12,7 +12,7 @@ class CurrentRuntimeContractTest {
     }
 
     @Test
-    fun contractUsesPostRest002TruthAndStableMainResolution() {
+    fun contractUsesPostHealthRestReadinessTruthAndStableMainResolution() {
         listOf(
             CONTENT_BASELINE_SHA,
             CONTENT_BASELINE_PARENT_SHA,
@@ -26,10 +26,13 @@ class CurrentRuntimeContractTest {
             RECALL_AUDITED_SOURCE_HEAD,
             REST_001_AUDITED_SOURCE_HEAD,
             REST_002_AUDITED_SOURCE_HEAD,
-            "PR_181=MERGED_BY_SQUASH_HISTORICAL",
-            "PR_182=MERGED_BY_SQUASH_HISTORICAL",
+            HEALTH_001_AUDITED_SOURCE_HEAD,
+            REST_BOOT_001_AUDITED_SOURCE_HEAD,
             "PR_183=MERGED_BY_SQUASH_HISTORICAL",
-            "PR_184=MERGED_BY_SQUASH_HISTORICAL"
+            "PR_184=MERGED_BY_SQUASH_HISTORICAL",
+            "PR_186=MERGED_BY_SQUASH_HISTORICAL",
+            "PR_187=MERGED_BY_SQUASH_HISTORICAL",
+            "PR_188=MERGED_BY_SQUASH_HISTORICAL"
         ).forEach { token -> assertTrue("Missing runtime token $token", contract.contains(token)) }
 
         assertTrue(contract.contains("| `MorimilDatabase` | `15` |"))
@@ -51,6 +54,7 @@ class CurrentRuntimeContractTest {
         assertTrue(rest.contains("RestCycleProtocolTypes.OWNER_TYPE"))
         assertTrue(rest.contains("planRestRepairProposalIfNeeded"))
         assertTrue(rest.contains("RestCycleOperationFactory.proposeRepair"))
+        assertTrue(rest.contains("isBootstrapReady"))
         listOf(
             "loadGenesisCore(",
             "loadLocalIdentity(",
@@ -62,7 +66,7 @@ class CurrentRuntimeContractTest {
     }
 
     @Test
-    fun startupRecoveryOrderIncludesRestBeforeLegacyConvergence() {
+    fun startupRecoveryOrderKeepsRecallOpenWhileRestReadinessIsIntegrated() {
         val section = contract.substringAfter("## Startup and recovery")
         val cog = section.indexOf("COG recovery")
         val orch = section.indexOf("ORCH recovery")
@@ -74,25 +78,30 @@ class CurrentRuntimeContractTest {
         assertTrue(cog >= 0 && orch > cog && agent > orch && rest > agent && legacy > rest && vault > legacy && boot > vault)
         assertTrue(contract.contains("REST recovery is owner-scoped"))
         assertTrue(contract.contains("BOOT still reports `recallState=WAITING_FOR_CANONICAL_MEMORY_ADAPTER`"))
-        assertTrue(contract.contains("BOOT still reports `restCycleState=WAITING_FOR_CANONICAL_MEMORY_ADAPTER`"))
+        assertTrue(contract.contains("RestCycleRepository.isBootstrapReady(identity)"))
+        assertTrue(contract.contains("maps only a successful verified probe to `restCycleState=READY`"))
         assertTrue(contract.contains("BOOT cannot consume COG, ORCH, AGENT or REST journal rows"))
+        assertFalse(contract.contains("BOOT still reports `restCycleState=WAITING_FOR_CANONICAL_MEMORY_ADAPTER`"))
     }
 
     @Test
-    fun phaseTableIntegratesRest002ProposalOnlyButKeepsReadinessOpen() {
+    fun phaseTableIntegratesHealthAndRestReadinessButKeepsRecallOpen() {
         listOf(
             "RECALL_001=INTEGRATED",
-            "REST_BOOT_READINESS=OPEN",
+            "REST_BOOT_READINESS=INTEGRATED",
             "RECALL_BOOT_READINESS=OPEN",
             "ORCH_001=INTEGRATED",
             "REST_001=INTEGRATED",
             "REST_002=INTEGRATED",
             "REST_REPAIR_PROPOSAL_CONVERGED=true",
             "REST_REPAIR_EXECUTION_IMPLEMENTED=false",
-            "HEALTH_CONVERGENCE=OPEN",
+            "HEALTH_CONVERGENCE=INTEGRATED",
+            "HEALTH_STATE=WAITING_FOR_DEPENDENCIES",
             "F3_3=OPEN"
         ).forEach { assertTrue("Missing phase token $it", contract.contains(it)) }
-        assertTrue(contract.contains("F3.2 | Integrated for ProjectVault, COG-001..004, ORCH-001..004, AGENT-001..006, BOOT-001, RECALL-001 derived rebuild, REST-001 and REST-002 proposal convergence"))
+        assertTrue(contract.contains("dependency-derived Health and REST startup readiness"))
+        assertFalse(contract.contains("REST_BOOT_READINESS=OPEN"))
+        assertFalse(contract.contains("HEALTH_CONVERGENCE=OPEN"))
         assertFalse(contract.contains("REST_001_002=OPEN"))
         assertFalse(contract.contains("REST_001=OPEN"))
         assertFalse(contract.contains("REST_002=OPEN"))
@@ -110,7 +119,8 @@ class CurrentRuntimeContractTest {
             "REST-specific mutation testing is not established",
             "RECALL-specific mutation testing is not established",
             "REST repair execution remains intentionally not implemented",
-            "physical ARM64 inference",
+            "WAITING_FOR_DEPENDENCIES",
+            "physical ARM64",
             "F5 succession/revocation"
         ).forEach { finding -> assertTrue("Missing residual/invariant $finding", contract.contains(finding, true)) }
     }
@@ -127,8 +137,8 @@ class CurrentRuntimeContractTest {
             ?: error("Repository file not found: $relativePath")
 
     private companion object {
-        const val CONTENT_BASELINE_SHA = "CONTENT_BASELINE_SHA=e05ae7a08b1a88d2fbc0d4f2dff8ff06d282c908"
-        const val CONTENT_BASELINE_PARENT_SHA = "CONTENT_BASELINE_PARENT_SHA=9585e94a690d4f00d591f81d14e56aedefda3341"
+        const val CONTENT_BASELINE_SHA = "CONTENT_BASELINE_SHA=32a183e7821de49a4958c52d75693c43ee99b2e1"
+        const val CONTENT_BASELINE_PARENT_SHA = "CONTENT_BASELINE_PARENT_SHA=0e06cd99c72db66a72d6f36345a2dae6d63c4c1f"
         const val COG_AUDITED_SOURCE_HEAD = "7bdbda2aa4b7568695ba8e98be54d506d42c99d5"
         const val ORCH_AUDITED_SOURCE_HEAD = "0348dccb561e576d17c45e7f8b1e38717332772b"
         const val ORCH_001_AUDITED_SOURCE_HEAD = "fe188fdee8eae901434a255051b6fa4f852b929b"
@@ -137,5 +147,7 @@ class CurrentRuntimeContractTest {
         const val RECALL_AUDITED_SOURCE_HEAD = "fae8a0df3c29775317986877bce2b8eda8593d27"
         const val REST_001_AUDITED_SOURCE_HEAD = "3661450325237fcadb86098ec16ee45cd039bc0b"
         const val REST_002_AUDITED_SOURCE_HEAD = "2ecca3f48d5e0ef27bd927da3986292daf7f7e2c"
+        const val HEALTH_001_AUDITED_SOURCE_HEAD = "f1697227241459f316bd562756e15ae3ce02c90d"
+        const val REST_BOOT_001_AUDITED_SOURCE_HEAD = "dd7a92a011fd4c453775df6ec307638b05313ec9"
     }
 }
