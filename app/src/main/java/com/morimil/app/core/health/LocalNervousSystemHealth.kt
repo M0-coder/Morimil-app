@@ -36,7 +36,6 @@ data class LocalLivingMemoryHealthInput(
     val canonicalMemoryVerified: Boolean = false,
     val totalCanonicalEventCount: Int = 0,
     val postBirthEventCount: Int = 0,
-    val recentVerifiedEventCount: Int = 0,
     val quarantineEventCount: Int = 0
 )
 
@@ -206,20 +205,18 @@ object LocalNervousSystemHealth {
             input.totalCanonicalEventCount >= 1 &&
                 input.postBirthEventCount >= 0 &&
                 input.totalCanonicalEventCount == input.postBirthEventCount + 1 &&
-                input.recentVerifiedEventCount >= 0 &&
-                input.recentVerifiedEventCount <= input.postBirthEventCount &&
                 input.quarantineEventCount >= 0 &&
                 input.quarantineEventCount <= input.postBirthEventCount
         return if (countsValid) {
             healthy(
                 "canonical_memory_activity",
-                "total=${input.totalCanonicalEventCount} post_birth=${input.postBirthEventCount} recent_verified=${input.recentVerifiedEventCount}"
+                "total=${input.totalCanonicalEventCount} post_birth=${input.postBirthEventCount}"
             )
         } else {
             critical(
                 "canonical_memory_activity",
                 "canonical_event_counts_inconsistent",
-                "total=${input.totalCanonicalEventCount}, post_birth=${input.postBirthEventCount}, recent_verified=${input.recentVerifiedEventCount}, quarantine=${input.quarantineEventCount}"
+                "total=${input.totalCanonicalEventCount}, post_birth=${input.postBirthEventCount}, quarantine=${input.quarantineEventCount}"
             )
         }
     }
