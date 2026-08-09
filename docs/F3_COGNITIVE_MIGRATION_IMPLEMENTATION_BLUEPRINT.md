@@ -16,7 +16,7 @@
 - RECALL audited source head: `fae8a0df3c29775317986877bce2b8eda8593d27`.
 - REST-001 audited source head: `3661450325237fcadb86098ec16ee45cd039bc0b`.
 - REST-002 audited source head: `2ecca3f48d5e0ef27bd927da3986292daf7f7e2c`.
-- HEALTH-001 audited source head: `f1697227241459f316bd562756e15ae3ce02c90d`.
+- Bootstrap-health audited source head: `f1697227241459f316bd562756e15ae3ce02c90d`.
 - REST-BOOT-001 audited source head: `dd7a92a011fd4c453775df6ec307638b05313ec9`.
 - PR `#174`: merged by squash for AGENT-001 through AGENT-006.
 - PR `#175`: merged by squash for post-AGENT CURRENT reconciliation.
@@ -30,10 +30,10 @@
 - PR `#183`: merged by squash for post-REST-001 CURRENT reconciliation.
 - PR `#184`: merged by squash for REST-002 canonical repair-proposal convergence.
 - PR `#186`: merged by squash for post-REST-002 CURRENT reconciliation without normative erosion.
-- PR `#187`: merged by squash for HEALTH-001 dependency-derived runtime health convergence.
+- PR `#187`: merged by squash for dependency-derived bootstrap health instead of a static READY assignment.
 - PR `#188`: merged by squash for REST boot-readiness canonical probing.
 - Gate: `STOP_S5=CLOSED`.
-- Integrated scope of this blueprint: `COG-001` through `COG-004`; ADR-0002 also governs integrated ORCH-002..004, AGENT-001..006, BOOT-001, REST-001 and REST-002. RECALL-001 is an integrated canonical `DERIVED_REBUILD`, not an XOP owner. ORCH-001 is integrated F1 seed convergence and does not add a new XOP operation. HEALTH-001 and REST-BOOT-001 are integrated runtime/readiness convergence and do not add XOP owners.
+- Integrated scope of this blueprint: `COG-001` through `COG-004`; ADR-0002 also governs integrated ORCH-002..004, AGENT-001..006, BOOT-001, REST-001 and REST-002. RECALL-001 is an integrated canonical `DERIVED_REBUILD`, not an XOP owner. ORCH-001 is integrated F1 seed convergence and does not add a new XOP operation. Bootstrap health derivation and REST-BOOT-001 are integrated runtime/readiness changes and do not add XOP owners.
 
 This document remains COG-specific. ADR-0002 and the F3 inventory record the broader common-journal scope. The moving protected-main SHA is resolved externally.
 
@@ -85,15 +85,15 @@ GenesisUltraRuntimeIdentityRepository + CanonicalMemoryRepository
 
 Protected main includes MemoryOrganDatabase v9, `cross_database_operations`, deterministic COG-001..004 commands, exact canonical ensure, typed owner finalization, startup/pre-mutation recovery, fresh-v9/migrated journal guards, and API30/API35 interruption/replay coverage.
 
-ProjectVault remains separate. PR #172 integrated ORCH-002..004 under ADR-0002, PR #174 integrated AGENT-001..006, PR #176 integrated BOOT-001, PR #178 integrated RECALL-001 as a canonical verified derived rebuild, PR #180 integrated ORCH-001 seed convergence, PR #182 integrated REST-001 canonical planning and durable execution, PR #184 integrated REST-002 proposal-only canonical convergence, PR #187 integrated dependency-derived Health, and PR #188 integrated REST startup readiness without changing the COG mapping documented here.
+ProjectVault remains separate. PR #172 integrated ORCH-002..004 under ADR-0002, PR #174 integrated AGENT-001..006, PR #176 integrated BOOT-001, PR #178 integrated RECALL-001 as a canonical verified derived rebuild, PR #180 integrated ORCH-001 seed convergence, PR #182 integrated REST-001 canonical planning and durable execution, PR #184 integrated REST-002 proposal-only canonical convergence, PR #187 integrated dependency-derived bootstrap Health, and PR #188 integrated REST startup readiness without changing the COG mapping documented here.
 
 REST-001 participates in the broader common-journal architecture as owner `rest_cycle`; its planning input comes from `CanonicalConsumerReadPort.readRestCyclePlanningInput`, and its exact writer is `CanonicalRestCycleCommitPort`. The local autobiographical snapshot remains a projection rather than a new canonical-memory authority.
 
 REST-002 extends the same closed `rest_cycle` owner registry with deterministic `rest_cycle.propose_repair` -> `memory.repair_proposed` proposal convergence. It persists only a repair proposal requiring approval; automatic repair execution remains unimplemented. REST-002 recovery may finalize an exact proposal receipt but does not execute repair.
 
-HEALTH-001 derives health from durable legacy convergence plus REST/RECALL readiness and rejects inconsistent forged READY state. REST-BOOT-001 probes canonical REST planning read-only and promotes REST only after the existing Instance/Body/epoch/digest validation succeeds. Neither creates a new identity source, canonical writer, or XOP owner.
+PR #187 derives the bootstrap Health report from dependency state and rejects inconsistent forged READY state. REST-BOOT-001 probes canonical REST planning read-only and promotes REST only after the existing Instance/Body/epoch/digest validation succeeds. Neither creates a new identity source, canonical writer, or XOP owner.
 
-Remaining F3.2/F1 work is RECALL startup-readiness convergence followed by a full F1/F3.2 reaudit. F3.3 legacy removal remains open.
+F1 health convergence itself remains open because `LocalNervousSystemRepository.recordHealthCheckIfDegraded` still reads legacy health counts/context through `MemoryDao` and can write a system event through `MemoryRepository.recordSystemMemoryEvent`. Remaining F3.2/F1 work therefore includes that legacy health consumer boundary, RECALL startup-readiness convergence and then a full F1/F3.2 reaudit. F3.3 legacy removal remains open.
 
 ## 3. Canonical planning input
 
@@ -145,13 +145,13 @@ The common coordinator is registry-parameterized. COG recovery cannot consume OR
 
 ## 8. Evidence and residual hardening
 
-COG remains covered by unit, lint, APK, CodeQL, SBOM, Reference Checks and managed-device evidence. Broader ADR evidence now also includes ORCH, AGENT, BOOT, RECALL, REST-001, REST-002, HEALTH-001 and REST-BOOT-001 validation, but that does not alter the COG mapping.
+COG remains covered by unit, lint, APK, CodeQL, SBOM, Reference Checks and managed-device evidence. Broader ADR evidence now also includes ORCH, AGENT, BOOT, RECALL, REST-001, REST-002, bootstrap Health derivation and REST-BOOT-001 validation, but that does not alter the COG mapping.
 
 REST-001 validation on source head `3661450325237fcadb86098ec16ee45cd039bc0b` passed Android CI #717, Genesis Body Preparation #699, Reference Checks #541, CodeQL #430 and SBOM #428. It also passed unit, lint, QA-7 JVM, fail-closed release signing, API30/API35 compatibility and canonical API30 instrumented coverage. Its Room process-death test demonstrated recovery from a persisted exact canonical receipt without canonical writer replay.
 
 REST-002 source head `2ecca3f48d5e0ef27bd927da3986292daf7f7e2c` passed Android CI #723, Genesis Body Preparation #703, Reference Checks #547, CodeQL #436 and SBOM #434. Android validation included unit tests, lint, debug/instrumentation build, fail-closed release signing, ephemeral signed release, API30/API35 compatibility and the process-death test proving exactly-once proposal recovery without repair execution.
 
-HEALTH-001 source head `f1697227241459f316bd562756e15ae3ce02c90d` passed Android CI #732, Genesis Body Preparation #710, Reference Checks #556, CodeQL #445 and SBOM #443. REST-BOOT-001 source head `dd7a92a011fd4c453775df6ec307638b05313ec9` passed Android CI #738, Genesis Body Preparation #715, Reference Checks #562, CodeQL #451 and SBOM #449.
+PR #187 source head `f1697227241459f316bd562756e15ae3ce02c90d` passed Android CI #732, Genesis Body Preparation #710, Reference Checks #556, CodeQL #445 and SBOM #443. REST-BOOT-001 source head `dd7a92a011fd4c453775df6ec307638b05313ec9` passed Android CI #738, Genesis Body Preparation #715, Reference Checks #562, CodeQL #451 and SBOM #449. Those PR #187 results prove bootstrap Health derivation, not migration of `LocalNervousSystemRepository`.
 
 The global mutation pilot remained report-only. REST-specific mutation testing is not established.
 
@@ -179,8 +179,10 @@ RECALL_BOOT_READINESS=OPEN
 MEMORY_ORGAN_DATABASE=V9
 F1_A_AUTHORITY=PRESERVED
 PROJECT_VAULT=SEPARATE_AND_PRESERVED
-F3_2_BOUNDED_SCOPE=CLOSED_FOR_PROJECTVAULT_COG_ORCH_AGENT_BOOT_RECALL_DERIVED_REST001_REST002_PROPOSAL_HEALTH_AND_REST_READINESS
-HEALTH_CONVERGENCE=INTEGRATED
+F3_2_BOUNDED_SCOPE=CLOSED_FOR_PROJECTVAULT_COG_ORCH_AGENT_BOOT_RECALL_DERIVED_REST001_REST002_PROPOSAL_AND_REST_READINESS
+BOOTSTRAP_HEALTH_DERIVATION=INTEGRATED
+HEALTH_CONVERGENCE=OPEN
+HEALTH_CONVERGED=false
 HEALTH_STATE=WAITING_FOR_DEPENDENCIES
 F3_3=OPEN
 F4_F6=OPEN
