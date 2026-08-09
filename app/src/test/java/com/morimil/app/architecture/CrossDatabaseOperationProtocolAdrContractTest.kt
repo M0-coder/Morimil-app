@@ -9,7 +9,7 @@ class CrossDatabaseOperationProtocolAdrContractTest {
     private val adr by lazy { repositoryFile("docs/adr/ADR-0002-cross-database-operation-protocol.md").readText() }
 
     @Test
-    fun adrIsCurrentAcceptedAndRecordsPostRestReadinessDisposition() {
+    fun adrIsCurrentAcceptedAndRecordsHealthLegacyConvergenceDisposition() {
         assertTrue(adr.startsWith("# Document status: CURRENT"))
         assertTrue(adr.contains("Status: Accepted and implemented for COG-001..004, ORCH-002..004, AGENT-001..006, BOOT-001, REST-001, and REST-002 proposal convergence"))
         listOf(
@@ -31,6 +31,7 @@ class CrossDatabaseOperationProtocolAdrContractTest {
             "PR_186=MERGED_BY_SQUASH_HISTORICAL",
             "PR_187=MERGED_BY_SQUASH_HISTORICAL",
             "PR_188=MERGED_BY_SQUASH_HISTORICAL",
+            "PR_189=MERGED_BY_SQUASH_HISTORICAL",
             "ADR_0002=ACCEPTED_AND_IMPLEMENTED_FOR_COG_ORCH_AGENT_BOOT_REST001_AND_REST002_PROPOSAL_BOUNDED_SCOPES",
             "RECALL_DISPOSITION=INTEGRATED_DERIVED_REBUILD_NOT_XOP_OWNER",
             "REST_001=INTEGRATED",
@@ -40,11 +41,16 @@ class CrossDatabaseOperationProtocolAdrContractTest {
             "REST_BOOT_READINESS=INTEGRATED",
             "RECALL_BOOT_READINESS=OPEN",
             "BOOTSTRAP_HEALTH_DERIVATION=INTEGRATED",
+            "HEALTH_LEGACY_CONSUMER_CONVERGENCE=INTEGRATED",
+            "HEALTH_CAN_READ_CANONICAL_MEMORY=true",
+            "HEALTH_CAN_WRITE_CANONICAL_MEMORY=false",
+            "HEALTH_CAN_WRITE_LEGACY_MEMORY_EVENTS=false",
             "HEALTH_CONVERGENCE=OPEN",
             "HEALTH_CONVERGED=false",
             "HEALTH_STATE=WAITING_FOR_DEPENDENCIES",
-            "TRACKER_88=OPEN_FOR_HEALTH_RECALL_READINESS_AND_LEGACY_RETIREMENT"
+            "TRACKER_88=OPEN_FOR_RECALL_READINESS_REAUDIT_AND_LEGACY_RETIREMENT"
         ).forEach { token -> assertTrue("Missing ADR token $token", adr.contains(token)) }
+        assertFalse(adr.contains("LocalNervousSystemRepository.recordHealthCheckIfDegraded"))
         assertFalse(adr.contains("REST_BOOT_READINESS=OPEN"))
         assertFalse(adr.contains("HEALTH_CONVERGENCE=INTEGRATED"))
         assertFalse(adr.contains("REST_002=OPEN"))
@@ -80,7 +86,7 @@ class CrossDatabaseOperationProtocolAdrContractTest {
     }
 
     @Test
-    fun mappingsIncludeRest001AndRest002WithoutAuthorityTransfer() {
+    fun mappingsIncludeRestAndCanonicalHealthWithoutAuthorityTransfer() {
         listOf(
             "COG-001",
             "COG-004",
@@ -97,6 +103,8 @@ class CrossDatabaseOperationProtocolAdrContractTest {
             "GenesisUltraRuntimeIdentityRepository.readCommittedIdentity()",
             "CanonicalConsumerReadPort.readRecallCandidates",
             "CanonicalConsumerReadPort.readRestCyclePlanningInput",
+            "CanonicalConsumerReadPort.readHealthInput",
+            "LocalNervousSystemRepository.observeHealth",
             "rest_cycle.execute",
             "rest_cycle.local_consolidation",
             "rest_cycle.propose_repair",
@@ -124,7 +132,7 @@ class CrossDatabaseOperationProtocolAdrContractTest {
     }
 
     @Test
-    fun restReadinessIsIntegratedWhileHealthLegacyAndRecallResidualsStayOpen() {
+    fun healthLegacyConsumerIsIntegratedWhileGlobalHealthAndRecallResidualsStayOpen() {
         listOf(
             "RECALL_001=INTEGRATED",
             "REST_BOOT_READINESS=INTEGRATED",
@@ -135,13 +143,17 @@ class CrossDatabaseOperationProtocolAdrContractTest {
             "REST_REPAIR_PROPOSAL_CONVERGED=true",
             "REST_REPAIR_EXECUTION_IMPLEMENTED=false",
             "BOOTSTRAP_HEALTH_DERIVATION=INTEGRATED",
+            "HEALTH_LEGACY_CONSUMER_CONVERGENCE=INTEGRATED",
+            "HEALTH_CAN_READ_CANONICAL_MEMORY=true",
+            "HEALTH_CAN_WRITE_CANONICAL_MEMORY=false",
+            "HEALTH_CAN_WRITE_LEGACY_MEMORY_EVENTS=false",
             "HEALTH_CONVERGENCE=OPEN",
             "HEALTH_CONVERGED=false",
             "HEALTH_STATE=WAITING_FOR_DEPENDENCIES",
             "F3_3=OPEN"
         ).forEach { assertTrue("Missing state $it", adr.contains(it)) }
         listOf(
-            "LocalNervousSystemRepository.recordHealthCheckIfDegraded",
+            "Health-specific mutation testing",
             "REST-specific mutation testing",
             "RECALL-specific mutation testing",
             "BOOT/AGENT-specific mutation testing",
@@ -170,8 +182,8 @@ class CrossDatabaseOperationProtocolAdrContractTest {
             ?: error("Repository file not found: $relativePath")
 
     private companion object {
-        const val CONTENT_BASELINE_SHA = "CONTENT_BASELINE_SHA=32a183e7821de49a4958c52d75693c43ee99b2e1"
-        const val CONTENT_BASELINE_PARENT_SHA = "CONTENT_BASELINE_PARENT_SHA=0e06cd99c72db66a72d6f36345a2dae6d63c4c1f"
+        const val CONTENT_BASELINE_SHA = "CONTENT_BASELINE_SHA=77af62a545f72161c0ff47d74c0de6e1d1f4f251"
+        const val CONTENT_BASELINE_PARENT_SHA = "CONTENT_BASELINE_PARENT_SHA=32a183e7821de49a4958c52d75693c43ee99b2e1"
         const val COG_AUDITED_SOURCE_HEAD = "7bdbda2aa4b7568695ba8e98be54d506d42c99d5"
         const val ORCH_AUDITED_SOURCE_HEAD = "0348dccb561e576d17c45e7f8b1e38717332772b"
         const val ORCH_001_AUDITED_SOURCE_HEAD = "fe188fdee8eae901434a255051b6fa4f852b929b"
