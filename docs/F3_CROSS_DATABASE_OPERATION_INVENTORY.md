@@ -103,7 +103,7 @@ Neither the XOP journal nor an owner repository becomes a second identity or can
 
 | ID | Entry point | Current state |
 | --- | --- | --- |
-| `ORCH-001` | `seedDefaultOrchestrationIfNeeded` | Integrated canonical identity-gated local projection. |
+| `ORCH-001` | `seedDefaultOrchestrationIfNeeded` | Integrated F1 convergence: committed Genesis Ultra identity is checked before any local seed; no legacy birth-completeness authority. |
 | `ORCH-002` | `proposeDelegatedTask` | Integrated. |
 | `ORCH-003` | `approveDelegatedTask` | Integrated. |
 | `ORCH-004` | `rejectDelegatedTask` | Integrated. |
