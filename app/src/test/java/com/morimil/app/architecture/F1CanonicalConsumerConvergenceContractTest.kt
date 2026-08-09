@@ -83,20 +83,32 @@ class F1CanonicalConsumerConvergenceContractTest {
     }
 
     @Test
-    fun localNervousSystemKeepsF1HealthConvergenceOpen() {
+    fun localNervousSystemUsesCanonicalReadBoundaryWhileGlobalHealthRemainsOpen() {
         val inventory = inventoryFile().readText()
         val health = repositoryFile("app/src/main/java/com/morimil/app/data/repository/LocalNervousSystemRepository.kt").readText()
         listOf(
+            "CanonicalConsumerReadPort",
+            "readHealthInput",
+            "observeHealth",
+            "CanonicalReadResult.Ready",
+            "CanonicalReadResult.Blocked",
+            "CanonicalReadDisposition.NOT_READY",
+            "CanonicalReadDisposition.RETRYABLE",
+            "CanonicalReadDisposition.BLOCKED"
+        ).forEach { token -> assertTrue("Missing canonical Health token $token", health.contains(token)) }
+        listOf(
             "MemoryDao",
+            "MemoryRepository",
+            "MorimilDatabase",
+            "MemoryEventEntity",
             "countGenesisCore()",
             "countLocalIdentity()",
             "countMemoryEvents()",
             "loadMemoryContext(20)",
             "memoryRepository.recordSystemMemoryEvent("
-        ).forEach { token -> assertTrue("Missing legacy health token $token", health.contains(token)) }
+        ).forEach { token -> assertFalse("Legacy Health dependency returned: $token", health.contains(token)) }
         listOf(
             "F1-HEALTH-001",
-            "LocalNervousSystemRepository.recordHealthCheckIfDegraded",
             "REST_BOOT_READINESS=INTEGRATED",
             "RECALL_BOOT_READINESS=OPEN",
             "BOOTSTRAP_HEALTH_DERIVATION=INTEGRATED",
