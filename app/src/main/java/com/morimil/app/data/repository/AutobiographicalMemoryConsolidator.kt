@@ -1,23 +1,22 @@
 package com.morimil.app.data.repository
 
-import com.morimil.app.data.local.MemoryEventEntity
 import org.json.JSONArray
 import org.json.JSONObject
 
-object AutobiographicalMemoryConsolidator {
+internal object AutobiographicalMemoryConsolidator {
     fun build(
         alias: String,
-        sourceRestCycleEventHash: String,
-        events: List<MemoryEventEntity>,
+        sourceRestCycleRef: String,
+        events: List<RestCycleSourceEvent>,
         generatedAtMillis: Long
     ): AutobiographicalMemoryDraft {
         val prioritized = events
             .filter { event -> event.memoryKind != "chat_noise" }
             .sortedWith(
-                compareByDescending<MemoryEventEntity> { it.userConfirmed }
+                compareByDescending<RestCycleSourceEvent> { it.userConfirmed }
                     .thenByDescending { it.importance }
                     .thenByDescending { it.confidence }
-                    .thenByDescending { it.createdAtMillis }
+                    .thenByDescending { it.observedAtMillis }
             )
 
         val identity = select(prioritized, limit = 4) { it.memoryKind == "identity" }
@@ -41,7 +40,7 @@ object AutobiographicalMemoryConsolidator {
         val selfSummary = buildString {
             appendLine("Morimil ($alias) es una instancia local con memoria viva firmada y append-only.")
             appendLine("Ultima consolidacion autobiografica: $generatedAtMillis.")
-            appendLine("Fuente de consolidacion: ${sourceRestCycleEventHash.take(19)}.")
+            appendLine("Fuente de consolidacion: ${sourceRestCycleRef.take(72)}.")
             appendSection("identidad", identity, 3)
             appendSection("decisiones_vigentes", decisions, 4)
         }.trim()
@@ -66,13 +65,10 @@ object AutobiographicalMemoryConsolidator {
             appendLine("- none_detected_by_v1; Memory Doubt Layer debe refinar esta seccion.")
         }.trim()
 
-        val sourceHashes = prioritized
-            .take(16)
-            .map { event -> event.eventHash }
-
+        val sourceHashes = prioritized.take(16).map { event -> event.eventHash }
         val evidenceJson = JSONObject()
-            .put("schema", "morimil.autobiographical_consolidation.v1")
-            .put("source_rest_cycle_event_hash", sourceRestCycleEventHash)
+            .put("schema", "morimil.autobiographical_consolidation.v2")
+            .put("source_rest_cycle_ref", sourceRestCycleRef)
             .put("generated_at_millis", generatedAtMillis)
             .put("source_event_count", events.size)
             .put("identity_count", identity.size)
@@ -81,7 +77,7 @@ object AutobiographicalMemoryConsolidator {
             .put("learning_count", learning.size)
             .put("correction_count", corrections.size)
             .put("project_signal_count", projects.size)
-            .put("policy", "append_signed_event_before_snapshot_update")
+            .put("policy", "canonical_rest_xop_before_snapshot_update")
             .put("open_doubt_policy", "future_memory_doubt_layer")
             .put("source_event_hashes", JSONArray(sourceHashes))
             .toString()
@@ -98,40 +94,29 @@ object AutobiographicalMemoryConsolidator {
 
     fun eventBody(draft: AutobiographicalMemoryDraft): String {
         return "Autobiografia local consolidada: alias=${draft.alias}; " +
-            "self=${draft.selfSummary.take(220)}; " +
-            "goals=${draft.activeGoals.take(220)}; " +
+            "self=${draft.selfSummary.take(220)}; goals=${draft.activeGoals.take(220)}; " +
             "constraints=${draft.importantConstraints.take(220)}"
     }
 
     private fun select(
-        events: List<MemoryEventEntity>,
+        events: List<RestCycleSourceEvent>,
         limit: Int,
-        predicate: (MemoryEventEntity) -> Boolean
-    ): List<MemoryEventEntity> {
-        return events.filter(predicate).take(limit)
-    }
+        predicate: (RestCycleSourceEvent) -> Boolean
+    ): List<RestCycleSourceEvent> = events.filter(predicate).take(limit)
 
-    private fun StringBuilder.appendSection(
-        title: String,
-        events: List<MemoryEventEntity>,
-        limit: Int
-    ) {
+    private fun StringBuilder.appendSection(title: String, events: List<RestCycleSourceEvent>, limit: Int) {
         appendLine("[$title]")
         val selected = events.take(limit)
-        if (selected.isEmpty()) {
-            appendLine("- none")
-        } else {
-            selected.forEach { event ->
-                appendLine(
-                    "- ${event.memoryKind}/i${event.importance}/c${event.confidence}/${event.eventHash.take(19)}: " +
-                        event.body.replace("\n", " ").take(220)
-                )
-            }
+        if (selected.isEmpty()) appendLine("- none") else selected.forEach { event ->
+            appendLine(
+                "- ${event.memoryKind}/i${event.importance}/c${event.confidence}/${event.eventHash.take(19)}: " +
+                    event.body.replace("\n", " ").take(220)
+            )
         }
     }
 }
 
-data class AutobiographicalMemoryDraft(
+internal data class AutobiographicalMemoryDraft(
     val alias: String,
     val selfSummary: String,
     val stableTraits: String,

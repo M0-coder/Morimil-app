@@ -1,7 +1,5 @@
 package com.morimil.app.data.repository
 
-import com.morimil.app.core.memory.MemoryIntegrityCore
-import com.morimil.app.data.local.MemoryEventEntity
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -13,36 +11,36 @@ class AutobiographicalMemoryConsolidatorTest {
     fun buildsAutobiographicalDraftFromMeaningfulMemoryEvents() {
         val events = listOf(
             event(
-                eventHash = "sha256:identity",
+                eventHash = "evsha256:${"a".repeat(64)}",
                 memoryKind = "identity",
                 body = "Morimil nacio como instancia local con memoria privada.",
                 importance = 100,
                 userConfirmed = false
             ),
             event(
-                eventHash = "sha256:decision",
+                eventHash = "evsha256:${"b".repeat(64)}",
                 memoryKind = "decision",
                 body = "Regla: decision importante debe entrar al torrente firmado.",
                 importance = 92,
                 userConfirmed = true
             ),
             event(
-                eventHash = "sha256:project",
-                eventType = "project.vault_created",
+                eventHash = "evsha256:${"c".repeat(64)}",
                 memoryKind = "conversation",
+                eventType = "project.vault_created",
                 tagsJson = "[\"project\"]",
                 body = "Boveda de proyecto creada: Morimil-app.",
                 importance = 88
             ),
             event(
-                eventHash = "sha256:correction",
+                eventHash = "evsha256:${"d".repeat(64)}",
                 memoryKind = "correction",
                 body = "Correccion: no crear organos desconectados del torrente.",
                 importance = 92,
                 userConfirmed = true
             ),
             event(
-                eventHash = "sha256:noise",
+                eventHash = "evsha256:${"e".repeat(64)}",
                 memoryKind = "chat_noise",
                 body = "dale",
                 importance = 8
@@ -51,7 +49,7 @@ class AutobiographicalMemoryConsolidatorTest {
 
         val draft = AutobiographicalMemoryConsolidator.build(
             alias = "Morimil",
-            sourceRestCycleEventHash = "sha256:rest-cycle",
+            sourceRestCycleRef = "rest_candidate_001",
             events = events,
             generatedAtMillis = 1234L
         )
@@ -62,8 +60,8 @@ class AutobiographicalMemoryConsolidatorTest {
         assertTrue(draft.activeGoals.contains("Boveda de proyecto"))
         assertTrue(draft.importantConstraints.contains("organos desconectados"))
         assertFalse(draft.selfSummary.contains("dale"))
-        assertEquals("morimil.autobiographical_consolidation.v1", evidence.getString("schema"))
-        assertEquals("sha256:rest-cycle", evidence.getString("source_rest_cycle_event_hash"))
+        assertEquals("morimil.autobiographical_consolidation.v2", evidence.getString("schema"))
+        assertEquals("rest_candidate_001", evidence.getString("source_rest_cycle_ref"))
         assertEquals(5, evidence.getInt("source_event_count"))
         assertEquals(1, evidence.getInt("project_signal_count"))
     }
@@ -96,30 +94,20 @@ class AutobiographicalMemoryConsolidatorTest {
         importance: Int,
         confidence: Int = 90,
         userConfirmed: Boolean = false,
-        createdAtMillis: Long = 1000L
-    ): MemoryEventEntity {
-        return MemoryEventEntity(
-            genesisCoreId = "primary_genesis",
-            genesisCoreHash = "sha256:genesis",
-            previousEventHash = null,
+        observedAtMillis: Long = 1000L
+    ): RestCycleSourceEvent {
+        return RestCycleSourceEvent(
             eventHash = eventHash,
-            hashAlgorithm = MemoryIntegrityCore.HASH_ALGORITHM_SHA256,
-            canonicalization = MemoryIntegrityCore.MEMORY_EVENT_CANONICALIZATION_V3,
-            signatureAlgorithm = MemoryIntegrityCore.MEMORY_EVENT_SIGNATURE_ALGORITHM_UNSIGNED,
-            eventSignature = null,
             eventType = eventType,
             actor = "system",
             source = "test",
-            contextTag = "test",
-            privacyVisibility = "private_local",
             memoryKind = memoryKind,
             tagsJson = tagsJson,
-            evidenceJson = "{}",
-            confidence = confidence,
-            userConfirmed = userConfirmed,
             body = body,
             importance = importance,
-            createdAtMillis = createdAtMillis
+            confidence = confidence,
+            userConfirmed = userConfirmed,
+            observedAtMillis = observedAtMillis
         )
     }
 }

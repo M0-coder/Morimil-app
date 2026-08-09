@@ -1,9 +1,7 @@
 package com.morimil.app.data.repository
 
-import com.morimil.app.data.local.MemoryEventEntity
-
-object RestCyclePolicy {
-    fun requiresHumanApproval(events: List<MemoryEventEntity>): Boolean {
+internal object RestCyclePolicy {
+    fun requiresHumanApproval(events: List<RestCycleSourceEvent>): Boolean {
         val highImpactEvents = events.count { event -> event.importance >= HIGH_IMPACT_IMPORTANCE }
         val confirmedCriticalEvent = events.any { event ->
             event.userConfirmed && event.importance >= CONFIRMED_CRITICAL_IMPORTANCE
@@ -16,11 +14,11 @@ object RestCyclePolicy {
         return confirmedCriticalEvent || criticalKinds || highImpactEvents >= HIGH_IMPACT_BATCH_SIZE
     }
 
-    fun riskLevel(events: List<MemoryEventEntity>): String {
+    fun riskLevel(events: List<RestCycleSourceEvent>): String {
         return if (requiresHumanApproval(events)) "medium" else "low"
     }
 
-    fun approvalReason(events: List<MemoryEventEntity>): String {
+    fun approvalReason(events: List<RestCycleSourceEvent>): String {
         val confirmed = events.count { event -> event.userConfirmed }
         val highImpact = events.count { event -> event.importance >= HIGH_IMPACT_IMPORTANCE }
         val criticalKinds = events.count { event -> event.memoryKind in CRITICAL_MEMORY_KINDS }

@@ -1,436 +1,268 @@
 package com.morimil.app.data.repository
 
-import com.morimil.app.core.memory.MemoryIntegrityCore
-import com.morimil.app.core.memory.MemoryOrganReconciliationReport
-import com.morimil.app.core.memory.RestCycleMaintenancePlanner
-import com.morimil.app.core.memory.RestCycleMaintenanceReport
 import com.morimil.app.core.memory.RestCycleMode
-import com.morimil.app.data.local.AutobiographicalSnapshotEntity
-import com.morimil.app.data.local.MemoryDao
-import com.morimil.app.data.local.MemoryEventEntity
-import com.morimil.app.data.local.MemoryOrganDao
+import com.morimil.app.data.genesis.ultra.CanonicalConsumerReadPort
+import com.morimil.app.data.genesis.ultra.CanonicalReadDisposition
+import com.morimil.app.data.genesis.ultra.CanonicalReadFailure
+import com.morimil.app.data.genesis.ultra.CanonicalReadResult
+import com.morimil.app.data.genesis.ultra.CanonicalRestCyclePlanningInput
+import com.morimil.app.data.genesis.ultra.GenesisUltraRuntimeIdentity
+import com.morimil.app.data.genesis.ultra.GenesisUltraRuntimeIdentityRepository
+import com.morimil.app.data.local.CrossDatabaseOperationStatus
 import com.morimil.app.data.local.MemoryOrganDatabase
-import com.morimil.app.data.local.MemorySnapshotEntity
-import com.morimil.app.data.local.MorimilDatabase
-import org.json.JSONArray
-import org.json.JSONObject
+import java.time.Instant
 
-class RestCycleRepository(
-    private val database: MorimilDatabase,
+class RestCycleRepository internal constructor(
     organDatabase: MemoryOrganDatabase,
-    private val memoryIntegrityCore: MemoryIntegrityCore,
-    private val memoryRepository: MemoryRepository
+    private val identityRepository: GenesisUltraRuntimeIdentityRepository,
+    private val canonicalReadPort: CanonicalConsumerReadPort,
+    private val protocol: CrossDatabaseOperationCoordinator,
+    private val nowMillis: () -> Long = System::currentTimeMillis
 ) {
-    private val memoryDao: MemoryDao = database.memoryDao()
-    private val organDao: MemoryOrganDao = organDatabase.memoryOrganDao()
-    private val memoryLinkRepository = MemoryLinkRepository(organDatabase)
-    private val migrationRecordRepository = MigrationRecordRepository(organDatabase, memoryRepository)
-    private val organReconciliationRepository = MemoryOrganReconciliationRepository(
-        organDatabase = organDatabase,
-        memoryIntegrityCore = memoryIntegrityCore
-    )
-    private val localNervousSystemRepository = LocalNervousSystemRepository(
-        database = database,
-        memoryRepository = memoryRepository
-    )
+    private val migrationStore = RestCycleMigrationStore(organDatabase, nowMillis)
 
     suspend fun runLocalRestCycleIfDue(force: Boolean = false): Boolean {
-        return runLocalRestCycleIfDue(force = force, approvedMigrationId = null)
+        val context = loadCanonicalContext() ?: return false
+        if (!force && !isDue(context.planning.latestRestCycle?.observedAt)) return false
+
+        val meaningfulEvents = selectMeaningfulEvents(context.sources)
+        if (meaningfulEvents.isEmpty()) return false
+        if (!force && meaningfulEvents.size < REST_CYCLE_MIN_EVENTS) return false
+
+        val mode = if (force) RestCycleMode.Deep else RestCycleMode.Normal
+        val approvalRequired = !force && RestCyclePolicy.requiresHumanApproval(meaningfulEvents)
+        val plan = buildPlan(
+            context = context,
+            meaningfulEvents = meaningfulEvents,
+            mode = mode,
+            approvalRequired = approvalRequired
+        )
+        migrationStore.ensurePlanned(
+            migrationId = plan.migrationId,
+            instanceId = context.identity.instanceId,
+            birthRootEventHash = context.planning.snapshot.birthRootEventHash,
+            sourceEventHashes = plan.linkedSources.map { it.eventHash },
+            preSnapshotId = context.planning.latestRestCycle?.eventHash
+                ?: context.planning.snapshot.birthRootEventHash,
+            snapshotDigest = context.planning.snapshot.snapshotDigest,
+            sourceSetDigest = context.planning.sourceSetDigest,
+            mode = mode,
+            approvalRequired = approvalRequired,
+            riskLevel = if (approvalRequired) "medium" else "low",
+            summary = plan.summary
+        )
+        if (approvalRequired) return false
+        return executePlan(context, plan, approvalRequired = false, approvalId = null)
     }
 
     suspend fun approvePlannedRestCycle(migrationId: String): Boolean {
-        val record = migrationRecordRepository.loadMigration(migrationId) ?: return false
-        if (record.migrationType != REST_CYCLE_MIGRATION_TYPE || record.status != MIGRATION_STATUS_PLANNED) {
-            return false
-        }
-
-        migrationRecordRepository.markMigrationApproved(
-            migrationId = migrationId,
-            approvalId = "user_approved:${System.currentTimeMillis()}"
-        )
-        return runLocalRestCycleIfDue(force = true, approvedMigrationId = migrationId)
-    }
-
-    private suspend fun runLocalRestCycleIfDue(
-        force: Boolean,
-        approvedMigrationId: String?
-    ): Boolean {
-        if (memoryDao.countGenesisCore() == 0) return false
-
-        val now = System.currentTimeMillis()
-        val latestRestCycle = memoryRepository.loadLatestLivingMemoryEventByType(REST_CYCLE_EVENT_TYPE)
-        if (!force && latestRestCycle != null &&
-            now - latestRestCycle.observedAtMillis < REST_CYCLE_MIN_INTERVAL_MILLIS
+        val existing = migrationStore.load(migrationId) ?: return false
+        if (
+            existing.migrationType != RestCycleMigrationStore.REST_CYCLE_MIGRATION_TYPE ||
+            existing.status != RestCycleMigrationStore.STATUS_PLANNED ||
+            !existing.approvalRequired
         ) {
             return false
         }
 
-        val events = memoryDao.loadMemoryContext(80)
-            .filter { it.eventType != REST_CYCLE_EVENT_TYPE }
-            .sortedWith(compareBy<MemoryEventEntity> { it.createdAtMillis }.thenBy { it.id })
-
-        val meaningfulEvents = events.filter { event ->
-            event.memoryKind != "conversation" || event.importance >= 60
-        }
-        if (!force && meaningfulEvents.size < REST_CYCLE_MIN_EVENTS) return false
-
-        val summary = buildRestCycleSummary(events, now)
-        if (summary.isBlank()) return false
-
-        val chainScanStartedAtMillis = System.currentTimeMillis()
-        val fullChainEvents = memoryDao.loadMemoryEventAuditChain()
-        val fullChainVerified = memoryIntegrityCore.verifyMemoryEventChain(fullChainEvents)
-        val chainScanLatencyMillis = System.currentTimeMillis() - chainScanStartedAtMillis
-        val organReconciliation = organReconciliationRepository.reconcileAgainstMemoryEvents(
-            validMemoryEventHashes = fullChainEvents.map { event -> event.eventHash }.toSet(),
-            memoryChainVerified = fullChainVerified
-        )
-        localNervousSystemRepository.recordHealthCheckIfDegraded(
-            source = "rest_cycle_preflight",
-            fullMemoryChain = fullChainEvents,
-            memoryChainVerified = fullChainVerified,
-            chainScanLatencyMillis = chainScanLatencyMillis,
-            organReconciliation = organReconciliation,
-            nowMillis = now
-        )
-        val maintenanceReport = RestCycleMaintenancePlanner.build(
-            mode = if (force) RestCycleMode.Deep else RestCycleMode.Normal,
-            fullChainVerified = fullChainVerified,
-            organReconciliation = organReconciliation,
-            sourceEventCount = events.size,
-            meaningfulEventCount = meaningfulEvents.size,
-            policyApprovalRequired = RestCyclePolicy.requiresHumanApproval(meaningfulEvents),
-            policyReason = RestCyclePolicy.approvalReason(meaningfulEvents)
-        )
-        val repairProposalId = if (fullChainVerified && organReconciliation.compensatingWritesAllowed) {
-            runCatching {
-                planRestRepairProposalIfNeeded(
-                    events = events,
-                    preSnapshotId = latestRestCycle?.eventHash ?: "none",
-                    chainVerified = true
-                )
-            }.getOrNull()
-        } else {
-            null
-        }
-        val approvalRequired = !force && maintenanceReport.approvalRequired
-        if (approvalRequired) {
-            planImportantRestCycleIfNeeded(
-                summary = summary,
-                meaningfulEvents = meaningfulEvents,
-                preSnapshotId = latestRestCycle?.eventHash ?: "none",
-                maintenanceReport = maintenanceReport,
-                organReconciliation = organReconciliation
-            )
-            return false
-        }
-
-        val migrationId = approvedMigrationId ?: planRestCycleMigration(
-            summary = summary,
+        val context = loadCanonicalContext() ?: return false
+        val meaningfulEvents = selectMeaningfulEvents(context.sources)
+        if (meaningfulEvents.isEmpty()) return false
+        val plan = buildPlan(
+            context = context,
             meaningfulEvents = meaningfulEvents,
-            preSnapshotId = latestRestCycle?.eventHash ?: "none",
-            approvalRequired = false,
-            approvedByUser = force,
-            approvalId = if (force) "manual_force:${System.currentTimeMillis()}" else null,
-            maintenanceReport = maintenanceReport,
-            organReconciliation = organReconciliation
+            mode = RestCycleMode.Normal,
+            approvalRequired = true
         )
+        if (plan.migrationId != migrationId) return false
+        val approvalId = "user_approved:$migrationId"
+        migrationStore.approveExact(migrationId, approvalId)
+        return executePlan(context, plan, approvalRequired = true, approvalId = approvalId)
+    }
 
-        return runCatching {
-            val restCycle = appendRestCycleEvent(
-                summary = summary,
-                migrationId = migrationId,
-                approvalId = approvedMigrationId
-            ) ?: error("Rest cycle append skipped because memory tail integrity was not trusted.")
-            memoryLinkRepository.linkRestCycleToEvents(
-                instanceId = restCycle.instanceId,
-                genesisCoreHash = restCycle.genesisCoreHash,
-                restCycleEventHash = restCycle.eventHash,
-                sourceEvents = meaningfulEvents.sortedWith(
-                    compareByDescending<MemoryEventEntity> { it.userConfirmed }
-                        .thenByDescending { it.importance }
-                        .thenByDescending { it.confidence }
-                        .thenByDescending { it.createdAtMillis }
-                ),
-                createdAtMillis = restCycle.createdAtMillis
-            )
-            val autobiographyEventHash = if (maintenanceReport.fullChainVerified) {
-                consolidateAutobiographyFromRestCycle(
-                    restCycle = restCycle,
-                    events = events
-                )
-            } else {
-                null
+    private suspend fun loadCanonicalContext(): CanonicalRestCycleContext? {
+        val identity = identityRepository.readCommittedIdentity() ?: return null
+        val recovery = protocol.recoverBeforeMutation(
+            identity = identity,
+            ownerType = RestCycleProtocolTypes.OWNER_TYPE,
+            limit = MAX_RECOVERY_BATCH
+        )
+        check(recovery.blockedCount == 0) { "rest_cycle_protocol_blocked" }
+        check(recovery.retryableFailureCount == 0) { "rest_cycle_protocol_recovery_incomplete" }
+
+        val planning = when (val result = canonicalReadPort.readRestCyclePlanningInput(CANONICAL_SOURCE_LIMIT)) {
+            is CanonicalReadResult.Ready -> result.value
+            is CanonicalReadResult.Blocked -> return handleBlockedRead(result.failure)
+        }
+        requireCanonicalPlanning(identity, planning)
+        val sources = planning.sources.map { source -> source.toRestCycleSourceEvent() }
+        return CanonicalRestCycleContext(identity, planning, sources)
+    }
+
+    private fun handleBlockedRead(failure: CanonicalReadFailure): CanonicalRestCycleContext? {
+        if (failure.disposition == CanonicalReadDisposition.NOT_READY) return null
+        throw CanonicalRestCycleReadException(failure)
+    }
+
+    private fun requireCanonicalPlanning(
+        identity: GenesisUltraRuntimeIdentity,
+        planning: CanonicalRestCyclePlanningInput
+    ) {
+        require(planning.identity.instanceId == identity.instanceId) {
+            "rest_cycle_planning_foreign_instance"
+        }
+        require(planning.identity.companionName == identity.companionName) {
+            "rest_cycle_planning_identity_mismatch"
+        }
+        require(planning.writer.writerBodyId == identity.activeBody.bodyId) {
+            "rest_cycle_planning_wrong_body"
+        }
+        require(planning.writer.writerEpochId == identity.activeBody.keyEpochId) {
+            "rest_cycle_planning_stale_epoch"
+        }
+        require(planning.snapshot.instanceId == identity.instanceId) {
+            "rest_cycle_planning_snapshot_instance_mismatch"
+        }
+        require(planning.sourceSetDigest.matches(SHA256_DIGEST)) {
+            "rest_cycle_source_set_digest_invalid"
+        }
+        require(planning.snapshot.snapshotDigest.matches(SHA256_DIGEST)) {
+            "rest_cycle_snapshot_digest_invalid"
+        }
+        planning.sources.forEach { source ->
+            require(source.event.instanceId == identity.instanceId) {
+                "rest_cycle_source_foreign_instance"
             }
-            migrationRecordRepository.markMigrationCompleted(
-                migrationId = migrationId,
-                postSnapshotId = restCycle.eventHash,
-                resultNotes = buildRestCycleResultNotes(
-                    restCycle = restCycle,
-                    sourceEventCount = meaningfulEvents.size,
-                    linkedEventCount = meaningfulEvents.take(12).size,
-                    approvedMigrationId = approvedMigrationId,
-                    repairProposalId = repairProposalId,
-                    maintenanceReport = maintenanceReport,
-                    organReconciliation = organReconciliation,
-                    autobiographyEventHash = autobiographyEventHash
-                )
-            )
-            true
-        }.getOrElse { error ->
-            val failureMessage = error.message ?: error::class.java.simpleName
-            migrationRecordRepository.markMigrationFailed(
-                migrationId = migrationId,
-                errors = listOf(failureMessage)
-            )
-            throw RestCycleExecutionException("Rest cycle failed: $failureMessage", error)
+            require(source.event.bodyId == identity.activeBody.bodyId) {
+                "rest_cycle_source_wrong_body"
+            }
+            require(source.event.signerId == identity.activeBody.bodyId) {
+                "rest_cycle_source_wrong_signer"
+            }
+            require(source.event.signerEpochId == identity.activeBody.keyEpochId) {
+                "rest_cycle_source_stale_epoch"
+            }
         }
     }
 
-    private suspend fun appendRestCycleEvent(
-        summary: String,
-        migrationId: String,
-        approvalId: String?
-    ): RestCycleAppendResult? {
-        val genesisCore = requireNotNull(memoryDao.loadGenesisCore()) {
-            "Cannot run rest cycle without a local Genesis Core."
+    private fun isDue(latestObservedAt: String?): Boolean {
+        if (latestObservedAt == null) return true
+        val latestMillis = Instant.parse(latestObservedAt).toEpochMilli()
+        return nowMillis() - latestMillis >= REST_CYCLE_MIN_INTERVAL_MILLIS
+    }
+
+    private fun selectMeaningfulEvents(events: List<RestCycleSourceEvent>): List<RestCycleSourceEvent> {
+        return events.filter { event ->
+            when {
+                event.memoryKind == "chat_noise" -> false
+                event.memoryKind == "conversation" -> event.importance >= 60
+                event.memoryKind == "observation" -> event.importance >= 60 || event.userConfirmed
+                else -> true
+            }
         }
-        val localIdentity = memoryDao.loadLocalIdentity()
-        val createdAtMillis = System.currentTimeMillis()
-        val evidenceJson = JSONObject()
-            .put("schema", "morimil.memory_evidence.v1")
-            .put("classifier", "local_rest_cycle_v1")
-            .put("event_type", REST_CYCLE_EVENT_TYPE)
-            .put("actor", "system")
-            .put("source", "local_rest_cycle")
-            .put("memory_kind", "rest_cycle")
-            .put("user_confirmed", false)
-            .put("confidence", 90)
-            .put("migration_id", migrationId)
-            .put("approval_id", approvalId)
-            .put("excerpt", summary.take(240))
-            .toString()
-        val eventHash = memoryRepository.recordSystemMemoryEvent(
-            eventType = REST_CYCLE_EVENT_TYPE,
-            body = summary,
-            importance = 88,
-            evidenceJson = evidenceJson
-        ) ?: return null
-        return RestCycleAppendResult(
-            eventHash = eventHash,
-            instanceId = localIdentity?.instanceId ?: "legacy_instance_read_only",
-            genesisCoreHash = genesisCore.contentSha256,
-            createdAtMillis = createdAtMillis
-        )
     }
 
-    private suspend fun consolidateAutobiographyFromRestCycle(
-        restCycle: RestCycleAppendResult,
-        events: List<MemoryEventEntity>
-    ): String? {
-        val genesisCore = memoryDao.loadGenesisCore() ?: return null
-        val alias = memoryDao.loadLocalIdentity()?.alias ?: "Morimil"
-        val draft = AutobiographicalMemoryConsolidator.build(
-            alias = alias,
-            sourceRestCycleEventHash = restCycle.eventHash,
-            events = events,
-            generatedAtMillis = restCycle.createdAtMillis
+    private fun buildPlan(
+        context: CanonicalRestCycleContext,
+        meaningfulEvents: List<RestCycleSourceEvent>,
+        mode: RestCycleMode,
+        approvalRequired: Boolean
+    ): RestCyclePlan {
+        val protocolIdentity = RestCycleOperationFactory.identityOf(context.identity)
+        val migrationId = RestCycleOperationFactory.deterministicMigrationId(
+            identity = protocolIdentity,
+            sourceSetDigest = context.planning.sourceSetDigest,
+            mode = mode
         )
-        val autobiographyEventHash = memoryRepository.recordSystemMemoryEvent(
-            eventType = MEMORY_AUTOBIOGRAPHY_EVENT_TYPE,
-            body = AutobiographicalMemoryConsolidator.eventBody(draft),
-            importance = 90,
-            evidenceJson = draft.evidenceJson
-        ) ?: return null
-
-        organDao.upsertSelfSnapshot(
-            AutobiographicalSnapshotEntity(
-                snapshotId = "current",
-                genesisCoreId = genesisCore.coreId,
-                alias = alias,
-                selfSummary = draft.selfSummary,
-                stableTraits = draft.stableTraits,
-                activeGoals = draft.activeGoals,
-                importantConstraints = draft.importantConstraints,
-                sourceEventHash = autobiographyEventHash,
-                updatedAtMillis = System.currentTimeMillis()
+        val linkedSources = meaningfulEvents
+            .sortedWith(
+                compareByDescending<RestCycleSourceEvent> { it.userConfirmed }
+                    .thenByDescending { it.importance }
+                    .thenByDescending { it.confidence }
+                    .thenByDescending { it.observedAtMillis }
+                    .thenBy { it.eventHash }
             )
+            .take(REST_CYCLE_LINK_LIMIT)
+        val summary = buildRestCycleSummary(
+            events = meaningfulEvents,
+            mode = mode,
+            snapshotDigest = context.planning.snapshot.snapshotDigest,
+            sourceSetDigest = context.planning.sourceSetDigest,
+            approvalRequired = approvalRequired
         )
-        return autobiographyEventHash
-    }
-
-    private suspend fun planImportantRestCycleIfNeeded(
-        summary: String,
-        meaningfulEvents: List<MemoryEventEntity>,
-        preSnapshotId: String,
-        maintenanceReport: RestCycleMaintenanceReport,
-        organReconciliation: MemoryOrganReconciliationReport
-    ): String? {
-        val existing = migrationRecordRepository.loadLatestPlannedMigration(REST_CYCLE_MIGRATION_TYPE)
-        if (existing != null) return existing.migrationId
-
-        return planRestCycleMigration(
+        val generatedAtMillis = meaningfulEvents.maxOfOrNull { it.observedAtMillis } ?: 0L
+        val autobiography = AutobiographicalMemoryConsolidator.build(
+            alias = context.planning.identity.companionName,
+            sourceRestCycleRef = migrationId,
+            events = meaningfulEvents,
+            generatedAtMillis = generatedAtMillis
+        )
+        return RestCyclePlan(
+            migrationId = migrationId,
+            mode = mode,
             summary = summary,
-            meaningfulEvents = meaningfulEvents,
-            preSnapshotId = preSnapshotId,
-            approvalRequired = true,
-            approvedByUser = false,
-            approvalId = null,
-            maintenanceReport = maintenanceReport,
-            organReconciliation = organReconciliation
+            linkedSources = linkedSources,
+            autobiography = autobiography
         )
     }
 
-    private suspend fun planRestRepairProposalIfNeeded(
-        events: List<MemoryEventEntity>,
-        preSnapshotId: String,
-        chainVerified: Boolean
-    ): String? {
-        val existing = migrationRecordRepository.loadLatestPlannedMigration(REST_REPAIR_MIGRATION_TYPE)
-        if (existing != null) return existing.migrationId
-
-        val repairReport = RestRepairProposalPlanner.build(events)
-        if (!repairReport.hasCandidates) return null
-
-        val genesisCore = requireNotNull(memoryDao.loadGenesisCore()) {
-            "Cannot plan rest repair without a local Genesis Core."
-        }
-        val localIdentity = memoryDao.loadLocalIdentity()
-        val migrationId = migrationRecordRepository.planMigration(
-            instanceId = localIdentity?.instanceId ?: "local_instance_pending",
-            genesisCoreHash = genesisCore.contentSha256,
-            proposalId = null,
-            migrationType = REST_REPAIR_MIGRATION_TYPE,
-            fromVersion = "living_memory_current",
-            toVersion = "living_memory_after_human_reviewed_repair",
-            affectedArtifacts = repairReport.affectedEventHashes,
-            preSnapshotId = preSnapshotId,
-            chainVerified = chainVerified,
-            backupRequired = true,
-            steps = repairReport.migrationSteps(),
-            expectedEffect = repairReport.expectedEffect(),
-            riskLevel = repairReport.riskLevel,
-            approvalRequired = true,
-            rollbackAvailable = true,
-            rollbackStrategy = "proposal_only: no mutation occurs until the user approves a later append-only repair action",
-            approvedByUser = false,
-            approvalId = null
-        )
-        memoryRepository.recordSystemMemoryEvent(
-            eventType = MEMORY_REPAIR_PROPOSED_EVENT_TYPE,
-            body = repairReport.eventBody(migrationId),
-            importance = 82,
-            evidenceJson = repairReport.evidenceJson(migrationId)
-        )
-        return migrationId
-    }
-
-    private suspend fun planRestCycleMigration(
-        summary: String,
-        meaningfulEvents: List<MemoryEventEntity>,
-        preSnapshotId: String,
+    private suspend fun executePlan(
+        context: CanonicalRestCycleContext,
+        plan: RestCyclePlan,
         approvalRequired: Boolean,
-        approvedByUser: Boolean,
-        approvalId: String?,
-        maintenanceReport: RestCycleMaintenanceReport,
-        organReconciliation: MemoryOrganReconciliationReport
-    ): String {
-        val genesisCore = requireNotNull(memoryDao.loadGenesisCore()) {
-            "Cannot plan rest cycle without a local Genesis Core."
-        }
-        val localIdentity = memoryDao.loadLocalIdentity()
-        return migrationRecordRepository.planMigration(
-            instanceId = localIdentity?.instanceId ?: "local_instance_pending",
-            genesisCoreHash = genesisCore.contentSha256,
-            proposalId = null,
-            migrationType = REST_CYCLE_MIGRATION_TYPE,
-            fromVersion = "living_memory_current",
-            toVersion = "living_memory_after_rest_cycle",
-            affectedArtifacts = meaningfulEvents
-                .sortedByDescending { event -> event.importance }
-                .take(12)
-                .map { event -> event.eventHash },
-            preSnapshotId = preSnapshotId,
-            chainVerified = maintenanceReport.fullChainVerified,
-            backupRequired = approvalRequired,
-            steps = maintenanceReport.migrationSteps(approvalRequired),
-            expectedEffect = buildRestCycleExpectedEffect(
-                summary = summary,
-                meaningfulEvents = meaningfulEvents,
-                approvalRequired = approvalRequired,
-                maintenanceReport = maintenanceReport,
-                organReconciliation = organReconciliation
-            ),
-            riskLevel = maintenanceReport.riskLevel,
+        approvalId: String?
+    ): Boolean {
+        val command = RestCycleOperationFactory.execute(
+            identity = RestCycleOperationFactory.identityOf(context.identity),
+            companionName = context.planning.identity.companionName,
+            migrationId = plan.migrationId,
+            mode = plan.mode,
+            sourceSetDigest = context.planning.sourceSetDigest,
+            snapshotDigest = context.planning.snapshot.snapshotDigest,
+            birthRootEventHash = context.planning.snapshot.birthRootEventHash,
+            summary = plan.summary,
+            sourceEvents = plan.linkedSources,
+            autobiography = plan.autobiography,
             approvalRequired = approvalRequired,
-            rollbackAvailable = true,
-            rollbackStrategy = "append_only: failed plans do not mutate memory; completed rest cycles can be superseded by a compensating correction/quarantine event",
-            approvedByUser = approvedByUser,
             approvalId = approvalId
         )
+        return try {
+            val result = protocol.execute(context.identity, command)
+            check(result.status == CrossDatabaseOperationStatus.COMMITTED) {
+                "rest_cycle_protocol_not_committed"
+            }
+            true
+        } catch (failure: Throwable) {
+            CrossDatabaseProtocolErrors.rethrowCancellation(failure)
+            throw RestCycleExecutionException(
+                "Rest cycle failed: ${failure.message ?: failure::class.java.simpleName}",
+                failure
+            )
+        }
     }
 
-    private fun buildRestCycleExpectedEffect(
-        summary: String,
-        meaningfulEvents: List<MemoryEventEntity>,
-        approvalRequired: Boolean,
-        maintenanceReport: RestCycleMaintenanceReport,
-        organReconciliation: MemoryOrganReconciliationReport
+    private fun buildRestCycleSummary(
+        events: List<RestCycleSourceEvent>,
+        mode: RestCycleMode,
+        snapshotDigest: String,
+        sourceSetDigest: String,
+        approvalRequired: Boolean
     ): String {
-        return buildString {
-            appendLine(summary.take(500))
-            maintenanceReport.expectedEffectLines().forEach { line -> appendLine(line) }
-            appendLine("organ_reconciliation_has_issues=${organReconciliation.hasIssues}")
-            appendLine("organ_reconciliation_orphaned_links=${organReconciliation.orphanedLinkIds.size}")
-            appendLine("organ_reconciliation_orphaned_recalls=${organReconciliation.orphanedRecallIds.size}")
-            appendLine("organ_reconciliation_orphaned_capsules=${organReconciliation.orphanedCapsuleIds.size}")
-            appendLine("organ_reconciliation_memory_chain_verified=${organReconciliation.memoryChainVerified}")
-            appendLine("organ_reconciliation_capsule_chain_verified=${organReconciliation.capsuleChainVerified}")
-            appendLine("organ_reconciliation_compensating_writes_allowed=${organReconciliation.compensatingWritesAllowed}")
-            appendLine("organ_reconciliation_migrations_with_missing_refs=${organReconciliation.migrationMissingRefs.size}")
-            appendLine("approval_required=$approvalRequired")
-            appendLine("source_events=${meaningfulEvents.size}")
-            appendLine("execution=workmanager_or_manual_trigger")
-            appendLine("scope=local_only_append_only")
-        }.trim()
-    }
-
-    private fun buildRestCycleResultNotes(
-        restCycle: RestCycleAppendResult,
-        sourceEventCount: Int,
-        linkedEventCount: Int,
-        approvedMigrationId: String?,
-        repairProposalId: String?,
-        maintenanceReport: RestCycleMaintenanceReport,
-        organReconciliation: MemoryOrganReconciliationReport,
-        autobiographyEventHash: String?
-    ): List<String> {
-        return listOf(
-            "rest_cycle_result:completed",
-            "rest_cycle_event_hash:${restCycle.eventHash}",
-            "full_chain_verified:${maintenanceReport.fullChainVerified}",
-            "source_events:$sourceEventCount",
-            "links_created_for_sources:$linkedEventCount",
-            "autobiography_event_hash:${autobiographyEventHash ?: "skipped"}",
-            "repair_proposal_id:${repairProposalId ?: "none"}",
-            "approval_id:${approvedMigrationId ?: "none"}",
-            "completed_at_millis:${restCycle.createdAtMillis}"
-        ) + maintenanceReport.resultNotes() + organReconciliation.toAuditNotes()
-    }
-
-    private fun buildRestCycleSummary(events: List<MemoryEventEntity>, now: Long): String {
         val prioritized = events.sortedWith(
-            compareByDescending<MemoryEventEntity> { it.userConfirmed }
+            compareByDescending<RestCycleSourceEvent> { it.userConfirmed }
                 .thenByDescending { it.importance }
                 .thenByDescending { it.confidence }
-                .thenByDescending { it.createdAtMillis }
+                .thenByDescending { it.observedAtMillis }
+                .thenBy { it.eventHash }
         )
-
         return buildString {
-            appendLine("REST_CYCLE_LOCAL_V1")
-            appendLine("generated_at_millis=$now")
-            appendLine("policy=local_only_no_network_no_external_actions")
-            appendLine("purpose=consolidate_local_memory_for_future_reasoning_context")
+            appendLine("REST_CYCLE_CANONICAL_V1")
+            appendLine("mode=${mode.id}")
+            appendLine("snapshot_digest=$snapshotDigest")
+            appendLine("source_set_digest=$sourceSetDigest")
+            appendLine("approval_required=$approvalRequired")
+            appendLine("policy=canonical_verified_local_projection_no_external_actions")
+            appendLine("purpose=consolidate_verified_memory_for_future_reasoning_context")
             appendLine()
             appendRestSection("decisions", prioritized.filter { it.memoryKind == "decision" }, 6)
             appendRestSection("corrections", prioritized.filter { it.memoryKind == "correction" }, 6)
@@ -443,13 +275,13 @@ class RestCycleRepository(
                 6
             )
             appendRestSection("identity", prioritized.filter { it.memoryKind == "identity" }, 4)
-            appendRestSection("recent_context", events.takeLast(10), 10)
+            appendRestSection("recent_context", prioritized.take(10), 10)
         }.trim()
     }
 
     private fun StringBuilder.appendRestSection(
         title: String,
-        events: List<MemoryEventEntity>,
+        events: List<RestCycleSourceEvent>,
         limit: Int
     ) {
         appendLine("[$title]")
@@ -460,63 +292,44 @@ class RestCycleRepository(
             selected.forEach { event ->
                 appendLine(
                     "- ${event.memoryKind}/i${event.importance}/c${event.confidence}/${event.eventHash.take(19)}: " +
-                        event.body.replace("\n", " ").take(260)
+                        event.body.replace("\n", " ").replace(Regex("\\s+"), " ").trim().take(260)
                 )
             }
         }
         appendLine()
     }
 
-    private suspend fun rebuildLivingMemorySnapshot() {
-        val events = memoryDao.loadMemoryContext(limit = 24)
-        val eventCount = memoryDao.countMemoryEvents()
-        val prioritized = events
-            .sortedWith(
-                compareByDescending<MemoryEventEntity> { it.memoryKind == "rest_cycle" }
-                    .thenByDescending { it.userConfirmed }
-                    .thenByDescending { it.importance }
-                    .thenByDescending { it.confidence }
-                    .thenByDescending { it.createdAtMillis }
-            )
-            .take(8)
-            .joinToString("\n") { event ->
-                "- ${event.memoryKind}: ${event.body.take(220)} (${event.eventHash.take(19)})"
-            }
-            .ifBlank { "Genesis Core copied; living memory is waiting for lived events." }
+    private data class CanonicalRestCycleContext(
+        val identity: GenesisUltraRuntimeIdentity,
+        val planning: CanonicalRestCyclePlanningInput,
+        val sources: List<RestCycleSourceEvent>
+    )
 
-        memoryDao.upsertMemorySnapshot(
-            MemorySnapshotEntity(
-                genesisCoreId = "primary_genesis",
-                summary = prioritized,
-                eventCount = eventCount,
-                // Operational reasoning turns are not living memory.
-                messageCount = 0,
-                updatedAtMillis = System.currentTimeMillis()
-            )
-        )
-    }
-
-    private data class RestCycleAppendResult(
-        val eventHash: String,
-        val instanceId: String,
-        val genesisCoreHash: String,
-        val createdAtMillis: Long
+    private data class RestCyclePlan(
+        val migrationId: String,
+        val mode: RestCycleMode,
+        val summary: String,
+        val linkedSources: List<RestCycleSourceEvent>,
+        val autobiography: AutobiographicalMemoryDraft
     )
 
     companion object {
-        private const val REST_CYCLE_EVENT_TYPE = "rest_cycle.local_consolidation"
-        private const val MEMORY_AUTOBIOGRAPHY_EVENT_TYPE = "memory.autobiography_updated"
-        private const val MEMORY_REPAIR_PROPOSED_EVENT_TYPE = "memory.repair_proposed"
-        const val REST_CYCLE_MIGRATION_TYPE = "rest_cycle.local_consolidation"
+        const val REST_CYCLE_MIGRATION_TYPE = RestCycleMigrationStore.REST_CYCLE_MIGRATION_TYPE
         const val REST_REPAIR_MIGRATION_TYPE = "rest_cycle.repair_proposal"
-        private const val REST_CYCLE_MIN_INTERVAL_MILLIS = 6L * 60L * 60L * 1000L
+        private const val CANONICAL_SOURCE_LIMIT = 80
+        private const val REST_CYCLE_LINK_LIMIT = 12
         private const val REST_CYCLE_MIN_EVENTS = 6
-        private const val MIGRATION_STATUS_PLANNED = "planned"
-        private const val MEMORY_INTEGRITY_QUARANTINE_EVENT_TYPE = "memory_integrity.quarantine"
-        private const val MEMORY_EVENT_TAIL_VERIFICATION_LIMIT = 12
-        private const val PRIVATE_LOCAL = "private_local"
+        private const val REST_CYCLE_MIN_INTERVAL_MILLIS = 6L * 60L * 60L * 1000L
+        private const val MAX_RECOVERY_BATCH = 200
+        private val SHA256_DIGEST = Regex("^sha256:[a-f0-9]{64}$")
     }
 }
+
+internal class CanonicalRestCycleReadException(
+    val failure: CanonicalReadFailure
+) : IllegalStateException(
+    "canonical_rest_cycle_read_${failure.disposition.name.lowercase()}:${failure.diagnosticCode}"
+)
 
 class RestCycleExecutionException(
     message: String,

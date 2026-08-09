@@ -196,10 +196,10 @@ class MorimilAppContainer(context: Context) {
 
     val restCycleRepository: RestCycleRepository by lazy {
         RestCycleRepository(
-            database = memoryDatabase,
             organDatabase = organDatabase,
-            memoryIntegrityCore = memoryIntegrityCore,
-            memoryRepository = memoryRepository
+            identityRepository = genesisUltraRuntimeIdentityRepository,
+            canonicalReadPort = canonicalConsumerReadPort,
+            protocol = restCycleProtocolCoordinator
         )
     }
 

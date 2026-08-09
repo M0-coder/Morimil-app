@@ -21,6 +21,7 @@ internal val MorimilAppContainer.genesisUltraRuntimeStartupGate:
         val cognitiveRecovery = cognitiveMigrationProtocolCoordinator
         val orchestrationRecovery = orchestrationProtocolCoordinator
         val agentLifecycleRecovery = agentLifecycleProtocolCoordinator
+        val restCycleRecovery = restCycleProtocolCoordinator
         val projectVaultRecovery = projectVaultRepository
         val bootstrap = genesisUltraRuntimeBootstrapCoordinator
         return GenesisUltraRuntimeStartupGate.production(
@@ -56,6 +57,16 @@ internal val MorimilAppContainer.genesisUltraRuntimeStartupGate:
                 }
                 check(agentLifecycleReport.retryableFailureCount == 0) {
                     "agent_lifecycle_protocol_recovery_incomplete"
+                }
+                val restCycleReport = restCycleRecovery.recoverAtStartup(
+                    identity = identity,
+                    limit = 200
+                )
+                check(restCycleReport.blockedCount == 0) {
+                    "rest_cycle_protocol_blocked"
+                }
+                check(restCycleReport.retryableFailureCount == 0) {
+                    "rest_cycle_protocol_recovery_incomplete"
                 }
                 convergence.converge(identity)
                 val vaultRecovery = projectVaultRecovery.recoverPendingOperations()
