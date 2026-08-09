@@ -107,6 +107,8 @@ COG recovery
 
 COG, ORCH, AGENT and REST coordinators load only their own `ownerType`, verify Instance, writer Body and writer epoch, ensure exact canonical effects, reload after lost CAS, reject stale blocking, and finalize owner state plus XOP result atomically.
 
+If a pending legacy `cog_001.payload.v1` operation exists, activation blocks before COG recovery; that quarantine remains COG-specific. The legacy payload cannot be silently finalized under current COG rules.
+
 REST recovery is owner-scoped to `rest_cycle`; it cannot consume COG, ORCH, AGENT or BOOT journal rows. Recovery runs before remaining legacy convergence so an already persisted REST receipt can finish its local projection without replaying the canonical writer.
 
 BOOT-001 recovery is owner-scoped inside `GenesisUltraRuntimeBootstrapCoordinator.bootstrap(identity)` and intentionally runs only after legacy memory convergence and ProjectVault recovery are known durable.
