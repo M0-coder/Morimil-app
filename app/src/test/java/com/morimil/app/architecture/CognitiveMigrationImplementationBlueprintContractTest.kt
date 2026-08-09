@@ -126,8 +126,7 @@ class CognitiveMigrationImplementationBlueprintContractTest {
             "Room-backed multi-coordinator concurrency",
             "rollback snapshot",
             "UPDATE-trigger replacement",
-            "Health-specific mutation testing",
-            "REST-specific mutation testing is not established",
+            "REST-specific and Health-specific mutation testing are not established",
             "CanonicalHealthInput.recentVerifiedEventCount"
         ).forEach { token -> assertTrue("Missing blueprint token $token", blueprint.contains(token, true)) }
     }
