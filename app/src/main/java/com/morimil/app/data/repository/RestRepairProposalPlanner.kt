@@ -1,6 +1,5 @@
 package com.morimil.app.data.repository
 
-import com.morimil.app.data.local.MemoryEventEntity
 import org.json.JSONArray
 import org.json.JSONObject
 import java.text.Normalizer
@@ -29,7 +28,7 @@ data class RestRepairProposalReport(
 
     fun migrationSteps(): List<String> {
         return listOf(
-            "scan_recent_memory_for_repair_candidates",
+            "scan_verified_canonical_memory_for_repair_candidates",
             "create_human_reviewable_repair_proposal",
             "append_signed_memory_repair_proposed_event",
             "wait_for_human_approval_before_any_repair"
@@ -38,7 +37,7 @@ data class RestRepairProposalReport(
 
     fun expectedEffect(): String {
         return buildString {
-            appendLine("rest_repair_schema=morimil.rest_repair_proposal.v1")
+            appendLine("rest_repair_schema=morimil.rest_repair_proposal.v2")
             appendLine("mode=proposal_only")
             appendLine("automatic_changes=false")
             appendLine("approval_required=true")
@@ -57,7 +56,7 @@ data class RestRepairProposalReport(
 
     fun eventBody(migrationId: String): String {
         return buildString {
-            appendLine("REST_REPAIR_PROPOSAL_V1")
+            appendLine("REST_REPAIR_PROPOSAL_V2")
             appendLine("migration_id=$migrationId")
             appendLine("policy=proposal_only_no_automatic_memory_mutation")
             appendLine("approval_required=true")
@@ -69,6 +68,30 @@ data class RestRepairProposalReport(
                 )
             }
         }.trim()
+    }
+
+    fun canonicalProposalJson(): String {
+        val candidateJson = candidates.map { candidate ->
+            mapOf(
+                "event_hashes" to candidate.eventHashes,
+                "kind" to candidate.kind,
+                "reason" to candidate.reason,
+                "risk_level" to candidate.riskLevel,
+                "suggested_action" to candidate.suggestedAction
+            )
+        }
+        return CrossDatabaseOperationIdentity.canonicalJson(
+            mapOf(
+                "approval_required" to true,
+                "automatic_changes" to false,
+                "candidate_count" to candidates.size,
+                "candidates" to candidateJson,
+                "mode" to "proposal_only",
+                "risk_level" to riskLevel,
+                "scanned_event_count" to scannedEventCount,
+                "schema" to "morimil.rest_repair_proposal.v2"
+            )
+        )
     }
 
     fun evidenceJson(migrationId: String): String {
@@ -84,7 +107,7 @@ data class RestRepairProposalReport(
             )
         }
         return JSONObject()
-            .put("schema", "morimil.rest_repair_proposal.v1")
+            .put("schema", "morimil.rest_repair_proposal.v2")
             .put("migration_id", migrationId)
             .put("mode", "proposal_only")
             .put("automatic_changes", false)
@@ -106,7 +129,7 @@ object RestRepairProposalPlanner {
     private const val MAX_CANDIDATES = 12
     private const val MIN_DUPLICATE_BODY_LENGTH = 32
 
-    fun build(events: List<MemoryEventEntity>): RestRepairProposalReport {
+    internal fun build(events: List<RestCycleSourceEvent>): RestRepairProposalReport {
         val repairableEvents = events
             .filterNot { event -> event.memoryKind in EXCLUDED_MEMORY_KINDS }
             .filterNot { event -> event.eventType.startsWith("memory.repair_") }
@@ -130,7 +153,7 @@ object RestRepairProposalPlanner {
         )
     }
 
-    private fun findDuplicateCandidates(events: List<MemoryEventEntity>): List<RestRepairCandidate> {
+    private fun findDuplicateCandidates(events: List<RestCycleSourceEvent>): List<RestRepairCandidate> {
         return events
             .groupBy { event -> normalizedBody(event.body) }
             .filterKeys { key -> key.length >= MIN_DUPLICATE_BODY_LENGTH }
@@ -142,13 +165,13 @@ object RestRepairProposalPlanner {
                     kind = "duplicate_candidate",
                     riskLevel = "medium",
                     eventHashes = group.map { event -> event.eventHash }.take(4),
-                    reason = "Multiple memory events have near-identical normalized text.",
+                    reason = "Multiple verified canonical memory events have near-identical normalized text.",
                     suggestedAction = "Ask user whether to mark older duplicates as superseded by append-only review events."
                 )
             }
     }
 
-    private fun findImportantUnconfirmedCandidates(events: List<MemoryEventEntity>): List<RestRepairCandidate> {
+    private fun findImportantUnconfirmedCandidates(events: List<RestCycleSourceEvent>): List<RestRepairCandidate> {
         return events
             .filter { event -> event.importance >= 85 && !event.userConfirmed }
             .filter { event -> event.memoryKind in IMPORTANT_MEMORY_KINDS }
@@ -163,7 +186,7 @@ object RestRepairProposalPlanner {
             }
     }
 
-    private fun findLowConfidenceImportantCandidates(events: List<MemoryEventEntity>): List<RestRepairCandidate> {
+    private fun findLowConfidenceImportantCandidates(events: List<RestCycleSourceEvent>): List<RestRepairCandidate> {
         return events
             .filter { event -> event.importance >= 70 && event.confidence < 60 }
             .map { event ->
@@ -177,10 +200,10 @@ object RestRepairProposalPlanner {
             }
     }
 
-    private fun findCorrectionConflictCandidates(events: List<MemoryEventEntity>): List<RestRepairCandidate> {
+    private fun findCorrectionConflictCandidates(events: List<RestCycleSourceEvent>): List<RestRepairCandidate> {
         val corrections = events
             .filter { event -> event.memoryKind == "correction" || event.eventType.contains("correction") }
-            .sortedByDescending { event -> event.createdAtMillis }
+            .sortedByDescending { event -> event.observedAtMillis }
         val stableMemories = events
             .filter { event -> event.memoryKind in IMPORTANT_MEMORY_KINDS }
             .filterNot { event -> isCorrection(event) }
@@ -204,7 +227,7 @@ object RestRepairProposalPlanner {
         }
     }
 
-    private fun isCorrection(event: MemoryEventEntity): Boolean {
+    private fun isCorrection(event: RestCycleSourceEvent): Boolean {
         return event.memoryKind == "correction" || event.eventType.contains("correction")
     }
 
