@@ -7,10 +7,10 @@ import org.junit.Test
 
 class F1CanonicalConsumerConvergenceContractTest {
     @Test
-    fun inventoryRecordsRestReadinessAndBootstrapHealthWithoutClosingIssue86() {
+    fun inventoryRecordsHealthLegacyConvergenceWithoutClosingIssue86() {
         val inventory = inventoryFile().readText()
         assertTrue(inventory.startsWith("# Document status: CURRENT"))
-        assertTrue(inventory.contains("Inventory version: `12`"))
+        assertTrue(inventory.contains("Inventory version: `13`"))
         listOf(
             CONTENT_BASELINE_SHA,
             CONTENT_BASELINE_PARENT_SHA,
@@ -30,6 +30,7 @@ class F1CanonicalConsumerConvergenceContractTest {
             "PR_186=MERGED_BY_SQUASH_HISTORICAL",
             "PR_187=MERGED_BY_SQUASH_HISTORICAL",
             "PR_188=MERGED_BY_SQUASH_HISTORICAL",
+            "PR_189=MERGED_BY_SQUASH_HISTORICAL",
             "F1_RECALL_001=INTEGRATED_IN_MAIN",
             "F1_ORCH_001=INTEGRATED_IN_MAIN",
             "F1_REST_001=INTEGRATED_IN_MAIN",
@@ -43,12 +44,18 @@ class F1CanonicalConsumerConvergenceContractTest {
             "REST_BOOT_READINESS=INTEGRATED",
             "RECALL_BOOT_READINESS=OPEN",
             "BOOTSTRAP_HEALTH_DERIVATION=INTEGRATED",
+            "HEALTH_LEGACY_CONSUMER_CONVERGENCE=INTEGRATED",
+            "HEALTH_CAN_READ_CANONICAL_MEMORY=true",
+            "HEALTH_CAN_WRITE_CANONICAL_MEMORY=false",
+            "HEALTH_CAN_WRITE_LEGACY_MEMORY_EVENTS=false",
             "HEALTH_CONVERGENCE=OPEN",
             "HEALTH_CONVERGED=false",
             "HEALTH_STATE=WAITING_FOR_DEPENDENCIES",
             "ISSUE_86=OPEN"
         ).forEach { token -> assertTrue("Missing F1 token $token", inventory.contains(token)) }
         assertTrue(inventory.contains("This document does not close `#86`"))
+        assertTrue(inventory.contains("F1-HEALTH-001 — canonical living-memory observer"))
+        assertFalse(inventory.contains("LocalNervousSystemRepository.recordHealthCheckIfDegraded"))
         assertFalse(inventory.contains("REST_BOOT_READINESS=OPEN"))
         assertFalse(inventory.contains("HEALTH_CONVERGENCE=INTEGRATED"))
         assertFalse(inventory.contains("F1_RECALL_001=OPEN"))
@@ -101,6 +108,7 @@ class F1CanonicalConsumerConvergenceContractTest {
             "MemoryRepository",
             "MorimilDatabase",
             "MemoryEventEntity",
+            "MemoryOrganReconciliationReport",
             "countGenesisCore()",
             "countLocalIdentity()",
             "countMemoryEvents()",
@@ -112,6 +120,10 @@ class F1CanonicalConsumerConvergenceContractTest {
             "REST_BOOT_READINESS=INTEGRATED",
             "RECALL_BOOT_READINESS=OPEN",
             "BOOTSTRAP_HEALTH_DERIVATION=INTEGRATED",
+            "HEALTH_LEGACY_CONSUMER_CONVERGENCE=INTEGRATED",
+            "HEALTH_CAN_READ_CANONICAL_MEMORY=true",
+            "HEALTH_CAN_WRITE_CANONICAL_MEMORY=false",
+            "HEALTH_CAN_WRITE_LEGACY_MEMORY_EVENTS=false",
             "HEALTH_CONVERGENCE=OPEN",
             "HEALTH_CONVERGED=false",
             "HEALTH_STATE=WAITING_FOR_DEPENDENCIES"
@@ -120,6 +132,7 @@ class F1CanonicalConsumerConvergenceContractTest {
         assertTrue(inventory.contains("REST_EXECUTION_CONVERGED=true"))
         assertTrue(inventory.contains("BOOT still reports `recallState=WAITING_FOR_CANONICAL_MEMORY_ADAPTER`"))
         assertTrue(inventory.contains("RestCycleRepository.isBootstrapReady(identity)"))
+        assertTrue(inventory.contains("CanonicalConsumerReadPort.readHealthInput"))
     }
 
     @Test
@@ -142,8 +155,8 @@ class F1CanonicalConsumerConvergenceContractTest {
             ?: error("Repository file not found: $relativePath")
 
     private companion object {
-        const val CONTENT_BASELINE_SHA = "CONTENT_BASELINE_SHA=32a183e7821de49a4958c52d75693c43ee99b2e1"
-        const val CONTENT_BASELINE_PARENT_SHA = "CONTENT_BASELINE_PARENT_SHA=0e06cd99c72db66a72d6f36345a2dae6d63c4c1f"
+        const val CONTENT_BASELINE_SHA = "CONTENT_BASELINE_SHA=77af62a545f72161c0ff47d74c0de6e1d1f4f251"
+        const val CONTENT_BASELINE_PARENT_SHA = "CONTENT_BASELINE_PARENT_SHA=32a183e7821de49a4958c52d75693c43ee99b2e1"
         const val COG_AUDITED_SOURCE_HEAD = "7bdbda2aa4b7568695ba8e98be54d506d42c99d5"
         const val ORCH_AUDITED_SOURCE_HEAD = "0348dccb561e576d17c45e7f8b1e38717332772b"
         const val ORCH_001_AUDITED_SOURCE_HEAD = "fe188fdee8eae901434a255051b6fa4f852b929b"
