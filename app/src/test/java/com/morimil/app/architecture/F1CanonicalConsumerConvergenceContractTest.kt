@@ -7,7 +7,7 @@ import org.junit.Test
 
 class F1CanonicalConsumerConvergenceContractTest {
     @Test
-    fun inventoryRecordsHealthAndRestReadinessWithoutClosingIssue86() {
+    fun inventoryRecordsRestReadinessAndBootstrapHealthWithoutClosingIssue86() {
         val inventory = inventoryFile().readText()
         assertTrue(inventory.startsWith("# Document status: CURRENT"))
         assertTrue(inventory.contains("Inventory version: `12`"))
@@ -24,7 +24,7 @@ class F1CanonicalConsumerConvergenceContractTest {
             RECALL_AUDITED_SOURCE_HEAD,
             REST_001_AUDITED_SOURCE_HEAD,
             REST_002_AUDITED_SOURCE_HEAD,
-            HEALTH_001_AUDITED_SOURCE_HEAD,
+            BOOTSTRAP_HEALTH_AUDITED_SOURCE_HEAD,
             REST_BOOT_001_AUDITED_SOURCE_HEAD,
             "PR_184=MERGED_BY_SQUASH_HISTORICAL",
             "PR_186=MERGED_BY_SQUASH_HISTORICAL",
@@ -42,14 +42,15 @@ class F1CanonicalConsumerConvergenceContractTest {
             "REST_REPAIR_EXECUTION_IMPLEMENTED=false",
             "REST_BOOT_READINESS=INTEGRATED",
             "RECALL_BOOT_READINESS=OPEN",
-            "HEALTH_CONVERGENCE=INTEGRATED",
+            "BOOTSTRAP_HEALTH_DERIVATION=INTEGRATED",
+            "HEALTH_CONVERGENCE=OPEN",
             "HEALTH_CONVERGED=false",
             "HEALTH_STATE=WAITING_FOR_DEPENDENCIES",
             "ISSUE_86=OPEN"
         ).forEach { token -> assertTrue("Missing F1 token $token", inventory.contains(token)) }
         assertTrue(inventory.contains("This document does not close `#86`"))
         assertFalse(inventory.contains("REST_BOOT_READINESS=OPEN"))
-        assertFalse(inventory.contains("HEALTH_CONVERGENCE=OPEN"))
+        assertFalse(inventory.contains("HEALTH_CONVERGENCE=INTEGRATED"))
         assertFalse(inventory.contains("F1_RECALL_001=OPEN"))
         assertFalse(inventory.contains("F1_ORCH_001=OPEN"))
         assertFalse(inventory.contains("F1_REST_001=OPEN"))
@@ -82,25 +83,31 @@ class F1CanonicalConsumerConvergenceContractTest {
     }
 
     @Test
-    fun healthAndRestReadinessAreIntegratedWhileRecallReadinessRemainsOpen() {
+    fun localNervousSystemKeepsF1HealthConvergenceOpen() {
         val inventory = inventoryFile().readText()
+        val health = repositoryFile("app/src/main/java/com/morimil/app/data/repository/LocalNervousSystemRepository.kt").readText()
         listOf(
-            "LocalNervousSystemRepository",
-            "HEALTH-001 is integrated",
-            "REST-BOOT-001 is integrated",
+            "MemoryDao",
+            "countGenesisCore()",
+            "countLocalIdentity()",
+            "countMemoryEvents()",
+            "loadMemoryContext(20)",
+            "memoryRepository.recordSystemMemoryEvent("
+        ).forEach { token -> assertTrue("Missing legacy health token $token", health.contains(token)) }
+        listOf(
+            "F1-HEALTH-001",
+            "LocalNervousSystemRepository.recordHealthCheckIfDegraded",
             "REST_BOOT_READINESS=INTEGRATED",
             "RECALL_BOOT_READINESS=OPEN",
-            "REST_REPAIR_PROPOSAL_CONVERGED=true",
-            "REST_REPAIR_EXECUTION_IMPLEMENTED=false",
-            "HEALTH_CONVERGENCE=INTEGRATED",
+            "BOOTSTRAP_HEALTH_DERIVATION=INTEGRATED",
+            "HEALTH_CONVERGENCE=OPEN",
             "HEALTH_CONVERGED=false",
             "HEALTH_STATE=WAITING_FOR_DEPENDENCIES"
-        ).forEach { token -> assertTrue("Missing remaining convergence token $token", inventory.contains(token)) }
+        ).forEach { token -> assertTrue("Missing health/readiness truth $token", inventory.contains(token)) }
         assertTrue(inventory.contains("REST_PLANNING_CONVERGED=true"))
         assertTrue(inventory.contains("REST_EXECUTION_CONVERGED=true"))
         assertTrue(inventory.contains("BOOT still reports `recallState=WAITING_FOR_CANONICAL_MEMORY_ADAPTER`"))
         assertTrue(inventory.contains("RestCycleRepository.isBootstrapReady(identity)"))
-        assertFalse(inventory.contains("`restCycleState=WAITING_FOR_CANONICAL_MEMORY_ADAPTER`"))
     }
 
     @Test
@@ -133,7 +140,7 @@ class F1CanonicalConsumerConvergenceContractTest {
         const val RECALL_AUDITED_SOURCE_HEAD = "fae8a0df3c29775317986877bce2b8eda8593d27"
         const val REST_001_AUDITED_SOURCE_HEAD = "3661450325237fcadb86098ec16ee45cd039bc0b"
         const val REST_002_AUDITED_SOURCE_HEAD = "2ecca3f48d5e0ef27bd927da3986292daf7f7e2c"
-        const val HEALTH_001_AUDITED_SOURCE_HEAD = "f1697227241459f316bd562756e15ae3ce02c90d"
+        const val BOOTSTRAP_HEALTH_AUDITED_SOURCE_HEAD = "f1697227241459f316bd562756e15ae3ce02c90d"
         const val REST_BOOT_001_AUDITED_SOURCE_HEAD = "dd7a92a011fd4c453775df6ec307638b05313ec9"
     }
 }
