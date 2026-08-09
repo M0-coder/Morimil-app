@@ -23,15 +23,9 @@ class RestCycleRepository internal constructor(
     private val repairStore = RestRepairProposalStore(organDatabase, nowMillis)
 
     internal suspend fun isBootstrapReady(identity: GenesisUltraRuntimeIdentity): Boolean {
-        val planning = when (
-            val result = canonicalReadPort.readRestCyclePlanningInput(CANONICAL_SOURCE_LIMIT)
-        ) {
-            is CanonicalReadResult.Ready -> result.value
-            is CanonicalReadResult.Blocked -> {
-                if (result.failure.disposition == CanonicalReadDisposition.NOT_READY) return false
-                throw CanonicalRestCycleReadException(result.failure)
-            }
-        }
+        val planning = RestCycleBootstrapReadiness.resolve(
+            canonicalReadPort.readRestCyclePlanningInput(CANONICAL_SOURCE_LIMIT)
+        ) ?: return false
         requireCanonicalPlanning(identity, planning)
         return true
     }
