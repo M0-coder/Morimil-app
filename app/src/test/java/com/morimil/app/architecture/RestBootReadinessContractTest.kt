@@ -9,18 +9,22 @@ class RestBootReadinessContractTest {
     @Test
     fun bootstrapRestReadinessUsesTheExistingCanonicalPlanningBoundary() {
         val repository = production("data/repository/RestCycleRepository.kt")
+        val resolver = production("data/repository/RestCycleBootstrapReadiness.kt")
         val readiness = repository
             .substringAfter("internal suspend fun isBootstrapReady")
             .substringBefore("suspend fun runLocalRestCycleIfDue")
 
         assertTrue(readiness.contains("readRestCyclePlanningInput"))
-        assertTrue(readiness.contains("CanonicalReadDisposition.NOT_READY"))
+        assertTrue(readiness.contains("RestCycleBootstrapReadiness.resolve"))
         assertTrue(readiness.contains("requireCanonicalPlanning(identity, planning)"))
-        assertTrue(readiness.contains("CanonicalRestCycleReadException"))
+        assertTrue(resolver.contains("CanonicalReadDisposition.NOT_READY"))
+        assertTrue(resolver.contains("CanonicalRestCycleReadException"))
         assertFalse(readiness.contains("recoverBeforeMutation"))
         assertFalse(readiness.contains("protocol.execute"))
         assertFalse(readiness.contains("migrationStore"))
         assertFalse(readiness.contains("repairStore"))
+        assertFalse(resolver.contains("recoverBeforeMutation"))
+        assertFalse(resolver.contains("protocol.execute"))
     }
 
     @Test
