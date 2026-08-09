@@ -16,6 +16,29 @@ internal enum class GenesisUltraRuntimeSubsystemState {
     WAITING_FOR_CANONICAL_MEMORY_ADAPTER
 }
 
+internal enum class GenesisUltraRuntimeHealthState {
+    READY,
+    WAITING_FOR_DEPENDENCIES
+}
+
+internal object GenesisUltraRuntimeHealthConvergence {
+    fun evaluate(
+        legacyMemoryConverged: Boolean,
+        restCycleState: GenesisUltraRuntimeSubsystemState,
+        recallState: GenesisUltraRuntimeSubsystemState
+    ): GenesisUltraRuntimeHealthState {
+        return if (
+            legacyMemoryConverged &&
+            restCycleState == GenesisUltraRuntimeSubsystemState.READY &&
+            recallState == GenesisUltraRuntimeSubsystemState.READY
+        ) {
+            GenesisUltraRuntimeHealthState.READY
+        } else {
+            GenesisUltraRuntimeHealthState.WAITING_FOR_DEPENDENCIES
+        }
+    }
+}
+
 internal data class GenesisUltraRuntimeLegacyCounts(
     val localIdentityCount: Int,
     val genesisCoreCount: Int
@@ -53,7 +76,7 @@ internal data class GenesisUltraRuntimeBootstrapReport(
     val orchestratorDeviceCount: Int,
     val canonicalMemoryEventCount: Int,
     val legacyMemoryConverged: Boolean,
-    val healthState: GenesisUltraRuntimeSubsystemState,
+    val healthState: GenesisUltraRuntimeHealthState,
     val restCycleState: GenesisUltraRuntimeSubsystemState,
     val recallState: GenesisUltraRuntimeSubsystemState,
     val legacyCounts: GenesisUltraRuntimeLegacyCounts
@@ -67,9 +90,13 @@ internal data class GenesisUltraRuntimeBootstrapReport(
         require(legacyCounts.isEmpty || legacyMemoryConverged) {
             "runtime_bootstrap_legacy_rows_not_converged"
         }
-        require(healthState == GenesisUltraRuntimeSubsystemState.READY) {
-            "runtime_bootstrap_health_not_ready"
-        }
+        require(
+            healthState == GenesisUltraRuntimeHealthConvergence.evaluate(
+                legacyMemoryConverged = legacyMemoryConverged,
+                restCycleState = restCycleState,
+                recallState = recallState
+            )
+        ) { "runtime_bootstrap_health_state_inconsistent" }
     }
 }
 
@@ -116,6 +143,16 @@ internal class GenesisUltraRuntimeBootstrapCoordinator private constructor(
         val convergedAfter = after.isEmpty || isLegacyMemoryConverged(identity.instanceId)
         require(convergedAfter) { "runtime_bootstrap_created_unconverged_legacy_identity" }
 
+        val restCycleState =
+            GenesisUltraRuntimeSubsystemState.WAITING_FOR_CANONICAL_MEMORY_ADAPTER
+        val recallState =
+            GenesisUltraRuntimeSubsystemState.WAITING_FOR_CANONICAL_MEMORY_ADAPTER
+        val healthState = GenesisUltraRuntimeHealthConvergence.evaluate(
+            legacyMemoryConverged = convergedAfter,
+            restCycleState = restCycleState,
+            recallState = recallState
+        )
+
         return GenesisUltraRuntimeBootstrapReport(
             instanceId = identity.instanceId,
             companionName = identity.companionName,
@@ -125,9 +162,9 @@ internal class GenesisUltraRuntimeBootstrapCoordinator private constructor(
             orchestratorDeviceCount = orchestration.orchestratorDeviceCount,
             canonicalMemoryEventCount = canonicalMemoryEventCount,
             legacyMemoryConverged = convergedAfter,
-            healthState = GenesisUltraRuntimeSubsystemState.READY,
-            restCycleState = GenesisUltraRuntimeSubsystemState.WAITING_FOR_CANONICAL_MEMORY_ADAPTER,
-            recallState = GenesisUltraRuntimeSubsystemState.WAITING_FOR_CANONICAL_MEMORY_ADAPTER,
+            healthState = healthState,
+            restCycleState = restCycleState,
+            recallState = recallState,
             legacyCounts = after
         )
     }
