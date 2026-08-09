@@ -1,82 +1,74 @@
 package com.morimil.app.data.repository
 
-import com.morimil.app.core.health.LocalHealthStatus
+import com.morimil.app.core.health.LivingMemoryReadStatus
+import com.morimil.app.core.health.LocalLivingMemoryHealthInput
 import com.morimil.app.core.health.LocalNervousSystemHealth
 import com.morimil.app.core.health.LocalNervousSystemInput
-import com.morimil.app.core.health.LocalNervousSystemReport
-import com.morimil.app.core.memory.MemoryOrganReconciliationReport
-import com.morimil.app.data.local.MemoryDao
-import com.morimil.app.data.local.MemoryEventEntity
-import com.morimil.app.data.local.MorimilDatabase
+import com.morimil.app.core.health.LocalNervousSystemObservation
+import com.morimil.app.data.genesis.ultra.CanonicalConsumerReadPort
+import com.morimil.app.data.genesis.ultra.CanonicalHealthInput
+import com.morimil.app.data.genesis.ultra.CanonicalReadDisposition
+import com.morimil.app.data.genesis.ultra.CanonicalReadFailure
+import com.morimil.app.data.genesis.ultra.CanonicalReadResult
 
-class LocalNervousSystemRepository(
-    database: MorimilDatabase,
-    private val memoryRepository: MemoryRepository
+class LocalNervousSystemRepository internal constructor(
+    private val canonicalReadPort: CanonicalConsumerReadPort,
+    private val clockMillis: () -> Long = System::currentTimeMillis
 ) {
-    private val memoryDao: MemoryDao = database.memoryDao()
-
-    suspend fun recordHealthCheckIfDegraded(
+    suspend fun observeHealth(
         source: String,
-        fullMemoryChain: List<MemoryEventEntity>,
-        memoryChainVerified: Boolean,
-        chainScanLatencyMillis: Long,
-        organReconciliation: MemoryOrganReconciliationReport,
-        nowMillis: Long = System.currentTimeMillis()
-    ): LocalNervousSystemReport {
-        val startedAtMillis = System.currentTimeMillis()
-        val genesisCoreCount = memoryDao.countGenesisCore()
-        val localIdentityCount = memoryDao.countLocalIdentity()
-        val memoryEventCount = memoryDao.countMemoryEvents()
-        val livingSnapshotCount = memoryDao.countLivingMemorySnapshot()
-        val recentContextCount = memoryDao.loadMemoryContext(20).size
-        val healthCheckLatencyMillis = System.currentTimeMillis() - startedAtMillis
-
+        recentLimit: Int = DEFAULT_RECENT_LIMIT,
+        generatedAtMillis: Long = clockMillis()
+    ): LocalNervousSystemObservation {
+        require(source.isNotBlank()) { "local_health_source_blank" }
+        val startedAtMillis = clockMillis()
+        val livingMemory = when (val result = canonicalReadPort.readHealthInput(recentLimit)) {
+            is CanonicalReadResult.Ready -> result.value.toLivingMemoryHealthInput()
+            is CanonicalReadResult.Blocked -> result.failure.toLivingMemoryHealthInput()
+        }
+        val canonicalReadLatencyMillis = (clockMillis() - startedAtMillis).coerceAtLeast(0L)
         val report = LocalNervousSystemHealth.build(
             input = LocalNervousSystemInput(
-                genesisCoreCount = genesisCoreCount,
-                localIdentityCount = localIdentityCount,
-                memoryEventCount = memoryEventCount,
-                // Legacy health field: the reasoning transcript is not memory.
-                messageCount = 0,
-                livingSnapshotCount = livingSnapshotCount,
-                recentContextCount = recentContextCount,
-                memoryChainVerified = memoryChainVerified,
-                capsuleChainVerified = organReconciliation.capsuleChainVerified,
-                organReconciliationHasIssues = organReconciliation.hasIssues,
-                orphanedLinkCount = organReconciliation.orphanedLinkIds.size,
-                orphanedRecallCount = organReconciliation.orphanedRecallIds.size,
-                orphanedCapsuleCount = organReconciliation.orphanedCapsuleIds.size,
-                migrationMissingRefCount = organReconciliation.migrationMissingRefs.size,
-                chainScanLatencyMillis = chainScanLatencyMillis,
-                healthCheckLatencyMillis = healthCheckLatencyMillis
+                livingMemory = livingMemory,
+                canonicalReadLatencyMillis = canonicalReadLatencyMillis
             ),
-            generatedAtMillis = nowMillis
+            generatedAtMillis = generatedAtMillis
         )
-        if (report.hasAlert && genesisCoreCount > 0 && shouldRecordAlert(report, nowMillis)) {
-            memoryRepository.recordSystemMemoryEvent(
-                eventType = report.eventType(),
-                body = report.eventBody() + "; scanned_events=${fullMemoryChain.size}",
-                importance = report.importance(),
-                evidenceJson = report.evidenceJson(source)
-            )
-        }
-        return report
+        return LocalNervousSystemObservation(
+            report = report,
+            telemetry = report.operationalTelemetry(source)
+        )
     }
 
-    private suspend fun shouldRecordAlert(report: LocalNervousSystemReport, nowMillis: Long): Boolean {
-        val latest = memoryDao.loadLatestMemoryEventByType(report.eventType()) ?: return true
-        return nowMillis - latest.createdAtMillis >= HEALTH_ALERT_MIN_INTERVAL_MILLIS
+    private fun CanonicalHealthInput.toLivingMemoryHealthInput(): LocalLivingMemoryHealthInput {
+        return LocalLivingMemoryHealthInput(
+            readStatus = LivingMemoryReadStatus.READY,
+            instanceId = instanceId,
+            writerBodyId = writerBodyId,
+            writerEpochId = writerEpochId,
+            snapshotDigest = snapshotDigest,
+            birthRootPresent = birthRootPresent,
+            canonicalMemoryVerified = canonicalMemoryVerified,
+            totalCanonicalEventCount = totalCanonicalEventCount,
+            postBirthEventCount = postBirthEventCount,
+            recentVerifiedEventCount = recentVerifiedEventCount,
+            quarantineEventCount = quarantineEventCount
+        )
     }
 
-    private fun LocalNervousSystemReport.importance(): Int {
-        return when (status) {
-            LocalHealthStatus.CRITICAL -> 100
-            LocalHealthStatus.DEGRADED -> 90
-            LocalHealthStatus.HEALTHY -> 50
-        }
+    private fun CanonicalReadFailure.toLivingMemoryHealthInput(): LocalLivingMemoryHealthInput {
+        return LocalLivingMemoryHealthInput(
+            readStatus = when (disposition) {
+                CanonicalReadDisposition.NOT_READY -> LivingMemoryReadStatus.NOT_READY
+                CanonicalReadDisposition.RETRYABLE -> LivingMemoryReadStatus.RETRYABLE
+                CanonicalReadDisposition.BLOCKED -> LivingMemoryReadStatus.BLOCKED
+            },
+            failureCode = code.name,
+            diagnosticCode = diagnosticCode
+        )
     }
 
-    companion object {
-        private const val HEALTH_ALERT_MIN_INTERVAL_MILLIS = 60L * 60L * 1000L
+    private companion object {
+        const val DEFAULT_RECENT_LIMIT = 20
     }
 }
