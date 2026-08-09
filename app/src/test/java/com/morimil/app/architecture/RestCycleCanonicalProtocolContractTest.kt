@@ -16,7 +16,8 @@ class RestCycleCanonicalProtocolContractTest {
             "RestCycleProtocolTypes.OWNER_TYPE",
             "protocol.recoverBeforeMutation",
             "protocol.execute",
-            "CanonicalReadDisposition.NOT_READY"
+            "CanonicalReadDisposition.NOT_READY",
+            "isBootstrapReady"
         ).forEach { token -> assertTrue("Missing REST token $token", repository.contains(token)) }
 
         listOf(
@@ -91,16 +92,22 @@ class RestCycleCanonicalProtocolContractTest {
     }
 
     @Test
-    fun currentDocsRecordIntegratedProposalOnlyRest002AndKeepReadinessOpen() {
+    fun currentDocsRecordIntegratedRestReadinessButKeepHealthConsumerAndRecallOpen() {
         val f1 = repositoryFile("docs/F1_CANONICAL_CONSUMER_CONVERGENCE.md").readText()
         val inventory = repositoryFile("docs/F3_CROSS_DATABASE_OPERATION_INVENTORY.md").readText()
         assertTrue(f1.contains("F1_REST_001=INTEGRATED_IN_MAIN"))
         assertTrue(f1.contains("F1_REST_002=INTEGRATED_IN_MAIN"))
         assertTrue(f1.contains("REST_REPAIR_PROPOSAL_CONVERGED=true"))
         assertTrue(f1.contains("REST_REPAIR_EXECUTION_IMPLEMENTED=false"))
-        assertTrue(f1.contains("REST_BOOT_READINESS=OPEN"))
+        assertTrue(f1.contains("REST_BOOT_READINESS=INTEGRATED"))
         assertTrue(f1.contains("RECALL_BOOT_READINESS=OPEN"))
+        assertTrue(f1.contains("BOOTSTRAP_HEALTH_DERIVATION=INTEGRATED"))
         assertTrue(f1.contains("HEALTH_CONVERGENCE=OPEN"))
+        assertTrue(f1.contains("HEALTH_CONVERGED=false"))
+        assertTrue(f1.contains("HEALTH_STATE=WAITING_FOR_DEPENDENCIES"))
+        assertTrue(f1.contains("LocalNervousSystemRepository.recordHealthCheckIfDegraded"))
+        assertFalse(f1.contains("REST_BOOT_READINESS=OPEN"))
+        assertFalse(f1.contains("HEALTH_CONVERGENCE=INTEGRATED"))
         assertFalse(f1.contains("REST_002=OPEN"))
         val remaining = inventory.substringAfter("## Remaining operations").substringBefore("## Integrated guarantees")
         assertFalse(remaining.contains("REST-001"))
