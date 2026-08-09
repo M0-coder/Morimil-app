@@ -7,7 +7,7 @@ import org.junit.Test
 
 class CrossDatabaseImplementationOrderContractTest {
     @Test
-    fun implementationOrderRecordsRecallAndOrchIntegratedBeforeRest() {
+    fun implementationOrderRecordsRest001IntegratedBeforeRest002() {
         val inventory = repositoryFile("docs/F3_CROSS_DATABASE_OPERATION_INVENTORY.md").readText()
         val section = inventory.substringAfter("## Implementation order after STOP S5")
 
@@ -17,9 +17,10 @@ class CrossDatabaseImplementationOrderContractTest {
         val bootstrap = section.indexOf("`BOOT-001`")
         val recall = section.indexOf("`RECALL-001` — integrated canonical derived rebuild")
         val orch001 = section.indexOf("`ORCH-001` — integrated canonical identity-gated seed convergence")
-        val rest = section.indexOf("`REST-001` and `REST-002`")
+        val rest001 = section.indexOf("`REST-001` — integrated canonical planning and owner-scoped durable XOP")
+        val rest002 = section.indexOf("`REST-002`, health convergence and recall startup-readiness")
 
-        listOf(cognitive, orchestration, agents, bootstrap, recall, orch001, rest).forEach { position ->
+        listOf(cognitive, orchestration, agents, bootstrap, recall, orch001, rest001, rest002).forEach { position ->
             assertTrue("F3.2 implementation order entry is missing", position >= 0)
         }
         assertTrue(cognitive < orchestration)
@@ -27,12 +28,11 @@ class CrossDatabaseImplementationOrderContractTest {
         assertTrue(agents < bootstrap)
         assertTrue(bootstrap < recall)
         assertTrue(recall < orch001)
-        assertTrue(orch001 < rest)
+        assertTrue(orch001 < rest001)
+        assertTrue(rest001 < rest002)
 
-        assertTrue(section.contains("`RECALL-001` — integrated canonical derived rebuild"))
-        assertTrue(section.contains("`ORCH-001` — integrated canonical identity-gated seed convergence"))
-        assertFalse(section.contains("`ORCH-001` — next bounded convergence work"))
-        assertFalse(section.contains("`BOOT-001` — next bounded owner"))
+        assertFalse(section.contains("`REST-001` and `REST-002`"))
+        assertFalse(section.contains("`REST-001` — next bounded convergence work"))
     }
 
     @Test
@@ -42,6 +42,7 @@ class CrossDatabaseImplementationOrderContractTest {
         assertTrue(inventory.contains("MERGE_SHA_EVIDENCE=EXTERNAL"))
         assertTrue(inventory.contains("STOP_S5=CLOSED"))
         assertTrue(inventory.contains("F3.3 only after every F3.2 owner has a recorded disposition and separate authorization"))
+        assertTrue(inventory.contains("REST_002=OPEN"))
         assertFalse(inventory.contains("MORIMIL_OPERATIONAL_BIRTH=OCCURRED"))
     }
 
