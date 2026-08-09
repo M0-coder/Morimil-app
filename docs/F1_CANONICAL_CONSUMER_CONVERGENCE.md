@@ -26,7 +26,7 @@ Audited REST-001 source head: `3661450325237fcadb86098ec16ee45cd039bc0b`
 
 Audited REST-002 source head: `2ecca3f48d5e0ef27bd927da3986292daf7f7e2c`
 
-Audited HEALTH-001 source head: `f1697227241459f316bd562756e15ae3ce02c90d`
+Audited bootstrap-health source head: `f1697227241459f316bd562756e15ae3ce02c90d`
 
 Audited REST-BOOT-001 source head: `dd7a92a011fd4c453775df6ec307638b05313ec9`
 
@@ -50,7 +50,7 @@ PR `#184`: merged by squash for REST-002 canonical repair-proposal convergence.
 
 PR `#186`: merged by squash for post-REST-002 CURRENT reconciliation without normative erosion.
 
-PR `#187`: merged by squash for HEALTH-001 dependency-derived runtime health convergence.
+PR `#187`: merged by squash for dependency-derived bootstrap Health instead of a static READY assignment.
 
 PR `#188`: merged by squash for REST boot-readiness canonical probing.
 
@@ -81,7 +81,7 @@ PR_187=MERGED_BY_SQUASH_HISTORICAL
 PR_188=MERGED_BY_SQUASH_HISTORICAL
 ```
 
-This document does not close `#86`. F1-A is integrated. COG-001..004, ORCH-001..004, AGENT-001..006, BOOT-001, RECALL-001, REST-001 and REST-002 now consume committed Genesis Ultra identity and/or verified canonical memory without reopening legacy identity authority. HEALTH-001 dependency-derived health and REST-BOOT-001 canonical startup readiness are also integrated. Startup-level RECALL readiness and final legacy retirement remain incomplete.
+This document does not close `#86`. F1-A is integrated. COG-001..004, ORCH-001..004, AGENT-001..006, BOOT-001, RECALL-001, REST-001 and REST-002 consume committed Genesis Ultra identity and/or verified canonical memory without reopening legacy identity authority. REST-BOOT-001 canonical startup readiness is integrated, and PR #187 makes bootstrap health dependency-derived rather than tautologically READY. F1 health consumer convergence, startup-level RECALL readiness and final legacy retirement remain incomplete.
 
 ## Authority and scope
 
@@ -126,21 +126,27 @@ REST-001 executes under owner-scoped `rest_cycle` XOP. The deterministic `rest_c
 
 REST-002 is proposal-only convergence. The repair planner consumes neutral `RestCycleSourceEvent` values and a deterministic `rest_cycle.propose_repair` command exact-ensures one canonical `memory.repair_proposed` event. The local migration remains `PLANNED`, approval is required, automatic changes are false, and process-death recovery can finalize the proposal receipt exactly once. No `approveRestRepair` or `executeRestRepair` path is implemented by REST-002; `repair_execution=not_implemented` remains explicit. REST-002 does not regain legacy identity/memory authority, become a hidden canonical writer, or bypass the deterministic owner protocol.
 
-HEALTH-001 is integrated as a truthful derived runtime gate. `GenesisUltraRuntimeHealthConvergence.evaluate(...)` returns READY only when legacy memory is converged and both REST and RECALL subsystem states are READY. Otherwise Health is `WAITING_FOR_DEPENDENCIES`. `GenesisUltraRuntimeBootstrapReport` rejects inconsistent forged health state, so health can no longer be declared READY tautologically.
+PR #187 integrates dependency-derived **bootstrap** health. `GenesisUltraRuntimeHealthConvergence.evaluate(...)` returns READY only when legacy convergence is true and both REST and RECALL subsystem states are READY; `GenesisUltraRuntimeBootstrapReport` rejects inconsistent forged health. Current bootstrap Health remains `WAITING_FOR_DEPENDENCIES` while RECALL readiness is open.
 
 REST-BOOT-001 is integrated as a read-only readiness probe. `RestCycleRepository.isBootstrapReady(identity)` invokes `CanonicalConsumerReadPort.readRestCyclePlanningInput`, treats canonical NOT_READY as waiting without mutation, fails closed on RETRYABLE/BLOCKED evidence, and validates ready planning through the same `requireCanonicalPlanning(identity, planning)` boundary used by REST execution. The bootstrap promotes only REST when this evidence is verified; it does not promote RECALL or execute a REST cycle.
 
 ## Remaining convergence work
 
+### F1-HEALTH-001 — `LocalNervousSystemRepository.recordHealthCheckIfDegraded`
+
+This pre-existing F1 boundary remains open despite the bootstrap-health correction in PR #187. `LocalNervousSystemRepository` still derives `genesisCoreCount`, `localIdentityCount`, `memoryEventCount`, `livingSnapshotCount` and recent context from `MemoryDao`, and when degraded may persist an alert through `MemoryRepository.recordSystemMemoryEvent`.
+
+Legacy counts and legacy `memory_events` writes must not become alternate identity or canonical-memory authority. This consumer requires an explicit migration/retirement disposition before `HEALTH_CONVERGENCE` can close.
+
 ### Recall startup readiness
 
 RECALL-001's repository boundary is integrated, but BOOT still reports `recallState=WAITING_FOR_CANONICAL_MEMORY_ADAPTER` and startup does not automatically seed/declare recall ready. That residual must remain visible; integration of the repository does not justify claiming end-to-end recall startup readiness.
 
-Health convergence logic is already integrated, but current Health remains `WAITING_FOR_DEPENDENCIES` until RECALL startup readiness is proven. This is a truthful dependency state, not an unfinished static Health implementation.
+Bootstrap Health currently remains `WAITING_FOR_DEPENDENCIES` until RECALL startup readiness is proven. This is truthful bootstrap state, not evidence that F1 health consumer convergence has closed.
 
 ## Compatibility prohibition
 
-No convergence step may create, copy, seed, or reconstruct authority rows in:
+No new convergence step may create, copy, seed, or reconstruct authority rows in:
 
 ```text
 genesis_core
@@ -148,7 +154,7 @@ local_instance_identity
 memory_events
 ```
 
-No placeholder and no Body ID may substitute for canonical `instanceId`.
+No placeholder and no Body ID may substitute for canonical `instanceId`. The existing LocalNervousSystem legacy read/write boundary is debt to migrate or retire, not permission to extend compatibility authority.
 
 ## Required convergence order
 
@@ -161,11 +167,12 @@ No placeholder and no Body ID may substitute for canonical `instanceId`.
 7. ORCH-001 canonical identity-gated seed — integrated.
 8. REST-001 canonical planning and owner-scoped durable XOP — integrated.
 9. REST-002 canonical proposal-only convergence — integrated.
-10. HEALTH-001 dependency-derived health — integrated.
+10. Bootstrap dependency-derived health — integrated by PR #187.
 11. REST-BOOT-001 canonical startup readiness — integrated.
-12. RECALL startup-readiness convergence.
-13. Reaudit F1/F3.2 closure.
-14. F3.3 irreversible legacy removal only after separate authorization.
+12. F1 health legacy-consumer convergence for `LocalNervousSystemRepository`.
+13. RECALL startup-readiness convergence.
+14. Reaudit F1/F3.2 closure.
+15. F3.3 irreversible legacy removal only after separate authorization.
 
 ## Current closure state
 
@@ -197,8 +204,9 @@ BOOT_CONVERGED=true
 RECALL_CONVERGED=false
 REST_BOOT_READINESS=INTEGRATED
 RECALL_BOOT_READINESS=OPEN
-HEALTH_CONVERGED=true
-HEALTH_CONVERGENCE=INTEGRATED
+BOOTSTRAP_HEALTH_DERIVATION=INTEGRATED
+HEALTH_CONVERGED=false
+HEALTH_CONVERGENCE=OPEN
 HEALTH_STATE=WAITING_FOR_DEPENDENCIES
 LEGACY_GATES_REMOVED=false
 F3_3=OPEN
