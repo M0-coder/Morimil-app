@@ -7,7 +7,7 @@ import org.junit.Test
 
 class RestCycleCanonicalProtocolContractTest {
     @Test
-    fun rest001ConsumesCanonicalPlanningAndDurableProtocolOnly() {
+    fun restRepositoryConsumesCanonicalPlanningWithoutLegacyAuthority() {
         val repository = production("data/repository/RestCycleRepository.kt")
         listOf(
             "GenesisUltraRuntimeIdentityRepository",
@@ -17,7 +17,7 @@ class RestCycleCanonicalProtocolContractTest {
             "protocol.recoverBeforeMutation",
             "protocol.execute",
             "CanonicalReadDisposition.NOT_READY"
-        ).forEach { token -> assertTrue("Missing REST-001 token $token", repository.contains(token)) }
+        ).forEach { token -> assertTrue("Missing REST token $token", repository.contains(token)) }
 
         listOf(
             "MorimilDatabase",
@@ -30,14 +30,27 @@ class RestCycleCanonicalProtocolContractTest {
             "loadMemoryEventAuditChain(",
             "recordSystemMemoryEvent(",
             "local_instance_pending",
-            "legacy_instance_read_only",
-            "RestRepairProposalPlanner",
-            "planRestRepairProposalIfNeeded"
-        ).forEach { token -> assertFalse("Legacy/REST-002 dependency returned: $token", repository.contains(token)) }
+            "legacy_instance_read_only"
+        ).forEach { token -> assertFalse("Legacy REST dependency returned: $token", repository.contains(token)) }
     }
 
     @Test
-    fun rest001ProtocolHasClosedOwnerExactCanonicalEnsureAndAtomicLocalProjection() {
+    fun rest002PlannerUsesCanonicalNeutralSourcesAndNeverExecutesRepair() {
+        val planner = production("data/repository/RestRepairProposalPlanner.kt")
+        val repository = production("data/repository/RestCycleRepository.kt")
+        val worker = production("runtime/RestCycleWorker.kt")
+        assertTrue(planner.contains("List<RestCycleSourceEvent>"))
+        assertFalse(planner.contains("MemoryEventEntity"))
+        assertTrue(repository.contains("planRestRepairProposalIfNeeded"))
+        assertTrue(repository.contains("RestCycleOperationFactory.proposeRepair"))
+        assertTrue(worker.contains("planRepairProposalIfNeeded()"))
+        assertFalse(repository.contains("approveRestRepair"))
+        assertFalse(repository.contains("executeRestRepair"))
+        assertTrue(planner.contains("proposal_only_no_automatic_memory_mutation"))
+    }
+
+    @Test
+    fun restOwnerHasClosedRest001AndRest002OperationsWithExactCanonicalEnsure() {
         val registry = production("data/repository/CrossDatabaseProtocolRegistry.kt")
         val operations = production("data/repository/RestCycleProtocolOperations.kt")
         val canonical = production("data/genesis/ultra/CanonicalRestCycleCommitPort.kt")
@@ -45,13 +58,23 @@ class RestCycleCanonicalProtocolContractTest {
 
         assertTrue(registry.contains("const val OWNER_TYPE = \"rest_cycle\""))
         assertTrue(registry.contains("const val EXECUTE = \"rest_cycle.execute\""))
-        assertTrue(registry.contains("const val EXECUTED_EVENT = \"rest_cycle.local_consolidation\""))
-        assertTrue(operations.contains("CrossDatabaseOperationIdentity.operationId"))
-        assertFalse(operations.contains("System.currentTimeMillis"))
-        assertFalse(operations.contains("nowMillis"))
+        assertTrue(registry.contains("const val PROPOSE_REPAIR = \"rest_cycle.propose_repair\""))
+        assertTrue(registry.contains("const val REPAIR_PROPOSED_EVENT = \"memory.repair_proposed\""))
+        assertTrue(operations.contains("REST_002_PAYLOAD"))
+        assertTrue(operations.contains("deterministicRepairMigrationId"))
+        assertTrue(operations.contains("automatic_changes\" to false"))
+        assertTrue(canonical.contains("command.operationType in RestCycleProtocolTypes.CLOSED_REGISTRY"))
         assertTrue(canonical.contains("findVerified(command)"))
         assertTrue(canonical.contains("CANONICAL_EVENT_MISMATCH"))
         assertTrue(canonical.contains("CANONICAL_PROVENANCE_MISMATCH"))
+        assertTrue(finalizer.contains("finalizeRest002"))
+        assertTrue(finalizer.contains("repair_execution\" to \"not_implemented\""))
+        assertTrue(finalizer.contains("RestRepairProposalStore.STATUS_PLANNED"))
+    }
+
+    @Test
+    fun rest001LocalProjectionRemainsAtomicAndUnchangedInAuthority() {
+        val finalizer = production("data/repository/RestCycleProtocolFinalizer.kt")
         assertTrue(finalizer.contains("canonical_memory_event"))
         assertTrue(finalizer.contains("upsertSelfSnapshot"))
         assertTrue(finalizer.contains("updateMigrationRecordResult"))
@@ -68,15 +91,11 @@ class RestCycleCanonicalProtocolContractTest {
     }
 
     @Test
-    fun currentDocsRecordRest001IntegratedAndRest002Open() {
+    fun currentDocsRemainPreRest002UntilCandidateIsMergedAndReconciled() {
         val f1 = repositoryFile("docs/F1_CANONICAL_CONSUMER_CONVERGENCE.md").readText()
         val inventory = repositoryFile("docs/F3_CROSS_DATABASE_OPERATION_INVENTORY.md").readText()
         assertTrue(f1.contains("F1_REST_001=INTEGRATED_IN_MAIN"))
-        assertTrue(f1.contains("REST_PLANNING_CONVERGED=true"))
-        assertTrue(f1.contains("REST_EXECUTION_CONVERGED=true"))
         assertTrue(f1.contains("REST_002=OPEN"))
-        assertFalse(f1.contains("REST_PLANNING_CONVERGED=false"))
-        assertFalse(f1.contains("REST_EXECUTION_CONVERGED=false"))
         val remaining = inventory.substringAfter("## Remaining operations").substringBefore("## Integrated guarantees")
         assertFalse(remaining.contains("REST-001"))
         assertTrue(remaining.contains("REST-002"))
