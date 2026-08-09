@@ -57,7 +57,7 @@ class LocalNervousSystemHealthTest {
     fun quarantineEvidenceReportsDegraded() {
         val report = LocalNervousSystemHealth.build(
             input = baseInput(
-                livingMemory = readyInput(postBirthEventCount = 4, recentVerifiedEventCount = 3, quarantineEventCount = 1)
+                livingMemory = readyInput(postBirthEventCount = 4, quarantineEventCount = 1)
             ),
             generatedAtMillis = 1000L
         )
@@ -72,8 +72,7 @@ class LocalNervousSystemHealthTest {
             input = baseInput(
                 livingMemory = readyInput(
                     totalCanonicalEventCount = 2,
-                    postBirthEventCount = 4,
-                    recentVerifiedEventCount = 4
+                    postBirthEventCount = 4
                 )
             ),
             generatedAtMillis = 1000L
@@ -127,7 +126,6 @@ class LocalNervousSystemHealthTest {
     private fun readyInput(
         totalCanonicalEventCount: Int = 5,
         postBirthEventCount: Int = 4,
-        recentVerifiedEventCount: Int = 4,
         quarantineEventCount: Int = 0
     ): LocalLivingMemoryHealthInput {
         return LocalLivingMemoryHealthInput(
@@ -140,7 +138,6 @@ class LocalNervousSystemHealthTest {
             canonicalMemoryVerified = true,
             totalCanonicalEventCount = totalCanonicalEventCount,
             postBirthEventCount = postBirthEventCount,
-            recentVerifiedEventCount = recentVerifiedEventCount,
             quarantineEventCount = quarantineEventCount
         )
     }
