@@ -22,6 +22,20 @@ class RestCycleRepository internal constructor(
     private val migrationStore = RestCycleMigrationStore(organDatabase, nowMillis)
     private val repairStore = RestRepairProposalStore(organDatabase, nowMillis)
 
+    internal suspend fun isBootstrapReady(identity: GenesisUltraRuntimeIdentity): Boolean {
+        val planning = when (
+            val result = canonicalReadPort.readRestCyclePlanningInput(CANONICAL_SOURCE_LIMIT)
+        ) {
+            is CanonicalReadResult.Ready -> result.value
+            is CanonicalReadResult.Blocked -> {
+                if (result.failure.disposition == CanonicalReadDisposition.NOT_READY) return false
+                throw CanonicalRestCycleReadException(result.failure)
+            }
+        }
+        requireCanonicalPlanning(identity, planning)
+        return true
+    }
+
     suspend fun runLocalRestCycleIfDue(force: Boolean = false): Boolean {
         val context = loadCanonicalContext() ?: return false
         if (!force && !isDue(context.planning.latestRestCycle?.observedAt)) return false
