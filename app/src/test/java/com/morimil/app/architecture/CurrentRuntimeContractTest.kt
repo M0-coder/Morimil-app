@@ -114,16 +114,26 @@ class CurrentRuntimeContractTest {
     }
 
     @Test
-    fun legacyHealthDebtAndSovereigntyRemainVisible() {
+    fun canonicalHealthBoundaryAndSovereigntyRemainVisible() {
         val health = productionFile("com/morimil/app/data/repository/LocalNervousSystemRepository.kt").readText()
         listOf(
+            "CanonicalConsumerReadPort",
+            "readHealthInput",
+            "observeHealth",
+            "CanonicalReadResult.Ready",
+            "CanonicalReadResult.Blocked"
+        ).forEach { token -> assertTrue("Missing canonical health boundary $token", health.contains(token)) }
+        listOf(
             "MemoryDao",
+            "MemoryRepository",
+            "MorimilDatabase",
+            "MemoryEventEntity",
             "countGenesisCore()",
             "countLocalIdentity()",
             "countMemoryEvents()",
             "loadMemoryContext(20)",
             "memoryRepository.recordSystemMemoryEvent("
-        ).forEach { token -> assertTrue("Missing legacy health boundary $token", health.contains(token)) }
+        ).forEach { token -> assertFalse("Legacy health boundary returned: $token", health.contains(token)) }
         listOf(
             "instanceId != bodyId",
             "ownership_conferred=false",
