@@ -20,6 +20,7 @@ class RestCycleRepository internal constructor(
     private val nowMillis: () -> Long = System::currentTimeMillis
 ) {
     private val migrationStore = RestCycleMigrationStore(organDatabase, nowMillis)
+    private val repairStore = RestRepairProposalStore(organDatabase, nowMillis)
 
     suspend fun runLocalRestCycleIfDue(force: Boolean = false): Boolean {
         val context = loadCanonicalContext() ?: return false
@@ -78,6 +79,51 @@ class RestCycleRepository internal constructor(
         val approvalId = "user_approved:$migrationId"
         migrationStore.approveExact(migrationId, approvalId)
         return executePlan(context, plan, approvalRequired = true, approvalId = approvalId)
+    }
+
+    suspend fun planRestRepairProposalIfNeeded(): String? {
+        val context = loadCanonicalContext() ?: return null
+        val report = RestRepairProposalPlanner.build(context.sources)
+        if (!report.hasCandidates) return null
+
+        val protocolIdentity = RestCycleOperationFactory.identityOf(context.identity)
+        val migrationId = RestCycleOperationFactory.deterministicRepairMigrationId(
+            identity = protocolIdentity,
+            report = report
+        )
+        val proposalDigest = RestCycleOperationFactory.repairProposalDigest(report)
+        repairStore.ensurePlanned(
+            migrationId = migrationId,
+            instanceId = context.identity.instanceId,
+            birthRootEventHash = context.planning.snapshot.birthRootEventHash,
+            preSnapshotId = context.planning.latestRestCycle?.eventHash
+                ?: context.planning.snapshot.birthRootEventHash,
+            snapshotDigest = context.planning.snapshot.snapshotDigest,
+            sourceSetDigest = context.planning.sourceSetDigest,
+            proposalDigest = proposalDigest,
+            report = report
+        )
+        val command = RestCycleOperationFactory.proposeRepair(
+            identity = protocolIdentity,
+            migrationId = migrationId,
+            sourceSetDigest = context.planning.sourceSetDigest,
+            snapshotDigest = context.planning.snapshot.snapshotDigest,
+            birthRootEventHash = context.planning.snapshot.birthRootEventHash,
+            report = report
+        )
+        return try {
+            val result = protocol.execute(context.identity, command)
+            check(result.status == CrossDatabaseOperationStatus.COMMITTED) {
+                "rest_repair_protocol_not_committed"
+            }
+            migrationId
+        } catch (failure: Throwable) {
+            CrossDatabaseProtocolErrors.rethrowCancellation(failure)
+            throw RestRepairProposalExecutionException(
+                "Rest repair proposal failed: ${failure.message ?: failure::class.java.simpleName}",
+                failure
+            )
+        }
     }
 
     private suspend fun loadCanonicalContext(): CanonicalRestCycleContext? {
@@ -315,7 +361,7 @@ class RestCycleRepository internal constructor(
 
     companion object {
         const val REST_CYCLE_MIGRATION_TYPE = RestCycleMigrationStore.REST_CYCLE_MIGRATION_TYPE
-        const val REST_REPAIR_MIGRATION_TYPE = "rest_cycle.repair_proposal"
+        const val REST_REPAIR_MIGRATION_TYPE = RestRepairProposalStore.MIGRATION_TYPE
         private const val CANONICAL_SOURCE_LIMIT = 80
         private const val REST_CYCLE_LINK_LIMIT = 12
         private const val REST_CYCLE_MIN_EVENTS = 6
@@ -332,6 +378,11 @@ internal class CanonicalRestCycleReadException(
 )
 
 class RestCycleExecutionException(
+    message: String,
+    cause: Throwable
+) : RuntimeException(message, cause)
+
+class RestRepairProposalExecutionException(
     message: String,
     cause: Throwable
 ) : RuntimeException(message, cause)

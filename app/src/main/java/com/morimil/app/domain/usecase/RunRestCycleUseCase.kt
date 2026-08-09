@@ -9,6 +9,10 @@ class RunRestCycleUseCase(
         return restCycleRepository.runLocalRestCycleIfDue(force = force)
     }
 
+    suspend fun planRepairProposalIfNeeded(): String? {
+        return restCycleRepository.planRestRepairProposalIfNeeded()
+    }
+
     suspend fun approveAndRun(migrationId: String): Boolean {
         return restCycleRepository.approvePlannedRestCycle(migrationId)
     }

@@ -131,6 +131,89 @@ class RestCycleProtocolKillTest {
         }
     }
 
+    @Test
+    fun repairProposalReceiptRecoversExactlyOnceAndNeverExecutesRepair() = runBlocking {
+        val databaseName = testDatabaseName("repair-proposal-receipt-before-local")
+        context.deleteDatabase(databaseName)
+        var database = openDatabase(databaseName)
+        try {
+            val identity = identity()
+            val protocolIdentity = RestCycleOperationFactory.identityOf(identity)
+            val sourceSetDigest = digest("repair-source-set")
+            val snapshotDigest = digest("repair-snapshot")
+            val birthRootHash = "evsha256:${digest("repair-birth-root").removePrefix("sha256:")}" 
+            val repairSources = listOf(
+                source("repair", "decision", 95, 90, false, 3_000L)
+            )
+            val report = RestRepairProposalPlanner.build(repairSources)
+            assertTrue(report.hasCandidates)
+            val migrationId = RestCycleOperationFactory.deterministicRepairMigrationId(
+                identity = protocolIdentity,
+                report = report
+            )
+            val proposalDigest = RestCycleOperationFactory.repairProposalDigest(report)
+            RestRepairProposalStore(database) { 3_100L }.ensurePlanned(
+                migrationId = migrationId,
+                instanceId = identity.instanceId,
+                birthRootEventHash = birthRootHash,
+                preSnapshotId = birthRootHash,
+                snapshotDigest = snapshotDigest,
+                sourceSetDigest = sourceSetDigest,
+                proposalDigest = proposalDigest,
+                report = report
+            )
+            val command = RestCycleOperationFactory.proposeRepair(
+                identity = protocolIdentity,
+                migrationId = migrationId,
+                sourceSetDigest = sourceSetDigest,
+                snapshotDigest = snapshotDigest,
+                birthRootEventHash = birthRootHash,
+                report = report
+            )
+            val receipt = stagePendingLocalCommit(database, command, sequence = 402)
+
+            val before = requireNotNull(database.memoryOrganDao().loadMigrationRecord(migrationId))
+            assertEquals(RestRepairProposalStore.STATUS_PLANNED, before.status)
+            assertTrue(before.approvalRequired)
+            assertTrue(!before.approvedByUser)
+            assertEquals(null, before.approvalId)
+            assertEquals(null, before.postSnapshotId)
+            assertEquals(
+                CrossDatabaseOperationStatus.PENDING_LOCAL_COMMIT,
+                database.crossDatabaseOperationDao().loadOperation(command.operationId)?.status
+            )
+
+            database.close()
+            database = openDatabase(databaseName)
+            val firstRecovery = realCoordinator(database).recoverAtStartup(identity, 20)
+            val migration = requireNotNull(database.memoryOrganDao().loadMigrationRecord(migrationId))
+            val operation = requireNotNull(database.crossDatabaseOperationDao().loadOperation(command.operationId))
+
+            assertEquals(1, firstRecovery.recoveredCount)
+            assertEquals(RestRepairProposalStore.STATUS_PLANNED, migration.status)
+            assertTrue(migration.approvalRequired)
+            assertTrue(!migration.approvedByUser)
+            assertEquals(null, migration.approvalId)
+            assertEquals(null, migration.postSnapshotId)
+            assertEquals(CrossDatabaseOperationStatus.COMMITTED, operation.status)
+            assertEquals(RestCycleProtocolSchemas.REST_002_LOCAL_RESULT, operation.localResultSchema)
+            assertTrue(operation.localResultJson?.contains("\"repair_execution\":\"not_implemented\"") == true)
+            assertTrue(operation.localResultJson?.contains(receipt.eventHash) == true)
+            assertEquals(null, database.memoryOrganDao().getCurrentSelfSnapshot())
+            assertTrue(database.memoryOrganDao().loadMemoryLinksForReconciliation().isEmpty())
+
+            val secondRecovery = realCoordinator(database).recoverAtStartup(identity, 20)
+            assertEquals(0, secondRecovery.recoveredCount)
+            val durable = requireNotNull(database.memoryOrganDao().loadMigrationRecord(migrationId))
+            assertEquals(RestRepairProposalStore.STATUS_PLANNED, durable.status)
+            assertEquals(null, durable.postSnapshotId)
+            assertTrue(database.memoryOrganDao().loadMemoryLinksForReconciliation().isEmpty())
+        } finally {
+            database.close()
+            context.deleteDatabase(databaseName)
+        }
+    }
+
     private fun openDatabase(databaseName: String): MemoryOrganDatabase {
         return Room.databaseBuilder(context, MemoryOrganDatabase::class.java, databaseName)
             .allowMainThreadQueries()

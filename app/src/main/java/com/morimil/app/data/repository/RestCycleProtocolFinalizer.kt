@@ -24,11 +24,23 @@ internal class RestCycleProtocolFinalizer(
         )
         permanentCheck(
             operation.operationVersion == RestCycleProtocolTypes.VERSION &&
-                operation.ownerType == RestCycleProtocolTypes.OWNER_TYPE &&
-                operation.operationType == RestCycleProtocolTypes.EXECUTE,
+                operation.ownerType == RestCycleProtocolTypes.OWNER_TYPE,
             CrossDatabaseProtocolErrors.UNSUPPORTED_OPERATION_VERSION
         )
-        val payload = requirePayload(operation)
+        return when (operation.operationType) {
+            RestCycleProtocolTypes.EXECUTE -> finalizeRest001(operation, receipt)
+            RestCycleProtocolTypes.PROPOSE_REPAIR -> finalizeRest002(operation, receipt)
+            else -> throw CrossDatabaseProtocolErrors.permanent(
+                CrossDatabaseProtocolErrors.UNSUPPORTED_OPERATION_VERSION
+            )
+        }
+    }
+
+    private suspend fun finalizeRest001(
+        operation: CrossDatabaseOperationRecord,
+        receipt: CrossDatabaseCanonicalReceipt
+    ): CrossDatabaseLocalResult {
+        val payload = requirePayload(operation, RestCycleProtocolSchemas.REST_001_PAYLOAD)
         val migrationId = payload.getString("migration_id")
         permanentCheck(migrationId == operation.subjectId)
         permanentCheck(payload.getString("summary") == operation.eventBody)
@@ -118,6 +130,63 @@ internal class RestCycleProtocolFinalizer(
         )
     }
 
+    private suspend fun finalizeRest002(
+        operation: CrossDatabaseOperationRecord,
+        receipt: CrossDatabaseCanonicalReceipt
+    ): CrossDatabaseLocalResult {
+        val payload = requirePayload(operation, RestCycleProtocolSchemas.REST_002_PAYLOAD)
+        val migrationId = payload.getString("migration_id")
+        val birthRootEventHash = payload.getString("birth_root_event_hash")
+        val affectedHashes = RestCycleLocalProjection.jsonArrayValues(
+            payload.getJSONArray("affected_event_hashes").toString()
+        )
+        permanentCheck(migrationId == operation.subjectId)
+        permanentCheck(payload.getString("mode") == "proposal_only")
+        permanentCheck(payload.getBoolean("approval_required"))
+        permanentCheck(!payload.getBoolean("automatic_changes"))
+        permanentCheck(affectedHashes.isNotEmpty())
+        permanentCheck(affectedHashes.distinct().size == affectedHashes.size)
+
+        val migration = dao.loadMigrationRecord(migrationId)
+            ?: throw CrossDatabaseProtocolErrors.permanent(
+                CrossDatabaseProtocolErrors.OWNER_STATE_CONFLICT
+            )
+        permanentCheck(migration.instanceId == operation.instanceId)
+        permanentCheck(migration.genesisCoreHash == birthRootEventHash)
+        permanentCheck(migration.migrationType == RestRepairProposalStore.MIGRATION_TYPE)
+        permanentCheck(migration.status == RestRepairProposalStore.STATUS_PLANNED)
+        permanentCheck(migration.approvalRequired)
+        permanentCheck(!migration.approvedByUser)
+        permanentCheck(migration.approvalId == null)
+        permanentCheck(migration.postSnapshotId == null)
+        permanentCheck(
+            RestCycleLocalProjection.jsonArrayValues(migration.affectedArtifactsJson) == affectedHashes,
+            CrossDatabaseProtocolErrors.OWNER_STATE_CONFLICT
+        )
+
+        val resultJson = CrossDatabaseOperationIdentity.canonicalJson(
+            mapOf(
+                "approval_required" to true,
+                "automatic_changes" to false,
+                "canonical_event_hash" to receipt.eventHash,
+                "canonical_event_id" to receipt.eventId,
+                "canonical_provenance_digest" to receipt.provenanceDigest,
+                "canonical_sequence" to receipt.sequence,
+                "migration_id" to migrationId,
+                "owner_status" to RestRepairProposalStore.STATUS_PLANNED,
+                "proposal_digest" to payload.getString("proposal_digest"),
+                "repair_execution" to "not_implemented",
+                "schema" to RestCycleProtocolSchemas.REST_002_LOCAL_RESULT
+            )
+        )
+        return CrossDatabaseLocalResult(
+            schema = RestCycleProtocolSchemas.REST_002_LOCAL_RESULT,
+            json = resultJson,
+            digest = CrossDatabaseOperationIdentity.digestCanonicalJson(resultJson),
+            ownerStatus = RestRepairProposalStore.STATUS_PLANNED
+        )
+    }
+
     private suspend fun completeMigration(migrationId: String, eventHash: String) {
         val changed = dao.updateMigrationRecordResult(
             migrationId = migrationId,
@@ -129,8 +198,8 @@ internal class RestCycleProtocolFinalizer(
         permanentCheck(changed == 1, CrossDatabaseProtocolErrors.OWNER_TRANSITION_CONFLICT)
     }
 
-    private fun requirePayload(operation: CrossDatabaseOperationRecord): JSONObject {
-        if (operation.payloadSchema != RestCycleProtocolSchemas.REST_001_PAYLOAD) {
+    private fun requirePayload(operation: CrossDatabaseOperationRecord, schema: String): JSONObject {
+        if (operation.payloadSchema != schema) {
             throw CrossDatabaseProtocolErrors.permanent(
                 CrossDatabaseProtocolErrors.UNSUPPORTED_PAYLOAD_SCHEMA
             )
@@ -144,7 +213,7 @@ internal class RestCycleProtocolFinalizer(
             )
         }
         permanentCheck(
-            payload.getString("schema") == RestCycleProtocolSchemas.REST_001_PAYLOAD,
+            payload.getString("schema") == schema,
             CrossDatabaseProtocolErrors.UNSUPPORTED_PAYLOAD_SCHEMA
         )
         return payload
@@ -225,8 +294,6 @@ internal object RestCycleLocalProjection {
     ): AutobiographicalSnapshotEntity {
         return AutobiographicalSnapshotEntity(
             snapshotId = "current",
-            // Legacy-named projection column retained until F3.3. This is the
-            // canonical birth-root event hash, not a genesis_core row.
             genesisCoreId = birthRootEventHash,
             alias = autobiography.getString("alias"),
             selfSummary = autobiography.getString("self_summary"),

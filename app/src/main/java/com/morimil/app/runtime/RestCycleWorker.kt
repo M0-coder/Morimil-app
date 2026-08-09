@@ -21,6 +21,7 @@ class RestCycleWorker(
         val runRestCycle = MorimilAppContainer.from(applicationContext).runRestCycleUseCase
 
         return runCatching {
+            runRestCycle.planRepairProposalIfNeeded()
             val didConsolidate = runRestCycle()
             RestCycleNotifier.notifyRestCycleChecked(
                 context = applicationContext,
