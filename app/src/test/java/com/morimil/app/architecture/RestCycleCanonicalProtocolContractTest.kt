@@ -91,14 +91,20 @@ class RestCycleCanonicalProtocolContractTest {
     }
 
     @Test
-    fun currentDocsRemainPreRest002UntilCandidateIsMergedAndReconciled() {
+    fun currentDocsRecordIntegratedProposalOnlyRest002AndKeepReadinessOpen() {
         val f1 = repositoryFile("docs/F1_CANONICAL_CONSUMER_CONVERGENCE.md").readText()
         val inventory = repositoryFile("docs/F3_CROSS_DATABASE_OPERATION_INVENTORY.md").readText()
         assertTrue(f1.contains("F1_REST_001=INTEGRATED_IN_MAIN"))
-        assertTrue(f1.contains("REST_002=OPEN"))
+        assertTrue(f1.contains("F1_REST_002=INTEGRATED_IN_MAIN"))
+        assertTrue(f1.contains("REST_REPAIR_PROPOSAL_CONVERGED=true"))
+        assertTrue(f1.contains("REST_REPAIR_EXECUTION_IMPLEMENTED=false"))
+        assertTrue(f1.contains("REST_BOOT_READINESS=OPEN"))
+        assertTrue(f1.contains("RECALL_BOOT_READINESS=OPEN"))
+        assertTrue(f1.contains("HEALTH_CONVERGENCE=OPEN"))
+        assertFalse(f1.contains("REST_002=OPEN"))
         val remaining = inventory.substringAfter("## Remaining operations").substringBefore("## Integrated guarantees")
         assertFalse(remaining.contains("REST-001"))
-        assertTrue(remaining.contains("REST-002"))
+        assertFalse(remaining.contains("REST-002"))
     }
 
     private fun production(relative: String): String =
