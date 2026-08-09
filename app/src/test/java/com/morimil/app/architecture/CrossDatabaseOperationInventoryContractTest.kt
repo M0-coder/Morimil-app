@@ -8,10 +8,10 @@ import org.junit.Test
 
 class CrossDatabaseOperationInventoryContractTest {
     @Test
-    fun inventoryRecordsPostRest001CurrentSemantics() {
+    fun inventoryRecordsPostRest002CurrentSemantics() {
         val inventory = inventoryFile(repositoryRoot()).readText()
         assertTrue(inventory.startsWith("# Document status: CURRENT"))
-        assertTrue(inventory.contains("Inventory version: `10`"))
+        assertTrue(inventory.contains("Inventory version: `11`"))
         listOf(
             CONTENT_BASELINE_SHA,
             CONTENT_BASELINE_PARENT_SHA,
@@ -24,16 +24,22 @@ class CrossDatabaseOperationInventoryContractTest {
             BOOT_AUDITED_SOURCE_HEAD,
             RECALL_AUDITED_SOURCE_HEAD,
             REST_001_AUDITED_SOURCE_HEAD,
+            REST_002_AUDITED_SOURCE_HEAD,
             "PR_181=MERGED_BY_SQUASH_HISTORICAL",
-            "PR_182=MERGED_BY_SQUASH_HISTORICAL"
+            "PR_182=MERGED_BY_SQUASH_HISTORICAL",
+            "PR_183=MERGED_BY_SQUASH_HISTORICAL",
+            "PR_184=MERGED_BY_SQUASH_HISTORICAL"
         ).forEach { token -> assertTrue("Missing inventory token $token", inventory.contains(token)) }
 
-        assertTrue(inventory.contains("RestCycleRepository.kt` | `INTEGRATED_PROTOCOL` | REST-001 integrated"))
+        assertTrue(inventory.contains("RestCycleRepository.kt` | `INTEGRATED_PROTOCOL` | REST-001 local consolidation and REST-002 repair-proposal convergence"))
         assertTrue(inventory.contains("`REST-001` | `runLocalRestCycleIfDue`, `approvePlannedRestCycle` | Integrated canonical protocol:"))
-        assertTrue(inventory.contains("`REST-001` — integrated canonical planning and owner-scoped durable XOP"))
-        assertTrue(inventory.contains("`REST-002`"))
-        assertFalse(inventory.substringAfter("## Remaining operations").substringBefore("## Integrated guarantees").contains("REST-001"))
-        assertTrue(inventory.substringAfter("## Remaining operations").substringBefore("## Integrated guarantees").contains("REST-002"))
+        assertTrue(inventory.contains("`REST-002` | `planRestRepairProposalIfNeeded` | Integrated proposal-only canonical protocol:"))
+        assertTrue(inventory.contains("rest_cycle.propose_repair"))
+        assertTrue(inventory.contains("memory.repair_proposed"))
+        assertTrue(inventory.contains("repair_execution=not_implemented"))
+        val remaining = inventory.substringAfter("## Remaining operations").substringBefore("## Integrated guarantees")
+        assertFalse(remaining.contains("REST-001"))
+        assertFalse(remaining.contains("REST-002"))
     }
 
     @Test
@@ -48,7 +54,7 @@ class CrossDatabaseOperationInventoryContractTest {
     }
 
     @Test
-    fun integratedRest001AndRemainingOwnersAreExplicit() {
+    fun integratedRestOperationsAndRemainingReadinessAreExplicit() {
         val root = repositoryRoot()
         val inventory = inventoryFile(root).readText()
         REQUIRED_ENTRY_POINTS.forEach { (path, entryPoints) ->
@@ -58,13 +64,28 @@ class CrossDatabaseOperationInventoryContractTest {
                 assertTrue(inventory.contains("`$entryPoint`"))
             }
         }
-        listOf("COG-001", "ORCH-001", "ORCH-002", "AGENT-001", "AGENT-006", "BOOT-001", "RECALL-001", "REST-001").forEach {
+        listOf("COG-001", "ORCH-001", "ORCH-002", "AGENT-001", "AGENT-006", "BOOT-001", "RECALL-001", "REST-001", "REST-002").forEach {
             assertTrue("Missing integrated owner/disposition $it", inventory.contains("`$it`"))
         }
-        assertTrue("Missing remaining REST-002", inventory.contains("`REST-002`"))
-        assertTrue(inventory.contains("RECALL_BOOT_READINESS") || inventory.contains("startup-level recall readiness"))
+        assertTrue(inventory.contains("REST_REPAIR_PROPOSAL_CONVERGED=true"))
+        assertTrue(inventory.contains("REST_REPAIR_EXECUTION_IMPLEMENTED=false"))
+        assertTrue(inventory.contains("REST_BOOT_READINESS") || inventory.contains("startup-level REST readiness", true))
+        assertTrue(inventory.contains("RECALL_BOOT_READINESS") || inventory.contains("startup-level recall readiness", true))
         assertTrue(inventory.contains("HEALTH_CONVERGENCE") || inventory.contains("health convergence", true))
         assertTrue(inventory.contains("F3.3"))
+    }
+
+    @Test
+    fun previouslyIntegratedGuaranteesRemainExplicit() {
+        val inventory = inventoryFile(repositoryRoot()).readText()
+        listOf(
+            "ORCH-001 does not add an XOP event",
+            "targetEventHash` as idempotency key",
+            "schedule + local graph link in one `MemoryOrganDatabase` transaction",
+            "blocked verification",
+            "process-death recovery reuses the exact receipt",
+            "autobiographical snapshot remains a rebuildable local projection"
+        ).forEach { token -> assertTrue("Missing preserved guarantee $token", inventory.contains(token, true)) }
     }
 
     private fun discoverBoundaryCandidates(root: File): Set<String> {
@@ -93,8 +114,8 @@ class CrossDatabaseOperationInventoryContractTest {
 
     private companion object {
         const val INVENTORY_PATH = "docs/F3_CROSS_DATABASE_OPERATION_INVENTORY.md"
-        const val CONTENT_BASELINE_SHA = "CONTENT_BASELINE_SHA=2d16c5c3197d492d5daed3707e97a68caa0011a6"
-        const val CONTENT_BASELINE_PARENT_SHA = "CONTENT_BASELINE_PARENT_SHA=d7e679b9f8e0b34d44a5e702c02c436f21e4eaee"
+        const val CONTENT_BASELINE_SHA = "CONTENT_BASELINE_SHA=e05ae7a08b1a88d2fbc0d4f2dff8ff06d282c908"
+        const val CONTENT_BASELINE_PARENT_SHA = "CONTENT_BASELINE_PARENT_SHA=9585e94a690d4f00d591f81d14e56aedefda3341"
         const val COG_AUDITED_SOURCE_HEAD = "7bdbda2aa4b7568695ba8e98be54d506d42c99d5"
         const val ORCH_AUDITED_SOURCE_HEAD = "0348dccb561e576d17c45e7f8b1e38717332772b"
         const val ORCH_001_AUDITED_SOURCE_HEAD = "fe188fdee8eae901434a255051b6fa4f852b929b"
@@ -102,6 +123,7 @@ class CrossDatabaseOperationInventoryContractTest {
         const val BOOT_AUDITED_SOURCE_HEAD = "c7710635fa172108cce87b3f7a76d6e037095864"
         const val RECALL_AUDITED_SOURCE_HEAD = "fae8a0df3c29775317986877bce2b8eda8593d27"
         const val REST_001_AUDITED_SOURCE_HEAD = "3661450325237fcadb86098ec16ee45cd039bc0b"
+        const val REST_002_AUDITED_SOURCE_HEAD = "2ecca3f48d5e0ef27bd927da3986292daf7f7e2c"
         const val BOOTSTRAP_PATH = "app/src/main/java/com/morimil/app/runtime/GenesisUltraRuntimeBootstrapCoordinator.kt"
         const val BOOTSTRAP_FINALIZER_PATH = "app/src/main/java/com/morimil/app/data/repository/RuntimeBootstrapProtocolFinalizer.kt"
 
@@ -128,7 +150,7 @@ class CrossDatabaseOperationInventoryContractTest {
             "app/src/main/java/com/morimil/app/data/repository/ProjectVaultRepository.kt" to setOf("createProjectVaultFromIntent", "completeProjectVault", "archiveProjectVault"),
             BOOTSTRAP_PATH to setOf("bootstrap"),
             "app/src/main/java/com/morimil/app/data/repository/RecallScheduleRepository.kt" to setOf("seedFromRecentMemoryIfNeeded"),
-            "app/src/main/java/com/morimil/app/data/repository/RestCycleRepository.kt" to setOf("runLocalRestCycleIfDue", "approvePlannedRestCycle"),
+            "app/src/main/java/com/morimil/app/data/repository/RestCycleRepository.kt" to setOf("runLocalRestCycleIfDue", "approvePlannedRestCycle", "planRestRepairProposalIfNeeded"),
             "app/src/main/java/com/morimil/app/data/repository/CognitiveMigrationRepository.kt" to setOf("proposeCognitiveMigration", "approveCognitiveMigration", "executeCognitiveMigration", "rollbackCognitiveMigration"),
             "app/src/main/java/com/morimil/app/data/repository/AgentOrchestrationRepository.kt" to setOf("seedDefaultOrchestrationIfNeeded", "proposeDelegatedTask", "approveDelegatedTask", "rejectDelegatedTask"),
             "app/src/main/java/com/morimil/app/data/repository/AgentInstanceLifecycleRepository.kt" to setOf("createAgentForVault", "assignTaskToAgent", "submitAgentResult", "evaluateAgent", "retireAgent", "quarantineAgent", "promoteAgent"),

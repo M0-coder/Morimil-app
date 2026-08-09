@@ -2,7 +2,7 @@
 
 # ADR-0002 — Common recoverable cross-database operation protocol
 
-- Status: Accepted and implemented for COG-001..004, ORCH-002..004, AGENT-001..006, BOOT-001, and REST-001.
+- Status: Accepted and implemented for COG-001..004, ORCH-002..004, AGENT-001..006, BOOT-001, REST-001, and REST-002 proposal convergence.
 - Original decision date: 2026-07-28.
 - COG implemented amendment: 2026-07-31.
 - ORCH owner amendment: integrated by PR `#172`.
@@ -11,9 +11,10 @@
 - BOOT owner amendment: integrated by PR `#176`.
 - RECALL disposition: integrated by PR `#178` as `DERIVED_REBUILD`; it does not become an ADR-0002 XOP owner.
 - REST-001 owner amendment: integrated by PR `#182` under owner `rest_cycle`.
-- Tracker: `#88` — open for remaining owners.
-- Content baseline SHA: `2d16c5c3197d492d5daed3707e97a68caa0011a6`.
-- Content baseline parent SHA: `d7e679b9f8e0b34d44a5e702c02c436f21e4eaee`.
+- REST-002 proposal amendment: integrated by PR `#184` under the same closed owner registry; repair execution is not implemented.
+- Tracker: `#88` — open for health/readiness and later F3.3 work.
+- Content baseline SHA: `e05ae7a08b1a88d2fbc0d4f2dff8ff06d282c908`.
+- Content baseline parent SHA: `9585e94a690d4f00d591f81d14e56aedefda3341`.
 - Current protected `main`: resolved externally from `refs/heads/main`.
 - Merge SHA evidence: external GitHub and Morimil Control Tower evidence.
 - Historical COG audited source head: `7bdbda2aa4b7568695ba8e98be54d506d42c99d5`.
@@ -23,10 +24,11 @@
 - BOOT audited source head: `c7710635fa172108cce87b3f7a76d6e037095864`.
 - RECALL audited source head: `fae8a0df3c29775317986877bce2b8eda8593d27`.
 - REST-001 audited source head: `3661450325237fcadb86098ec16ee45cd039bc0b`.
+- REST-002 audited source head: `2ecca3f48d5e0ef27bd927da3986292daf7f7e2c`.
 
 ```text
-CONTENT_BASELINE_SHA=2d16c5c3197d492d5daed3707e97a68caa0011a6
-CONTENT_BASELINE_PARENT_SHA=d7e679b9f8e0b34d44a5e702c02c436f21e4eaee
+CONTENT_BASELINE_SHA=e05ae7a08b1a88d2fbc0d4f2dff8ff06d282c908
+CONTENT_BASELINE_PARENT_SHA=9585e94a690d4f00d591f81d14e56aedefda3341
 CURRENT_MAIN_RESOLUTION=EXTERNAL_GIT_REF
 MERGE_SHA_EVIDENCE=EXTERNAL
 PR_172=MERGED_BY_SQUASH_HISTORICAL
@@ -40,6 +42,8 @@ PR_179=MERGED_BY_SQUASH_HISTORICAL
 PR_180=MERGED_BY_SQUASH_HISTORICAL
 PR_181=MERGED_BY_SQUASH_HISTORICAL
 PR_182=MERGED_BY_SQUASH_HISTORICAL
+PR_183=MERGED_BY_SQUASH_HISTORICAL
+PR_184=MERGED_BY_SQUASH_HISTORICAL
 ```
 
 ## Context
@@ -52,9 +56,10 @@ ADR-0001 remains the separate ProjectVault protected reference. ADR-0002 governs
 - ORCH-002 propose delegated task, ORCH-003 approve, ORCH-004 reject;
 - AGENT-001 create worker, AGENT-002 assign task, AGENT-003 submit result, AGENT-004 evaluate, AGENT-005 retire/promote, AGENT-006 quarantine/replacement;
 - BOOT-001 durable runtime bootstrap/recovery across MorimilDatabase and MemoryOrganDatabase;
-- REST-001 canonical rest-cycle local consolidation under owner `rest_cycle`.
+- REST-001 canonical rest-cycle local consolidation under owner `rest_cycle`;
+- REST-002 canonical repair-proposal convergence under owner `rest_cycle`.
 
-ORCH-001 is integrated F1 convergence but remains outside the XOP operation set: it gates rebuildable local orchestration seed projections directly on committed Genesis Ultra identity and no longer uses legacy birth-completeness authority. RECALL-001 is integrated but deliberately outside the XOP owner set because it is a verified canonical read followed by an atomic rebuildable projection inside `MemoryOrganDatabase`. REST-002 remains open and does not inherit REST-001 closure.
+ORCH-001 is integrated F1 convergence but remains outside the XOP operation set: it gates rebuildable local orchestration seed projections directly on committed Genesis Ultra identity and no longer uses legacy birth-completeness authority. RECALL-001 is integrated but deliberately outside the XOP owner set because it is a verified canonical read followed by an atomic rebuildable projection inside `MemoryOrganDatabase`.
 
 ## Authority boundary
 
@@ -73,7 +78,7 @@ No compatibility write to `genesis_core`, `local_instance_identity`, or `memory_
 
 ## Decision
 
-Use one common recoverable operation contract for each bounded owner spanning authoritative state across database boundaries. The journal is `cross_database_operations` in MemoryOrganDatabase v9 for integrated COG, ORCH-002..004, AGENT, BOOT and REST-001 owner states.
+Use one common recoverable operation contract for each bounded owner spanning authoritative state across database boundaries. The journal is `cross_database_operations` in MemoryOrganDatabase v9 for integrated COG, ORCH-002..004, AGENT, BOOT and REST owner states.
 
 Owner finalizers are closed typed Kotlin. Executable SQL, reflection targets, callbacks, prompts, provider commands, or arbitrary code are forbidden journal payloads.
 
@@ -86,6 +91,18 @@ A bounded local seed projection also does not need an XOP when it creates no cro
 BOOT is an integrated owner whose local completion is a saga across both Room files: after exact canonical receipt, `MorimilDatabase` projection preparation is idempotent and replayable; MemoryOrgan projection finalization and XOP `COMMITTED` occur in the owner transaction. This does not make the BOOT journal an identity authority.
 
 REST-001 is an integrated owner because canonical memory append and local migration/link/autobiography finalization cross authority boundaries. Its journal entry freezes deterministic intent and derived projection material; it does not store executable behavior or become a second memory source.
+
+REST-002 is an integrated proposal-only operation under the same closed owner registry. Its journal entry freezes deterministic repair-proposal intent and exact canonical evidence; local finalization records only an approval-required proposal. It does not execute the proposed repair and must retain `repair_execution=not_implemented`.
+
+The REST owner mappings are:
+
+```text
+ownerType = rest_cycle
+REST-001 operation = rest_cycle.execute
+REST-001 canonical event = rest_cycle.local_consolidation
+REST-002 operation = rest_cycle.propose_repair
+REST-002 canonical event = memory.repair_proposed
+```
 
 ## Deterministic identity and state machine
 
@@ -151,7 +168,15 @@ canonical event = rest_cycle.local_consolidation
 
 `CanonicalRestCycleCommitPort` performs exact canonical ensure and verifies event/provenance identity. Only after the exact receipt is durable can local migration completion, `canonical_memory_event` links and the autobiographical snapshot finalize atomically. The autobiographical snapshot is a rebuildable local projection, not canonical memory or identity authority.
 
-Process-death recovery reuses the durable exact receipt and can finish the local projection without replaying the canonical writer. REST-002 repair proposal execution is outside this mapping and remains open.
+Process-death recovery reuses the durable exact receipt and can finish the local projection without replaying the canonical writer.
+
+## REST-002 mapping
+
+REST-002 uses the same verified canonical planning boundary and neutral `RestCycleSourceEvent` proposal inputs. `RestRepairProposalPlanner` does not consume legacy `MemoryEventEntity` authority.
+
+The deterministic `rest_cycle.propose_repair` operation exact-ensures `memory.repair_proposed` through `CanonicalRestCycleCommitPort`. Local finalization requires the matching planned migration, keeps `approvalRequired=true`, `approvedByUser=false`, leaves `postSnapshotId=null`, and records `automatic_changes=false` plus `repair_execution=not_implemented`.
+
+Recovery after process death may advance an already receipted proposal to XOP `COMMITTED` exactly once while the owner migration remains planned. It cannot perform repair execution, create a repaired snapshot, or silently convert approval state.
 
 ## Recovery and concurrency
 
@@ -159,11 +184,13 @@ Startup recovery runs after committed identity and before ordinary XOP owner mut
 
 Common protocol advancement serializes by `operationId`. ORCH additionally serializes task decisions by `taskId`; AGENT public lifecycle mutations serialize by striped `agentInstanceId` mutexes. Multiprocess Android would require durable cross-process serialization beyond those process-local mutexes.
 
-REST recovery is owner-scoped and executes before remaining legacy convergence so an already-persisted REST receipt can finish local state without turning legacy data back into authority.
+REST-001 and REST-002 share owner `rest_cycle` but use distinct closed operation schemas and typed finalization branches. REST recovery is owner-scoped and executes before remaining legacy convergence so an already-persisted REST receipt can finish local state without turning legacy data back into authority.
 
 ## Integrated evidence
 
 REST-001 source head `3661450325237fcadb86098ec16ee45cd039bc0b` passed all five governed PR-associated workflows before PR #182 squash integration: Android CI #717, Genesis Body Preparation #699, Reference Checks #541, CodeQL #430, and SBOM #428. Unit tests, lint, QA-7 JVM, release-signing fail-closed, ephemeral release, API30/API35 compatibility and canonical API30 instrumented coverage passed. The Room kill/recovery test demonstrated exactly-once local completion after an exact canonical receipt without canonical writer replay.
+
+REST-002 source head `2ecca3f48d5e0ef27bd927da3986292daf7f7e2c` passed all five governed PR-associated workflows before PR #184 squash integration: Android CI #723, Genesis Body Preparation #703, Reference Checks #547, CodeQL #436, and SBOM #434. Android validation passed unit tests, lint, release-signing fail-closed, ephemeral signed release, API30/API35 managed compatibility and instrumentation. The Room kill/recovery test demonstrated exactly-once proposal recovery from an exact canonical receipt while repair execution remained absent.
 
 The global mutation pilot remained report-only and does not establish REST-specific mutation coverage.
 
@@ -173,18 +200,18 @@ The global mutation pilot remained report-only and does not establish REST-speci
 - RECALL-specific mutation testing is not established; existing bounded PIT remains report-only and Genesis-scoped;
 - BOOT/AGENT-specific mutation testing is not established;
 - ORCH-specific mutation testing remains unestablished;
-- recall startup-readiness wiring remains open;
-- REST-002 remains open;
+- REST and recall startup-readiness wiring remain open;
+- REST repair execution remains deliberately unimplemented by REST-002;
 - health convergence remains open;
 - physical ARM64 inference remains outside emulator CI.
 
 ## Current acceptance state
 
 ```text
-ADR_0002=ACCEPTED_AND_IMPLEMENTED_FOR_COG_ORCH_AGENT_BOOT_AND_REST001_BOUNDED_SCOPES
+ADR_0002=ACCEPTED_AND_IMPLEMENTED_FOR_COG_ORCH_AGENT_BOOT_REST001_AND_REST002_PROPOSAL_BOUNDED_SCOPES
 RECALL_DISPOSITION=INTEGRATED_DERIVED_REBUILD_NOT_XOP_OWNER
-CONTENT_BASELINE_SHA=2d16c5c3197d492d5daed3707e97a68caa0011a6
-CONTENT_BASELINE_PARENT_SHA=d7e679b9f8e0b34d44a5e702c02c436f21e4eaee
+CONTENT_BASELINE_SHA=e05ae7a08b1a88d2fbc0d4f2dff8ff06d282c908
+CONTENT_BASELINE_PARENT_SHA=9585e94a690d4f00d591f81d14e56aedefda3341
 CURRENT_MAIN_RESOLUTION=EXTERNAL_GIT_REF
 MERGE_SHA_EVIDENCE=EXTERNAL
 MEMORY_ORGAN_DATABASE=V9
@@ -197,10 +224,13 @@ AGENT_001_006=INTEGRATED
 BOOT_001=INTEGRATED
 RECALL_001=INTEGRATED
 REST_001=INTEGRATED
-REST_002=OPEN
+REST_002=INTEGRATED
+REST_REPAIR_PROPOSAL_CONVERGED=true
+REST_REPAIR_EXECUTION_IMPLEMENTED=false
+REST_BOOT_READINESS=OPEN
 RECALL_BOOT_READINESS=OPEN
 HEALTH_CONVERGENCE=OPEN
 F3_3=OPEN
-TRACKER_88=OPEN_FOR_REMAINING_OWNERS
+TRACKER_88=OPEN_FOR_HEALTH_READINESS_AND_LEGACY_RETIREMENT
 MORIMIL_OPERATIONAL_BIRTH=NOT_OCCURRED
 ```

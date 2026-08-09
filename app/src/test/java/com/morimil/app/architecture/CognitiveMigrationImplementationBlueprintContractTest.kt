@@ -11,7 +11,7 @@ class CognitiveMigrationImplementationBlueprintContractTest {
     }
 
     @Test
-    fun blueprintIsCurrentAndRecordsPostRest001Truth() {
+    fun blueprintIsCurrentAndRecordsPostRest002Truth() {
         assertTrue(blueprint.startsWith("# Document status: CURRENT"))
         assertTrue(blueprint.contains("implemented and audited design", true))
         listOf(
@@ -26,8 +26,11 @@ class CognitiveMigrationImplementationBlueprintContractTest {
             BOOT_AUDITED_SOURCE_HEAD,
             RECALL_AUDITED_SOURCE_HEAD,
             REST_001_AUDITED_SOURCE_HEAD,
+            REST_002_AUDITED_SOURCE_HEAD,
             "PR_181=MERGED_BY_SQUASH_HISTORICAL",
             "PR_182=MERGED_BY_SQUASH_HISTORICAL",
+            "PR_183=MERGED_BY_SQUASH_HISTORICAL",
+            "PR_184=MERGED_BY_SQUASH_HISTORICAL",
             "COG_001_004=INTEGRATED_IN_MAIN",
             "ORCH_001=INTEGRATED_IN_MAIN",
             "ORCH_002_004=INTEGRATED_IN_MAIN",
@@ -35,9 +38,13 @@ class CognitiveMigrationImplementationBlueprintContractTest {
             "BOOT_001=INTEGRATED_IN_MAIN",
             "RECALL_001=INTEGRATED_IN_MAIN",
             "REST_001=INTEGRATED_IN_MAIN",
-            "REST_002=OPEN",
+            "REST_002=INTEGRATED_IN_MAIN",
+            "REST_REPAIR_PROPOSAL_CONVERGED=true",
+            "REST_REPAIR_EXECUTION_IMPLEMENTED=false",
+            "REST_BOOT_READINESS=OPEN",
             "RECALL_BOOT_READINESS=OPEN"
         ).forEach { token -> assertTrue("Missing blueprint token $token", blueprint.contains(token)) }
+        assertFalse(blueprint.contains("REST_002=OPEN"))
     }
 
     @Test
@@ -50,11 +57,16 @@ class CognitiveMigrationImplementationBlueprintContractTest {
         assertTrue(blueprint.contains("PR #178 integrated RECALL-001"))
         assertTrue(blueprint.contains("PR #180 integrated ORCH-001 seed convergence"))
         assertTrue(blueprint.contains("PR #182 integrated REST-001 canonical planning and durable execution"))
-        listOf("REST-002", "health convergence", "recall startup-readiness", "F3.3 legacy removal remains open").forEach {
-            assertTrue("Missing remaining scope $it", blueprint.contains(it, true))
-        }
+        assertTrue(blueprint.contains("PR #184 integrated REST-002 proposal-only canonical convergence"))
+        listOf(
+            "health convergence",
+            "REST/recall startup-readiness wiring",
+            "F3.3 legacy removal remains open",
+            "automatic repair execution remains unimplemented"
+        ).forEach { assertTrue("Missing remaining scope $it", blueprint.contains(it, true)) }
         assertFalse(blueprint.contains("REST_001_002=OPEN"))
         assertFalse(blueprint.contains("REST_001=OPEN"))
+        assertFalse(blueprint.contains("REST_002=OPEN"))
         assertFalse(blueprint.contains("RECALL_001=OPEN"))
     }
 
@@ -88,7 +100,10 @@ class CognitiveMigrationImplementationBlueprintContractTest {
             "reloads after lost CAS",
             "rejects stale blocking",
             "COG recovery cannot consume ORCH or AGENT rows",
+            "ORCH, AGENT and BOOT likewise remain owner-scoped",
             "REST recovery is owner-scoped",
+            "BOOT has an additional idempotent MorimilDatabase preparation",
+            "REST-002 recovery may finalize a proposal receipt but never execute a repair",
             "Room-backed multi-coordinator concurrency",
             "rollback snapshot",
             "UPDATE-trigger replacement",
@@ -111,8 +126,8 @@ class CognitiveMigrationImplementationBlueprintContractTest {
             ?: error("Repository file not found: $relativePath")
 
     private companion object {
-        const val CONTENT_BASELINE_SHA = "CONTENT_BASELINE_SHA=2d16c5c3197d492d5daed3707e97a68caa0011a6"
-        const val CONTENT_BASELINE_PARENT_SHA = "CONTENT_BASELINE_PARENT_SHA=d7e679b9f8e0b34d44a5e702c02c436f21e4eaee"
+        const val CONTENT_BASELINE_SHA = "CONTENT_BASELINE_SHA=e05ae7a08b1a88d2fbc0d4f2dff8ff06d282c908"
+        const val CONTENT_BASELINE_PARENT_SHA = "CONTENT_BASELINE_PARENT_SHA=9585e94a690d4f00d591f81d14e56aedefda3341"
         const val COG_AUDITED_SOURCE_HEAD = "7bdbda2aa4b7568695ba8e98be54d506d42c99d5"
         const val ORCH_AUDITED_SOURCE_HEAD = "0348dccb561e576d17c45e7f8b1e38717332772b"
         const val ORCH_001_AUDITED_SOURCE_HEAD = "fe188fdee8eae901434a255051b6fa4f852b929b"
@@ -120,5 +135,6 @@ class CognitiveMigrationImplementationBlueprintContractTest {
         const val BOOT_AUDITED_SOURCE_HEAD = "c7710635fa172108cce87b3f7a76d6e037095864"
         const val RECALL_AUDITED_SOURCE_HEAD = "fae8a0df3c29775317986877bce2b8eda8593d27"
         const val REST_001_AUDITED_SOURCE_HEAD = "3661450325237fcadb86098ec16ee45cd039bc0b"
+        const val REST_002_AUDITED_SOURCE_HEAD = "2ecca3f48d5e0ef27bd927da3986292daf7f7e2c"
     }
 }
