@@ -51,7 +51,6 @@ class LocalNervousSystemRepository internal constructor(
             canonicalMemoryVerified = canonicalMemoryVerified,
             totalCanonicalEventCount = totalCanonicalEventCount,
             postBirthEventCount = postBirthEventCount,
-            recentVerifiedEventCount = recentVerifiedEventCount,
             quarantineEventCount = quarantineEventCount
         )
     }
