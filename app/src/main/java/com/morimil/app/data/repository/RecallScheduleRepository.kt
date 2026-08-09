@@ -32,18 +32,7 @@ class RecallScheduleRepository internal constructor(
             canonicalReadPort.readRecallCandidates(CANONICAL_CANDIDATE_LIMIT)
         ) ?: return false
         requireCanonicalBatch(batch)
-        require(batch.instanceId == identity.instanceId) {
-            "canonical_recall_bootstrap_foreign_instance"
-        }
-        require(batch.snapshot.instanceId == identity.instanceId) {
-            "canonical_recall_bootstrap_snapshot_instance_mismatch"
-        }
-        require(batch.writerBodyId == identity.activeBody.bodyId) {
-            "canonical_recall_bootstrap_wrong_body"
-        }
-        require(batch.writerEpochId == identity.activeBody.keyEpochId) {
-            "canonical_recall_bootstrap_stale_epoch"
-        }
+        RecallBootstrapReadiness.requireIdentityBinding(identity, batch)
         return true
     }
 
