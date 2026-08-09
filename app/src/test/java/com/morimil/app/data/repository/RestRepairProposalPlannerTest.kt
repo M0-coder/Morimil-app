@@ -1,6 +1,5 @@
 package com.morimil.app.data.repository
 
-import com.morimil.app.data.local.MemoryEventEntity
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -12,8 +11,8 @@ class RestRepairProposalPlannerTest {
         val text = "Morimil debe guardar decisiones importantes solo cuando el usuario las confirma claramente."
         val report = RestRepairProposalPlanner.build(
             listOf(
-                event(hash = "sha256:a", body = text, memoryKind = "decision", importance = 80),
-                event(hash = "sha256:b", body = text, memoryKind = "decision", importance = 76)
+                event(hash = "evsha256:${"a".repeat(64)}", body = text, memoryKind = "decision", importance = 80),
+                event(hash = "evsha256:${"b".repeat(64)}", body = text, memoryKind = "decision", importance = 76)
             )
         )
 
@@ -27,7 +26,7 @@ class RestRepairProposalPlannerTest {
         val report = RestRepairProposalPlanner.build(
             listOf(
                 event(
-                    hash = "sha256:decision",
+                    hash = "evsha256:${"c".repeat(64)}",
                     body = "La arquitectura aprobada exige aprobacion humana antes de acciones externas.",
                     memoryKind = "decision",
                     importance = 92,
@@ -46,19 +45,19 @@ class RestRepairProposalPlannerTest {
         val report = RestRepairProposalPlanner.build(
             listOf(
                 event(
-                    hash = "sha256:old",
+                    hash = "evsha256:${"d".repeat(64)}",
                     body = "IonPay sera una empresa billetera digital con agentes activos en la boveda.",
                     memoryKind = "decision",
                     importance = 88,
-                    createdAtMillis = 10L
+                    observedAtMillis = 10L
                 ),
                 event(
-                    hash = "sha256:correction",
+                    hash = "evsha256:${"e".repeat(64)}",
                     body = "Correccion: IonPay no sera una empresa billetera digital todavia; solo es una idea por revisar.",
                     memoryKind = "correction",
                     eventType = "memory_review.correction",
                     importance = 90,
-                    createdAtMillis = 20L
+                    observedAtMillis = 20L
                 )
             )
         )
@@ -71,8 +70,8 @@ class RestRepairProposalPlannerTest {
     fun cleanLowImportanceMemoriesDoNotCreateRepairProposal() {
         val report = RestRepairProposalPlanner.build(
             listOf(
-                event(hash = "sha256:one", body = "Hola, conversacion casual.", memoryKind = "conversation", importance = 20),
-                event(hash = "sha256:two", body = "Nota simple sin importancia estable.", memoryKind = "learning", importance = 45)
+                event(hash = "evsha256:${"f".repeat(64)}", body = "Hola, conversacion casual.", memoryKind = "conversation", importance = 20),
+                event(hash = "evsha256:${"1".repeat(64)}", body = "Nota simple sin importancia estable.", memoryKind = "learning", importance = 45)
             )
         )
 
@@ -81,11 +80,11 @@ class RestRepairProposalPlannerTest {
     }
 
     @Test
-    fun evidenceJsonDeclaresProposalOnlyMode() {
+    fun evidenceDeclaresProposalOnlyMode() {
         val report = RestRepairProposalPlanner.build(
             listOf(
                 event(
-                    hash = "sha256:decision",
+                    hash = "evsha256:${"2".repeat(64)}",
                     body = "Una decision muy importante debe revisarse antes de consolidarse como verdad estable.",
                     memoryKind = "decision",
                     importance = 95,
@@ -94,11 +93,9 @@ class RestRepairProposalPlannerTest {
             )
         )
 
-        val evidence = report.evidenceJson("mig_test")
-
-        assertTrue(evidence.contains("morimil.rest_repair_proposal.v1"))
-        assertTrue(evidence.contains("proposal_only"))
-        assertTrue(evidence.contains("approval_required"))
+        assertTrue(report.evidenceJson("repair_test").contains("morimil.rest_repair_proposal.v2"))
+        assertTrue(report.canonicalProposalJson().contains("proposal_only"))
+        assertTrue(report.eventBody("repair_test").contains("no_automatic_memory_mutation"))
     }
 
     private fun event(
@@ -109,30 +106,20 @@ class RestRepairProposalPlannerTest {
         eventType: String = "test.event",
         confidence: Int = 90,
         userConfirmed: Boolean = false,
-        createdAtMillis: Long = 123L
-    ): MemoryEventEntity {
-        return MemoryEventEntity(
-            genesisCoreId = "primary_genesis",
-            genesisCoreHash = "sha256:genesis",
-            previousEventHash = null,
+        observedAtMillis: Long = 123L
+    ): RestCycleSourceEvent {
+        return RestCycleSourceEvent(
             eventHash = hash,
-            hashAlgorithm = "sha256",
-            canonicalization = "morimil.memory_event_hash.v3",
-            signatureAlgorithm = "unsigned_runtime_v1",
-            eventSignature = null,
             eventType = eventType,
             actor = "user",
             source = "test",
-            contextTag = "test",
-            privacyVisibility = "private_local",
             memoryKind = memoryKind,
             tagsJson = "[]",
-            evidenceJson = "{}",
-            confidence = confidence,
-            userConfirmed = userConfirmed,
             body = body,
             importance = importance,
-            createdAtMillis = createdAtMillis
+            confidence = confidence,
+            userConfirmed = userConfirmed,
+            observedAtMillis = observedAtMillis
         )
     }
 }
