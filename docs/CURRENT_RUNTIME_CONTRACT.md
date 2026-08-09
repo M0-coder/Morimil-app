@@ -24,7 +24,7 @@
 >
 > **REST-002 audited source head:** `2ecca3f48d5e0ef27bd927da3986292daf7f7e2c`.
 >
-> **HEALTH-001 audited source head:** `f1697227241459f316bd562756e15ae3ce02c90d`.
+> **Bootstrap-health audited source head:** `f1697227241459f316bd562756e15ae3ce02c90d`.
 >
 > **REST-BOOT-001 audited source head:** `dd7a92a011fd4c453775df6ec307638b05313ec9`.
 >
@@ -48,7 +48,7 @@
 >
 > **PR #186:** merged by squash for post-REST-002 CURRENT reconciliation without normative erosion.
 >
-> **PR #187:** merged by squash for HEALTH-001 dependency-derived runtime health convergence.
+> **PR #187:** merged by squash for dependency-derived bootstrap health instead of a static READY assignment.
 >
 > **PR #188:** merged by squash for REST boot-readiness canonical probing.
 >
@@ -154,9 +154,11 @@ BOOT-001 recovery is owner-scoped inside `GenesisUltraRuntimeBootstrapCoordinato
 
 RECALL-001 is not an XOP owner. Its schedule is a rebuildable local projection derived from verified canonical memory. Current startup does not automatically seed or declare recall ready; BOOT still reports `recallState=WAITING_FOR_CANONICAL_MEMORY_ADAPTER`. That remaining readiness wiring is open and must not be hidden by the repository-level RECALL integration.
 
-REST startup readiness is now integrated without creating a new authority or mutation path. `RestCycleRepository.isBootstrapReady(identity)` reads `CanonicalConsumerReadPort.readRestCyclePlanningInput`; canonical NOT_READY keeps REST waiting without mutation, retryable/blocked evidence fails closed, and ready input is validated through the existing `requireCanonicalPlanning` Instance/Body/epoch/digest/source boundary. `GenesisUltraRuntimeBootstrapCoordinator` maps only a successful verified probe to `restCycleState=READY`.
+REST startup readiness is integrated without creating a new authority or mutation path. `RestCycleRepository.isBootstrapReady(identity)` reads `CanonicalConsumerReadPort.readRestCyclePlanningInput`; canonical NOT_READY keeps REST waiting without mutation, retryable/blocked evidence fails closed, and ready input is validated through the existing `requireCanonicalPlanning` Instance/Body/epoch/digest/source boundary. `GenesisUltraRuntimeBootstrapCoordinator` maps only a successful verified probe to `restCycleState=READY`.
 
-HEALTH-001 is also integrated. `healthState` is no longer a static READY assignment: `GenesisUltraRuntimeHealthConvergence.evaluate(...)` derives health from legacy convergence plus REST and RECALL state, and `GenesisUltraRuntimeBootstrapReport` rejects inconsistent forged health. Since RECALL readiness remains open, current health remains `WAITING_FOR_DEPENDENCIES`; integrated health convergence does not mean global runtime READY.
+PR #187 removed the former tautological bootstrap `healthState=READY`. `GenesisUltraRuntimeHealthConvergence.evaluate(...)` now derives the bootstrap report's health state from legacy convergence plus REST and RECALL subsystem state, and `GenesisUltraRuntimeBootstrapReport` rejects inconsistent forged health. Since RECALL readiness remains open, current bootstrap health is `WAITING_FOR_DEPENDENCIES`.
+
+That bootstrap correction does **not** close all F1 health convergence. `LocalNervousSystemRepository.recordHealthCheckIfDegraded` still derives legacy health counts through `MemoryDao` (`genesis_core`, local identity, `memory_events`, living snapshot/context reads) and may persist alerts through `MemoryRepository.recordSystemMemoryEvent`. This legacy consumer/write boundary remains explicit work and prevents `HEALTH_CONVERGENCE` from being declared closed.
 
 ## Integrated COG-001 through COG-004
 
@@ -238,7 +240,7 @@ REST-002 is deliberately proposal-only:
 - `repair_execution=not_implemented` is persisted in the local result;
 - no `approveRestRepair` or `executeRestRepair` production path is introduced by REST-002.
 
-Therefore `REST_002=INTEGRATED` means canonical proposal convergence only. It must not be interpreted as automatic repair execution, global health readiness, or Operational Birth.
+Therefore `REST_002=INTEGRATED` means canonical proposal convergence only. It must not be interpreted as automatic repair execution, global health convergence, or Operational Birth.
 
 ## Remaining F3/F1 work
 
@@ -251,20 +253,24 @@ REST_001=INTEGRATED
 REST_002=INTEGRATED
 REST_REPAIR_PROPOSAL_CONVERGED=true
 REST_REPAIR_EXECUTION_IMPLEMENTED=false
-HEALTH_CONVERGENCE=INTEGRATED
+BOOTSTRAP_HEALTH_DERIVATION=INTEGRATED
+HEALTH_CONVERGENCE=OPEN
+HEALTH_CONVERGED=false
 HEALTH_STATE=WAITING_FOR_DEPENDENCIES
 F3_3=OPEN
 ```
 
 F3.3 irreversible legacy removal remains open and must not begin until every remaining owner/readiness dependency has an explicit disposition and separate authorization.
 
-Compatibility writes remain forbidden. No convergence step may create or reconstruct authority rows in:
+Compatibility writes remain forbidden for convergence work. No new convergence step may create or reconstruct authority rows in:
 
 ```text
 genesis_core
 local_instance_identity
 memory_events
 ```
+
+The existing `LocalNervousSystemRepository` legacy read/write boundary is debt to retire or migrate, not permission to add new compatibility authority.
 
 ## Normal reasoning runtime
 
@@ -283,10 +289,10 @@ Auxiliary providers return unverified advisory output and cannot become Morimil'
 
 | Phase | Evidence-backed state |
 | --- | --- |
-| F1 | F1-A, BOOT, RECALL repository convergence, ORCH-001, REST-001, REST-002 proposal convergence, HEALTH-001 and REST-BOOT-001 are integrated; `#86` remains open for RECALL startup readiness and final legacy convergence. |
+| F1 | F1-A, BOOT, RECALL repository convergence, ORCH-001, REST-001, REST-002 proposal convergence, bootstrap Health derivation and REST-BOOT-001 are integrated; `#86` remains open for the legacy `LocalNervousSystemRepository` health boundary, RECALL startup readiness and final legacy convergence. |
 | F2 | Closed for canonical verified memory and bounded promotion/convergence. |
 | F3.1 | ProjectVault protected outbox/recovery integrated. |
-| F3.2 | Integrated for ProjectVault, COG-001..004, ORCH-001..004, AGENT-001..006, BOOT-001, RECALL-001 derived rebuild, REST-001, REST-002 proposal convergence, dependency-derived Health and REST startup readiness. RECALL startup readiness remains open. |
+| F3.2 | Integrated for ProjectVault, COG-001..004, ORCH-001..004, AGENT-001..006, BOOT-001, RECALL-001 derived rebuild, REST-001, REST-002 proposal convergence and REST startup readiness. Bootstrap Health derivation is truthful, but F1 health convergence and RECALL startup readiness remain open. |
 | F3.3 | Open. Irreversible legacy removal has not begun. |
 | F4 | Open: sovereign durable continuation. |
 | F5 | Open: signed export, dry-run restore, Body succession, writer transfer/revocation. |
@@ -299,7 +305,7 @@ REST-001 PR-associated validation completed all five governed workflows successf
 
 REST-002 PR-associated validation completed all five governed workflows successfully for source head `2ecca3f48d5e0ef27bd927da3986292daf7f7e2c`: Android CI #723, Genesis Body Preparation #703, Reference Checks #547, CodeQL #436, and SBOM #434. Its process-death recovery evidence demonstrated an already persisted proposal receipt recovering exactly once while the migration remains proposal-only and no repair executes.
 
-HEALTH-001 PR-associated validation completed all five governed workflows successfully for source head `f1697227241459f316bd562756e15ae3ce02c90d`: Android CI #732, Genesis Body Preparation #710, Reference Checks #556, CodeQL #445, and SBOM #443. The runtime tests prove Health waits when either REST or RECALL is not ready, converges only when all dependencies are ready, and rejects forged READY state.
+PR #187 validation completed all five governed workflows successfully for source head `f1697227241459f316bd562756e15ae3ce02c90d`: Android CI #732, Genesis Body Preparation #710, Reference Checks #556, CodeQL #445, and SBOM #443. Those tests prove the bootstrap Health report waits when a dependency is not ready, converges only when its modeled dependencies are ready, and rejects forged READY state. They do not prove migration of `LocalNervousSystemRepository` away from legacy memory authority.
 
 REST-BOOT-001 PR-associated validation completed all five governed workflows successfully for source head `dd7a92a011fd4c453775df6ec307638b05313ec9`: Android CI #738, Genesis Body Preparation #715, Reference Checks #562, CodeQL #451, and SBOM #449. JVM tests directly cover READY, NOT_READY, RETRYABLE and BLOCKED readiness dispositions; API30/API35 managed-device validation passed, while physical ARM64-only tests remain skipped in emulator CI.
 
@@ -307,10 +313,11 @@ The global mutation pilot remained report-only. REST-specific mutation testing i
 
 Residual hardening remains visible:
 
+- `LocalNervousSystemRepository.recordHealthCheckIfDegraded` still reads legacy health data through `MemoryDao` and can write a legacy system memory event through `MemoryRepository`; F1 health convergence remains open;
 - REST-specific mutation testing is not established;
 - RECALL-specific mutation testing is not established;
 - BOOT still reports recall readiness as waiting and startup does not automatically seed recall;
-- Health currently remains `WAITING_FOR_DEPENDENCIES` because RECALL startup readiness is not yet proven;
+- bootstrap Health currently remains `WAITING_FOR_DEPENDENCIES` because RECALL startup readiness is not yet proven;
 - REST repair execution remains intentionally not implemented by REST-002;
 - ORCH-specific mutation testing remains unestablished;
 - BOOT/AGENT-specific mutation testing remains unestablished;
