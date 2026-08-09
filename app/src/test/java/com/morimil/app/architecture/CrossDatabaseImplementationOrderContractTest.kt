@@ -7,7 +7,7 @@ import org.junit.Test
 
 class CrossDatabaseImplementationOrderContractTest {
     @Test
-    fun implementationOrderRecordsRest001IntegratedBeforeRest002() {
+    fun implementationOrderRecordsRest001AndRest002IntegratedBeforeReadiness() {
         val inventory = repositoryFile("docs/F3_CROSS_DATABASE_OPERATION_INVENTORY.md").readText()
         val section = inventory.substringAfter("## Implementation order after STOP S5")
 
@@ -18,9 +18,11 @@ class CrossDatabaseImplementationOrderContractTest {
         val recall = section.indexOf("`RECALL-001` — integrated canonical derived rebuild")
         val orch001 = section.indexOf("`ORCH-001` — integrated canonical identity-gated seed convergence")
         val rest001 = section.indexOf("`REST-001` — integrated canonical planning and owner-scoped durable XOP")
-        val rest002 = section.indexOf("`REST-002`, health convergence and recall startup-readiness")
+        val rest002 = section.indexOf("`REST-002` — integrated canonical proposal-only XOP")
+        val readiness = section.indexOf("Health convergence and REST/RECALL startup-readiness")
+        val f33 = section.indexOf("F3.3 only after every F3.2/readiness dependency")
 
-        listOf(cognitive, orchestration, agents, bootstrap, recall, orch001, rest001, rest002).forEach { position ->
+        listOf(cognitive, orchestration, agents, bootstrap, recall, orch001, rest001, rest002, readiness, f33).forEach { position ->
             assertTrue("F3.2 implementation order entry is missing", position >= 0)
         }
         assertTrue(cognitive < orchestration)
@@ -30,9 +32,12 @@ class CrossDatabaseImplementationOrderContractTest {
         assertTrue(recall < orch001)
         assertTrue(orch001 < rest001)
         assertTrue(rest001 < rest002)
+        assertTrue(rest002 < readiness)
+        assertTrue(readiness < f33)
 
         assertFalse(section.contains("`REST-001` and `REST-002`"))
         assertFalse(section.contains("`REST-001` — next bounded convergence work"))
+        assertFalse(section.contains("`REST-002`, health convergence and recall startup-readiness"))
     }
 
     @Test
@@ -41,8 +46,11 @@ class CrossDatabaseImplementationOrderContractTest {
         assertTrue(inventory.contains("CURRENT_MAIN_RESOLUTION=EXTERNAL_GIT_REF"))
         assertTrue(inventory.contains("MERGE_SHA_EVIDENCE=EXTERNAL"))
         assertTrue(inventory.contains("STOP_S5=CLOSED"))
-        assertTrue(inventory.contains("F3.3 only after every F3.2 owner has a recorded disposition and separate authorization"))
-        assertTrue(inventory.contains("REST_002=OPEN"))
+        assertTrue(inventory.contains("F3.3 only after every F3.2/readiness dependency has a recorded disposition and separate authorization"))
+        assertTrue(inventory.contains("REST_002=INTEGRATED"))
+        assertTrue(inventory.contains("REST_REPAIR_EXECUTION_IMPLEMENTED=false"))
+        assertTrue(inventory.contains("HEALTH_CONVERGENCE=OPEN"))
+        assertFalse(inventory.contains("REST_002=OPEN"))
         assertFalse(inventory.contains("MORIMIL_OPERATIONAL_BIRTH=OCCURRED"))
     }
 
