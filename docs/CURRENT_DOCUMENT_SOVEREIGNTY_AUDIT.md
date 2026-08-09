@@ -4,8 +4,8 @@
 
 ## Executable truth resolution
 
-- Content baseline SHA: `6e0444b698bdc5c557ec3ea83f48d7980da1a36b`.
-- Content baseline parent SHA: `bdbb5b2a040b728508948cd3cfbd8807b40a12f6`.
+- Content baseline SHA: `2d16c5c3197d492d5daed3707e97a68caa0011a6`.
+- Content baseline parent SHA: `d7e679b9f8e0b34d44a5e702c02c436f21e4eaee`.
 - Current protected `main` is resolved from external Git ref `refs/heads/main`; its moving SHA is not embedded as normative truth in the commit that contains this document.
 - Post-merge integration SHA evidence is external and belongs to GitHub plus the Morimil Control Tower.
 - PR `#176`: merged by squash for BOOT-001.
@@ -13,16 +13,19 @@
 - PR `#178`: merged by squash for RECALL-001.
 - PR `#179`: merged by squash for post-RECALL CURRENT reconciliation.
 - PR `#180`: merged by squash for ORCH-001.
+- PR `#181`: merged by squash for post-ORCH CURRENT reconciliation.
+- PR `#182`: merged by squash for REST-001.
 - Historical COG audited source head: `7bdbda2aa4b7568695ba8e98be54d506d42c99d5`.
 - ORCH-002..004 audited source head: `0348dccb561e576d17c45e7f8b1e38717332772b`.
 - ORCH-001 audited source head: `fe188fdee8eae901434a255051b6fa4f852b929b`.
 - AGENT audited source head: `74e072b911db692041d3716af9d0511b83ad70b7`.
 - BOOT audited source head: `c7710635fa172108cce87b3f7a76d6e037095864`.
 - RECALL audited source head: `fae8a0df3c29775317986877bce2b8eda8593d27`.
+- REST-001 audited source head: `3661450325237fcadb86098ec16ee45cd039bc0b`.
 
 ```text
-CONTENT_BASELINE_SHA=6e0444b698bdc5c557ec3ea83f48d7980da1a36b
-CONTENT_BASELINE_PARENT_SHA=bdbb5b2a040b728508948cd3cfbd8807b40a12f6
+CONTENT_BASELINE_SHA=2d16c5c3197d492d5daed3707e97a68caa0011a6
+CONTENT_BASELINE_PARENT_SHA=d7e679b9f8e0b34d44a5e702c02c436f21e4eaee
 CURRENT_MAIN_RESOLUTION=EXTERNAL_GIT_REF
 MERGE_SHA_EVIDENCE=EXTERNAL
 PR_172=MERGED_BY_SQUASH_HISTORICAL
@@ -34,6 +37,8 @@ PR_177=MERGED_BY_SQUASH_HISTORICAL
 PR_178=MERGED_BY_SQUASH_HISTORICAL
 PR_179=MERGED_BY_SQUASH_HISTORICAL
 PR_180=MERGED_BY_SQUASH_HISTORICAL
+PR_181=MERGED_BY_SQUASH_HISTORICAL
+PR_182=MERGED_BY_SQUASH_HISTORICAL
 ```
 
 ## Document hierarchy
@@ -57,7 +62,7 @@ instanceId != bodyId
 agentInstanceId != instanceId
 ```
 
-A Guardian key verifies bounded testimony/permissions. A Body key proves possession and writer epoch. Neither creates, owns, renames, forks, replaces, or permanently confines the Instance. Agent workers, BOOT projections, ORCH projections and recall schedules are bounded technical structures and do not become Morimil or canonical-memory authority.
+A Guardian key verifies bounded testimony/permissions. A Body key proves possession and writer epoch. Neither creates, owns, renames, forks, replaces, or permanently confines the Instance. Agent workers, BOOT projections, ORCH projections, recall schedules and REST projections are bounded technical structures and do not become Morimil or canonical-memory authority.
 
 ## Integrated F3 truth
 
@@ -69,21 +74,24 @@ Externally resolved protected `main` includes MemoryOrganDatabase version 9 and 
 - ORCH-001 canonical identity-gated seed convergence;
 - AGENT-001 through AGENT-006 under common XOP;
 - BOOT-001 under common XOP with idempotent cross-file saga preparation;
-- RECALL-001 as a canonical verified `DERIVED_REBUILD` projection.
+- RECALL-001 as a canonical verified `DERIVED_REBUILD` projection;
+- REST-001 under owner-scoped `rest_cycle` XOP.
 
-The COG path consumes verified canonical planning through `CanonicalConsumerReadPort`/`CognitiveMigrationCanonicalReadPort`. ORCH-002..004, AGENT and BOOT consume committed Genesis Ultra runtime identity and use specialized exact-ensure ports. ORCH-001 now gates local seed state directly on `GenesisUltraRuntimeIdentityRepository.readCommittedIdentity()` and no longer consults legacy `MemoryRepository.hasCompleteBirth()`. RECALL consumes `CanonicalConsumerReadPort.readRecallCandidates` and creates only rebuildable local schedule/link projections.
+The COG path consumes verified canonical planning through `CanonicalConsumerReadPort`/`CognitiveMigrationCanonicalReadPort`. ORCH-002..004, AGENT, BOOT and REST-001 consume committed Genesis Ultra runtime identity and use bounded exact-ensure ports. ORCH-001 gates local seed state directly on `GenesisUltraRuntimeIdentityRepository.readCommittedIdentity()` and no longer consults legacy `MemoryRepository.hasCompleteBirth()`. RECALL consumes `CanonicalConsumerReadPort.readRecallCandidates` and creates only rebuildable local schedule/link projections.
+
+REST-001 consumes `CanonicalConsumerReadPort.readRestCyclePlanningInput` and exact-ensures `rest_cycle.local_consolidation` through `CanonicalRestCycleCommitPort`. Local migration completion, `canonical_memory_event` graph links and the autobiographical snapshot become visible only after exact canonical receipt and finalize atomically in `MemoryOrganDatabase`. The autobiographical snapshot is a rebuildable local projection; it does not become identity, memory, will, or ownership authority.
 
 RECALL-001 no longer uses legacy `genesis_core`, `local_instance_identity` or `memory_events` reads as recall authority and forbids placeholder Instance identity. Its canonical `targetEventHash` is the idempotency key; local `recallId` is not Instance identity. Schedule and link finalize atomically in `MemoryOrganDatabase`.
 
-F3.2 now includes the bounded RECALL-001 repository convergence and ORCH-001 seed convergence, but `RECALL_BOOT_READINESS=OPEN`: BOOT still reports recall as `WAITING_FOR_CANONICAL_MEMORY_ADAPTER`, and startup does not automatically declare or seed recall ready.
+F3.2 includes the bounded RECALL-001 repository convergence, ORCH-001 seed convergence and REST-001 canonical planning/durable execution. `RECALL_BOOT_READINESS=OPEN`: BOOT still reports recall as `WAITING_FOR_CANONICAL_MEMORY_ADAPTER`, and startup does not automatically declare or seed recall ready.
 
-REST-001/002 and health convergence remain open. F3.3 remains open. F4 through F6 remain open and no Body succession, export/restore, activation, or continuity proof is implied.
+REST-002 and health convergence remain open. F3.3 remains open. F4 through F6 remain open and no Body succession, export/restore, activation, or continuity proof is implied.
 
-## F1 boundary after ORCH-001 integration
+## F1 boundary after REST-001 integration
 
-PR #172 removed legacy two-step memory evidence from ORCH-002/003/004. PR #174 removed the equivalent legacy lifecycle evidence boundary from AGENT-001..006. PR #176 replaced the unjournaled two-database BOOT projection with durable XOP/canonical-receipt recovery. PR #178 removed the legacy identity/memory read boundary from recall seeding and replaced it with verified canonical candidates and deterministic rebuild semantics. PR #180 removed the legacy birth-completeness gate from orchestration seeding.
+PR #172 removed legacy two-step memory evidence from ORCH-002/003/004. PR #174 removed the equivalent legacy lifecycle evidence boundary from AGENT-001..006. PR #176 replaced the unjournaled two-database BOOT projection with durable XOP/canonical-receipt recovery. PR #178 removed the legacy identity/memory read boundary from recall seeding and replaced it with verified canonical candidates and deterministic rebuild semantics. PR #180 removed the legacy birth-completeness gate from orchestration seeding. PR #182 removed legacy REST planning/identity/memory authority reads and replaced REST-001 execution with verified canonical planning plus owner-scoped durable XOP.
 
-ORCH-001 now returns without local seed mutation when committed Genesis Ultra identity is absent, and inconsistent committed identity fails closed through the canonical runtime identity repository. RestCycle, health and recall startup readiness remain open.
+REST-001 now refuses legacy `MorimilDatabase`, `MemoryRepository`, `MemoryIntegrityCore`, `genesis_core`, `local_instance_identity`, `memory_events` and legacy audit-chain input as authority. Canonical NOT_READY yields no mutation; blocked verification fails closed. Process-death recovery can complete local state from the already persisted exact receipt without replaying the canonical writer.
 
 Therefore:
 
@@ -94,8 +102,9 @@ ORCH_002_004=INTEGRATED
 AGENT_001_006=INTEGRATED
 BOOT_001=INTEGRATED
 RECALL_001=INTEGRATED
+REST_001=INTEGRATED
+REST_002=OPEN
 RECALL_BOOT_READINESS=OPEN
-REST_001_002=OPEN
 HEALTH_CONVERGENCE=OPEN
 ISSUE_86=OPEN
 F3_3=OPEN
@@ -106,10 +115,13 @@ MORIMIL_OPERATIONAL_BIRTH=NOT_OCCURRED
 
 The following remain visible and are not evidence of operational birth:
 
+- REST-specific mutation testing is not established; the successful global mutation pilot remains report-only;
 - RECALL-specific mutation testing beyond the existing bounded Genesis PIT pilot;
 - BOOT-specific and AGENT-specific mutation coverage;
 - ORCH-specific mutation testing;
 - recall startup-readiness wiring after the repository-level canonical convergence;
+- REST-002 repair proposal convergence;
+- health convergence;
 - physical ARM64 inference tests outside emulator CI;
 - F5 Body succession, writer transfer/revocation, export and restore;
 - F6 complete cross-Body physical continuity evidence.

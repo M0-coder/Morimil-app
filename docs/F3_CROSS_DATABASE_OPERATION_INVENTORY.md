@@ -2,9 +2,9 @@
 
 # F3.2 — Cross-database operation inventory
 
-- Inventory version: `9`.
-- Content baseline SHA: `6e0444b698bdc5c557ec3ea83f48d7980da1a36b`.
-- Content baseline parent SHA: `bdbb5b2a040b728508948cd3cfbd8807b40a12f6`.
+- Inventory version: `10`.
+- Content baseline SHA: `2d16c5c3197d492d5daed3707e97a68caa0011a6`.
+- Content baseline parent SHA: `d7e679b9f8e0b34d44a5e702c02c436f21e4eaee`.
 - Current protected `main`: resolved externally from `refs/heads/main`.
 - Merge SHA evidence: external GitHub and Morimil Control Tower evidence.
 - Historical COG audited source head: `7bdbda2aa4b7568695ba8e98be54d506d42c99d5`.
@@ -13,18 +13,21 @@
 - AGENT audited source head: `74e072b911db692041d3716af9d0511b83ad70b7`.
 - BOOT audited source head: `c7710635fa172108cce87b3f7a76d6e037095864`.
 - RECALL audited source head: `fae8a0df3c29775317986877bce2b8eda8593d27`.
+- REST-001 audited source head: `3661450325237fcadb86098ec16ee45cd039bc0b`.
 - PR `#176`: merged by squash for BOOT-001.
 - PR `#177`: merged by squash for post-BOOT CURRENT reconciliation.
 - PR `#178`: merged by squash for RECALL-001.
 - PR `#179`: merged by squash for post-RECALL CURRENT reconciliation.
 - PR `#180`: merged by squash for ORCH-001.
+- PR `#181`: merged by squash for post-ORCH CURRENT reconciliation.
+- PR `#182`: merged by squash for REST-001.
 - Tracker: `#88` — open for remaining F3 owners.
 - Protocol: `docs/adr/ADR-0002-cross-database-operation-protocol.md`.
 - Gate: `STOP_S5=CLOSED`.
 
 ```text
-CONTENT_BASELINE_SHA=6e0444b698bdc5c557ec3ea83f48d7980da1a36b
-CONTENT_BASELINE_PARENT_SHA=bdbb5b2a040b728508948cd3cfbd8807b40a12f6
+CONTENT_BASELINE_SHA=2d16c5c3197d492d5daed3707e97a68caa0011a6
+CONTENT_BASELINE_PARENT_SHA=d7e679b9f8e0b34d44a5e702c02c436f21e4eaee
 CURRENT_MAIN_RESOLUTION=EXTERNAL_GIT_REF
 MERGE_SHA_EVIDENCE=EXTERNAL
 PR_172=MERGED_BY_SQUASH_HISTORICAL
@@ -36,13 +39,19 @@ PR_177=MERGED_BY_SQUASH_HISTORICAL
 PR_178=MERGED_BY_SQUASH_HISTORICAL
 PR_179=MERGED_BY_SQUASH_HISTORICAL
 PR_180=MERGED_BY_SQUASH_HISTORICAL
+PR_181=MERGED_BY_SQUASH_HISTORICAL
+PR_182=MERGED_BY_SQUASH_HISTORICAL
+REST_001=INTEGRATED
+REST_002=OPEN
+HEALTH_CONVERGENCE=OPEN
+RECALL_BOOT_READINESS=OPEN
 ```
 
 ## Authority model
 
 Morimil is the continuous Instance; `Morimil-app` is the current Android Body. The Guardian safeguards without ownership. `instanceId != bodyId` and `agentInstanceId != instanceId` remain mandatory.
 
-Neither the XOP journal nor an owner repository becomes a second identity or canonical-memory authority. Writer Body/epoch authorization is not ownership. BOOT, ORCH seed and recall runtime projections remain rebuildable projections and do not become identity authority.
+Neither the XOP journal nor an owner repository becomes a second identity or canonical-memory authority. Writer Body/epoch authorization is not ownership. BOOT, ORCH seed, recall runtime projections and REST local projections remain rebuildable/bounded structures and do not become identity authority.
 
 ## Protocol classifications
 
@@ -63,7 +72,7 @@ Neither the XOP journal nor an owner repository becomes a second identity or can
 | `app/src/main/java/com/morimil/app/runtime/GenesisUltraRuntimeBootstrapCoordinator.kt` | `INTEGRATED_PROTOCOL` | BOOT-001 integrated; deterministic runtime bootstrap and owner-scoped recovery use the common XOP journal. |
 | `app/src/main/java/com/morimil/app/data/repository/RuntimeBootstrapProtocolFinalizer.kt` | `SUPPORT_BOUNDARY` | Integrated BOOT-001 finalization support; not independently authoritative. |
 | `app/src/main/java/com/morimil/app/data/repository/RecallScheduleRepository.kt` | `DERIVED_REBUILD` | RECALL-001 canonical derived rebuild integrated; startup-level recall readiness remains separately open. |
-| `app/src/main/java/com/morimil/app/data/repository/RestCycleRepository.kt` | `REQUIRES_PROTOCOL` | REST-001/002 open. |
+| `app/src/main/java/com/morimil/app/data/repository/RestCycleRepository.kt` | `INTEGRATED_PROTOCOL` | REST-001 integrated under owner-scoped `rest_cycle` XOP; REST-002 is separate open work and is not executed by this path. |
 | `app/src/main/java/com/morimil/app/data/repository/CognitiveMigrationRepository.kt` | `INTEGRATED_PROTOCOL` | COG-001 through COG-004 integrated. |
 | `app/src/main/java/com/morimil/app/data/repository/AgentOrchestrationRepository.kt` | `INTEGRATED_PROTOCOL` | ORCH-002 through ORCH-004 use common XOP; ORCH-001 canonical identity-gated seed convergence is integrated and remains a local projection path rather than a new XOP operation. |
 | `app/src/main/java/com/morimil/app/data/repository/AgentInstanceLifecycleRepository.kt` | `INTEGRATED_PROTOCOL` | AGENT-001 through AGENT-006 integrated. |
@@ -124,17 +133,24 @@ ORCH-001 does not add an XOP event. Its profiles/devices are local rebuildable p
 
 RECALL does not own a cross-database XOP because its local schedule is a rebuildable projection derived from verified canonical memory. Its remaining startup-readiness wiring is not reclassified as a second authority.
 
+### REST cycle
+
+| ID | Entry point | Current state |
+| --- | --- | --- |
+| `REST-001` | `runLocalRestCycleIfDue`, `approvePlannedRestCycle` | Integrated canonical protocol: verified canonical planning input, deterministic owner `rest_cycle`, exact `rest_cycle.local_consolidation` receipt, atomic local migration/link/autobiography finalization and replay-safe recovery. |
+
+REST-001 has one canonical effect. The autobiographical snapshot is a rebuildable local projection bound to the exact canonical receipt. REST-002 repair proposal work is deliberately outside this execution path.
+
 ## Remaining operations
 
 | ID | Entry point | Disposition |
 | --- | --- | --- |
-| `REST-001` | `runLocalRestCycleIfDue`, `approvePlannedRestCycle` | `REQUIRES_PROTOCOL`; open. |
 | `REST-002` | repair-proposal path | `REQUIRES_PROTOCOL`; open. |
 | `MIG-001` | `planMigration`, `markMigrationApproved`, `markMigrationCompleted`, `markMigrationFailed`, `markMigrationRolledBack` | `SUPPORT_BOUNDARY`. |
 
 ## Integrated guarantees
 
-Within COG, ORCH-002..004, AGENT and BOOT bounded scopes, common XOP guarantees remain deterministic identities, hidden staging, exact canonical ensure/receipt, owner-scoped recovery, stale-block prevention, atomic owner finalization, typed failures and replay safety.
+Within COG, ORCH-002..004, AGENT, BOOT and REST-001 bounded scopes, common XOP guarantees remain deterministic identities, hidden staging, exact canonical ensure/receipt, owner-scoped recovery, stale-block prevention, atomic owner finalization, typed failures and replay safety.
 
 ORCH-001 separately guarantees:
 
@@ -156,6 +172,18 @@ RECALL-001 separately guarantees:
 8. no mutation on canonical NOT_READY and fail-closed behavior on blocked verification;
 9. legacy reconciliation cannot orphan a canonical-derived recall merely because its target is absent from legacy `memory_events`.
 
+REST-001 separately guarantees:
+
+1. committed Genesis Ultra identity plus verified `CanonicalConsumerReadPort.readRestCyclePlanningInput` are the only planning authority;
+2. legacy `genesis_core`, `local_instance_identity`, `memory_events`, `MemoryRepository` and audit-chain planning reads do not authorize the cycle;
+3. canonical NOT_READY produces no REST mutation and blocked verification fails closed;
+4. deterministic migration/operation/event identity and owner-scoped `rest_cycle` recovery;
+5. one exact canonical `rest_cycle.local_consolidation` event through `CanonicalRestCycleCommitPort`;
+6. migration completion, `canonical_memory_event` links and autobiography finalize atomically after the receipt;
+7. the autobiographical snapshot remains a rebuildable local projection;
+8. process-death recovery reuses the exact receipt and does not replay the canonical writer;
+9. REST-002 remains outside this path.
+
 No compatibility write to `memory_events`, `genesis_core`, or `local_instance_identity` is authorized.
 
 ## Implementation order after STOP S5
@@ -166,16 +194,20 @@ No compatibility write to `memory_events`, `genesis_core`, or `local_instance_id
 4. `BOOT-001` — integrated.
 5. `RECALL-001` — integrated canonical derived rebuild.
 6. `ORCH-001` — integrated canonical identity-gated seed convergence.
-7. `REST-001` and `REST-002`, then health and recall startup-readiness convergence.
-8. F3.3 only after every F3.2 owner has a recorded disposition and separate authorization.
+7. `REST-001` — integrated canonical planning and owner-scoped durable XOP.
+8. `REST-002`, health convergence and recall startup-readiness.
+9. F3.3 only after every F3.2 owner has a recorded disposition and separate authorization.
 
 ## Residual hardening
 
+- REST-specific mutation testing is not established; the successful global mutation pilot remains report-only;
 - RECALL-specific mutation testing is not established; the existing report-only PIT pilot remains Genesis-scoped;
 - BOOT-specific mutation testing is not established;
 - AGENT-specific mutation testing is not established;
 - ORCH-specific mutation testing remains unestablished;
 - BOOT still reports recall as `WAITING_FOR_CANONICAL_MEMORY_ADAPTER`; repository convergence does not equal startup-level recall readiness;
+- `REST_002=OPEN`;
+- `HEALTH_CONVERGENCE=OPEN`;
 - continuous physical ARM64 inference remains outside emulator CI.
 
 These findings are not evidence of operational birth.
