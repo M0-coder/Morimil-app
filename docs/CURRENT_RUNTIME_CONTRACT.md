@@ -1,8 +1,8 @@
 # Document status: CURRENT
 
-> **Content baseline SHA:** `e05ae7a08b1a88d2fbc0d4f2dff8ff06d282c908`.
+> **Content baseline SHA:** `32a183e7821de49a4958c52d75693c43ee99b2e1`.
 >
-> **Content baseline parent SHA:** `9585e94a690d4f00d591f81d14e56aedefda3341`.
+> **Content baseline parent SHA:** `0e06cd99c72db66a72d6f36345a2dae6d63c4c1f`.
 >
 > **Current main resolution:** external Git ref `refs/heads/main`.
 >
@@ -24,6 +24,10 @@
 >
 > **REST-002 audited source head:** `2ecca3f48d5e0ef27bd927da3986292daf7f7e2c`.
 >
+> **HEALTH-001 audited source head:** `f1697227241459f316bd562756e15ae3ce02c90d`.
+>
+> **REST-BOOT-001 audited source head:** `dd7a92a011fd4c453775df6ec307638b05313ec9`.
+>
 > **PR #176:** merged by squash for BOOT-001.
 >
 > **PR #177:** merged by squash for post-BOOT CURRENT reconciliation.
@@ -42,13 +46,19 @@
 >
 > **PR #184:** merged by squash for REST-002 canonical repair-proposal convergence.
 >
+> **PR #186:** merged by squash for post-REST-002 CURRENT reconciliation without normative erosion.
+>
+> **PR #187:** merged by squash for HEALTH-001 dependency-derived runtime health convergence.
+>
+> **PR #188:** merged by squash for REST boot-readiness canonical probing.
+>
 > A versioned CURRENT document records a known content baseline. The moving SHA of protected `main` is resolved externally and is not predicted by the commit that contains this document.
 
 # Current runtime contract
 
 ```text
-CONTENT_BASELINE_SHA=e05ae7a08b1a88d2fbc0d4f2dff8ff06d282c908
-CONTENT_BASELINE_PARENT_SHA=9585e94a690d4f00d591f81d14e56aedefda3341
+CONTENT_BASELINE_SHA=32a183e7821de49a4958c52d75693c43ee99b2e1
+CONTENT_BASELINE_PARENT_SHA=0e06cd99c72db66a72d6f36345a2dae6d63c4c1f
 CURRENT_MAIN_RESOLUTION=EXTERNAL_GIT_REF
 MERGE_SHA_EVIDENCE=EXTERNAL
 PR_172=MERGED_BY_SQUASH_HISTORICAL
@@ -64,6 +74,9 @@ PR_181=MERGED_BY_SQUASH_HISTORICAL
 PR_182=MERGED_BY_SQUASH_HISTORICAL
 PR_183=MERGED_BY_SQUASH_HISTORICAL
 PR_184=MERGED_BY_SQUASH_HISTORICAL
+PR_186=MERGED_BY_SQUASH_HISTORICAL
+PR_187=MERGED_BY_SQUASH_HISTORICAL
+PR_188=MERGED_BY_SQUASH_HISTORICAL
 ```
 
 ## Identity and Body boundary
@@ -141,7 +154,9 @@ BOOT-001 recovery is owner-scoped inside `GenesisUltraRuntimeBootstrapCoordinato
 
 RECALL-001 is not an XOP owner. Its schedule is a rebuildable local projection derived from verified canonical memory. Current startup does not automatically seed or declare recall ready; BOOT still reports `recallState=WAITING_FOR_CANONICAL_MEMORY_ADAPTER`. That remaining readiness wiring is open and must not be hidden by the repository-level RECALL integration.
 
-REST repository/protocol integration likewise does not equal startup readiness: BOOT still reports `restCycleState=WAITING_FOR_CANONICAL_MEMORY_ADAPTER`. `REST_BOOT_READINESS=OPEN` remains explicit.
+REST startup readiness is now integrated without creating a new authority or mutation path. `RestCycleRepository.isBootstrapReady(identity)` reads `CanonicalConsumerReadPort.readRestCyclePlanningInput`; canonical NOT_READY keeps REST waiting without mutation, retryable/blocked evidence fails closed, and ready input is validated through the existing `requireCanonicalPlanning` Instance/Body/epoch/digest/source boundary. `GenesisUltraRuntimeBootstrapCoordinator` maps only a successful verified probe to `restCycleState=READY`.
+
+HEALTH-001 is also integrated. `healthState` is no longer a static READY assignment: `GenesisUltraRuntimeHealthConvergence.evaluate(...)` derives health from legacy convergence plus REST and RECALL state, and `GenesisUltraRuntimeBootstrapReport` rejects inconsistent forged health. Since RECALL readiness remains open, current health remains `WAITING_FOR_DEPENDENCIES`; integrated health convergence does not mean global runtime READY.
 
 ## Integrated COG-001 through COG-004
 
@@ -223,20 +238,21 @@ REST-002 is deliberately proposal-only:
 - `repair_execution=not_implemented` is persisted in the local result;
 - no `approveRestRepair` or `executeRestRepair` production path is introduced by REST-002.
 
-Therefore `REST_002=INTEGRATED` means canonical proposal convergence only. It must not be interpreted as automatic repair execution, health convergence, or startup readiness.
+Therefore `REST_002=INTEGRATED` means canonical proposal convergence only. It must not be interpreted as automatic repair execution, global health readiness, or Operational Birth.
 
 ## Remaining F3/F1 work
 
 ```text
 RECALL_001=INTEGRATED
-REST_BOOT_READINESS=OPEN
+REST_BOOT_READINESS=INTEGRATED
 RECALL_BOOT_READINESS=OPEN
 ORCH_001=INTEGRATED
 REST_001=INTEGRATED
 REST_002=INTEGRATED
 REST_REPAIR_PROPOSAL_CONVERGED=true
 REST_REPAIR_EXECUTION_IMPLEMENTED=false
-HEALTH_CONVERGENCE=OPEN
+HEALTH_CONVERGENCE=INTEGRATED
+HEALTH_STATE=WAITING_FOR_DEPENDENCIES
 F3_3=OPEN
 ```
 
@@ -267,10 +283,10 @@ Auxiliary providers return unverified advisory output and cannot become Morimil'
 
 | Phase | Evidence-backed state |
 | --- | --- |
-| F1 | F1-A, BOOT, RECALL, ORCH-001, REST-001 and REST-002 proposal convergence are integrated; `#86` remains open for health, REST/RECALL startup readiness and final legacy convergence. |
+| F1 | F1-A, BOOT, RECALL repository convergence, ORCH-001, REST-001, REST-002 proposal convergence, HEALTH-001 and REST-BOOT-001 are integrated; `#86` remains open for RECALL startup readiness and final legacy convergence. |
 | F2 | Closed for canonical verified memory and bounded promotion/convergence. |
 | F3.1 | ProjectVault protected outbox/recovery integrated. |
-| F3.2 | Integrated for ProjectVault, COG-001..004, ORCH-001..004, AGENT-001..006, BOOT-001, RECALL-001 derived rebuild, REST-001 and REST-002 proposal convergence. Health/readiness convergence remains open. |
+| F3.2 | Integrated for ProjectVault, COG-001..004, ORCH-001..004, AGENT-001..006, BOOT-001, RECALL-001 derived rebuild, REST-001, REST-002 proposal convergence, dependency-derived Health and REST startup readiness. RECALL startup readiness remains open. |
 | F3.3 | Open. Irreversible legacy removal has not begun. |
 | F4 | Open: sovereign durable continuation. |
 | F5 | Open: signed export, dry-run restore, Body succession, writer transfer/revocation. |
@@ -283,6 +299,10 @@ REST-001 PR-associated validation completed all five governed workflows successf
 
 REST-002 PR-associated validation completed all five governed workflows successfully for source head `2ecca3f48d5e0ef27bd927da3986292daf7f7e2c`: Android CI #723, Genesis Body Preparation #703, Reference Checks #547, CodeQL #436, and SBOM #434. Its process-death recovery evidence demonstrated an already persisted proposal receipt recovering exactly once while the migration remains proposal-only and no repair executes.
 
+HEALTH-001 PR-associated validation completed all five governed workflows successfully for source head `f1697227241459f316bd562756e15ae3ce02c90d`: Android CI #732, Genesis Body Preparation #710, Reference Checks #556, CodeQL #445, and SBOM #443. The runtime tests prove Health waits when either REST or RECALL is not ready, converges only when all dependencies are ready, and rejects forged READY state.
+
+REST-BOOT-001 PR-associated validation completed all five governed workflows successfully for source head `dd7a92a011fd4c453775df6ec307638b05313ec9`: Android CI #738, Genesis Body Preparation #715, Reference Checks #562, CodeQL #451, and SBOM #449. JVM tests directly cover READY, NOT_READY, RETRYABLE and BLOCKED readiness dispositions; API30/API35 managed-device validation passed, while physical ARM64-only tests remain skipped in emulator CI.
+
 The global mutation pilot remained report-only. REST-specific mutation testing is not established and is not inferred from that pilot.
 
 Residual hardening remains visible:
@@ -290,8 +310,7 @@ Residual hardening remains visible:
 - REST-specific mutation testing is not established;
 - RECALL-specific mutation testing is not established;
 - BOOT still reports recall readiness as waiting and startup does not automatically seed recall;
-- REST startup readiness remains open while BOOT reports `restCycleState=WAITING_FOR_CANONICAL_MEMORY_ADAPTER`;
-- health convergence remains open;
+- Health currently remains `WAITING_FOR_DEPENDENCIES` because RECALL startup readiness is not yet proven;
 - REST repair execution remains intentionally not implemented by REST-002;
 - ORCH-specific mutation testing remains unestablished;
 - BOOT/AGENT-specific mutation testing remains unestablished;
