@@ -2,9 +2,9 @@
 
 # F3.2 — Cross-database operation inventory
 
-- Inventory version: `12`.
-- Content baseline SHA: `32a183e7821de49a4958c52d75693c43ee99b2e1`.
-- Content baseline parent SHA: `0e06cd99c72db66a72d6f36345a2dae6d63c4c1f`.
+- Inventory version: `13`.
+- Content baseline SHA: `77af62a545f72161c0ff47d74c0de6e1d1f4f251`.
+- Content baseline parent SHA: `32a183e7821de49a4958c52d75693c43ee99b2e1`.
 - Current protected `main`: resolved externally from `refs/heads/main`.
 - Merge SHA evidence: external GitHub and Morimil Control Tower evidence.
 - Historical COG audited source head: `7bdbda2aa4b7568695ba8e98be54d506d42c99d5`.
@@ -29,13 +29,14 @@
 - PR `#186`: merged by squash for post-REST-002 CURRENT reconciliation without normative erosion.
 - PR `#187`: merged by squash for dependency-derived bootstrap health instead of a static READY assignment.
 - PR `#188`: merged by squash for REST boot-readiness canonical probing.
-- Tracker: `#88` — open for F1 health legacy-consumer convergence, RECALL startup-readiness, final F1/F3.2 reaudit and later F3.3 work.
+- PR `#189`: merged by squash for post-REST-readiness/bootstrap-Health CURRENT reconciliation.
+- Tracker: `#88` — open for RECALL startup-readiness, final F1/F3.2 reaudit and later F3.3 work.
 - Protocol: `docs/adr/ADR-0002-cross-database-operation-protocol.md`.
 - Gate: `STOP_S5=CLOSED`.
 
 ```text
-CONTENT_BASELINE_SHA=32a183e7821de49a4958c52d75693c43ee99b2e1
-CONTENT_BASELINE_PARENT_SHA=0e06cd99c72db66a72d6f36345a2dae6d63c4c1f
+CONTENT_BASELINE_SHA=77af62a545f72161c0ff47d74c0de6e1d1f4f251
+CONTENT_BASELINE_PARENT_SHA=32a183e7821de49a4958c52d75693c43ee99b2e1
 CURRENT_MAIN_RESOLUTION=EXTERNAL_GIT_REF
 MERGE_SHA_EVIDENCE=EXTERNAL
 PR_172=MERGED_BY_SQUASH_HISTORICAL
@@ -54,12 +55,17 @@ PR_184=MERGED_BY_SQUASH_HISTORICAL
 PR_186=MERGED_BY_SQUASH_HISTORICAL
 PR_187=MERGED_BY_SQUASH_HISTORICAL
 PR_188=MERGED_BY_SQUASH_HISTORICAL
+PR_189=MERGED_BY_SQUASH_HISTORICAL
 REST_001=INTEGRATED
 REST_002=INTEGRATED
 REST_REPAIR_PROPOSAL_CONVERGED=true
 REST_REPAIR_EXECUTION_IMPLEMENTED=false
 REST_BOOT_READINESS=INTEGRATED
 BOOTSTRAP_HEALTH_DERIVATION=INTEGRATED
+HEALTH_LEGACY_CONSUMER_CONVERGENCE=INTEGRATED
+HEALTH_CAN_READ_CANONICAL_MEMORY=true
+HEALTH_CAN_WRITE_CANONICAL_MEMORY=false
+HEALTH_CAN_WRITE_LEGACY_MEMORY_EVENTS=false
 HEALTH_CONVERGENCE=OPEN
 HEALTH_CONVERGED=false
 HEALTH_STATE=WAITING_FOR_DEPENDENCIES
@@ -97,7 +103,7 @@ Neither the XOP journal nor an owner repository becomes a second identity or can
 | `app/src/main/java/com/morimil/app/data/repository/AgentInstanceLifecycleRepository.kt` | `INTEGRATED_PROTOCOL` | AGENT-001 through AGENT-006 integrated. |
 | `app/src/main/java/com/morimil/app/data/repository/MigrationRecordRepository.kt` | `SUPPORT_BOUNDARY` | Typed COG finalization support. |
 
-`LocalNervousSystemRepository` is not reclassified as an XOP owner by this inventory. Its legacy `MemoryDao` reads and `MemoryRepository.recordSystemMemoryEvent` alert write remain an F1 health consumer convergence boundary outside the common-journal owner set.
+`LocalNervousSystemRepository` is not reclassified as an XOP owner by this inventory. It now consumes `CanonicalConsumerReadPort.readHealthInput` read-only, derives operational Health, and returns non-persisted `LocalHealthTelemetry`; it has no canonical or legacy memory-write authority.
 
 ## Integrated operation inventory
 
@@ -175,7 +181,7 @@ REST-BOOT-001 reuses `CanonicalConsumerReadPort.readRestCyclePlanningInput` read
 | --- | --- | --- |
 | `MIG-001` | `planMigration`, `markMigrationApproved`, `markMigrationCompleted`, `markMigrationFailed`, `markMigrationRolledBack` | `SUPPORT_BOUNDARY`. |
 
-No remaining F3.2 REST operation is classified as `REQUIRES_PROTOCOL`. Remaining convergence work is the F1 legacy health consumer boundary in `LocalNervousSystemRepository`, RECALL startup readiness, a full F1/F3.2 reaudit and later F3.3 retirement under separate authorization.
+No remaining F3.2 REST operation is classified as `REQUIRES_PROTOCOL`. Remaining convergence work is RECALL startup readiness, a full F1/F3.2 reaudit and later F3.3 retirement under separate authorization. The Local Nervous System Health boundary is integrated as a non-owner, read-only canonical observer.
 
 ## Integrated guarantees
 
@@ -223,7 +229,7 @@ REST-002 separately guarantees:
 7. process-death recovery finalizes an already receipted proposal exactly once without executing repair;
 8. no compatibility write to `memory_events`, `genesis_core`, or `local_instance_identity`.
 
-No new compatibility write to `memory_events`, `genesis_core`, or `local_instance_identity` is authorized. The existing LocalNervousSystem legacy boundary is debt to converge, not an authorization pattern.
+No new compatibility write to `memory_events`, `genesis_core`, or `local_instance_identity` is authorized. Local Nervous System Health likewise has no compatibility or canonical memory writer.
 
 ## Implementation order after STOP S5
 
@@ -237,21 +243,22 @@ No new compatibility write to `memory_events`, `genesis_core`, or `local_instanc
 8. `REST-002` — integrated canonical proposal-only XOP.
 9. Bootstrap dependency-derived Health — integrated by PR #187.
 10. `REST-BOOT-001` — integrated canonical read-only startup readiness.
-11. F1 health legacy-consumer convergence for `LocalNervousSystemRepository`.
+11. F1 Health legacy-consumer convergence — integrated as canonical read-only observation with no memory writer.
 12. RECALL startup-readiness convergence.
 13. Full F1/F3.2 reaudit.
 14. F3.3 only after every F3.2/readiness dependency has a recorded disposition and separate authorization.
 
 ## Residual hardening
 
-- `LocalNervousSystemRepository.recordHealthCheckIfDegraded` still reads legacy health data through `MemoryDao` and can write via `MemoryRepository.recordSystemMemoryEvent`; `HEALTH_CONVERGENCE=OPEN`;
+- RECALL startup-readiness wiring remains open; RECALL repository convergence does not equal startup-level readiness;
+- bootstrap Health remains `WAITING_FOR_DEPENDENCIES` until RECALL startup readiness is proven;
+- Health-specific mutation testing is not established; the successful global mutation pilot remains report-only and Genesis-scoped;
+- `CanonicalHealthInput.recentVerifiedEventCount` is intentionally excluded from Health decisions until its metadata-only semantics are separately hardened;
 - REST-specific mutation testing is not established; the successful global mutation pilot remains report-only;
 - RECALL-specific mutation testing is not established; the existing report-only PIT pilot remains Genesis-scoped;
 - BOOT-specific mutation testing is not established;
 - AGENT-specific mutation testing is not established;
 - ORCH-specific mutation testing remains unestablished;
-- BOOT still reports RECALL as `WAITING_FOR_CANONICAL_MEMORY_ADAPTER`; RECALL repository convergence does not equal startup-level readiness;
-- bootstrap Health remains `WAITING_FOR_DEPENDENCIES` until RECALL startup readiness is proven;
 - REST repair execution is not implemented by REST-002;
 - continuous physical ARM64 inference remains outside emulator CI.
 
