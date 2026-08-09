@@ -71,7 +71,7 @@ Protected main includes MemoryOrganDatabase v9, `cross_database_operations`, det
 
 ProjectVault remains separate. PR #172 integrated ORCH-002..004 under ADR-0002, PR #174 integrated AGENT-001..006, PR #176 integrated BOOT-001, PR #178 integrated RECALL-001 as a canonical verified derived rebuild, PR #180 integrated ORCH-001 seed convergence, PR #182 integrated REST-001 canonical planning/durable execution, and PR #184 integrated REST-002 proposal-only canonical convergence without changing the COG mapping documented here.
 
-REST-001 participates in the broader common-journal architecture as owner `rest_cycle`; its exact writer is `CanonicalRestCycleCommitPort`. REST-002 extends the same closed owner registry with `rest_cycle.propose_repair` -> `memory.repair_proposed`. It persists only a repair proposal requiring approval; automatic repair execution remains unimplemented.
+REST-001 participates in the broader common-journal architecture as owner `rest_cycle`; its exact writer is `CanonicalRestCycleCommitPort`. REST-002 extends the same closed owner registry with `rest_cycle.propose_repair` -> `memory.repair_proposed`. It persists only a repair proposal requiring approval; automatic repair execution remains unimplemented. Repair execution is not implemented.
 
 Remaining F3.2/F1 work is health convergence and REST/recall startup-readiness wiring. F3.3 legacy removal remains open.
 
