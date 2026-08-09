@@ -8,10 +8,10 @@ import org.junit.Test
 
 class CrossDatabaseOperationInventoryContractTest {
     @Test
-    fun inventoryRecordsPostRestReadinessCurrentSemantics() {
+    fun inventoryRecordsPostHealthLegacyConvergenceCurrentSemantics() {
         val inventory = inventoryFile(repositoryRoot()).readText()
         assertTrue(inventory.startsWith("# Document status: CURRENT"))
-        assertTrue(inventory.contains("Inventory version: `12`"))
+        assertTrue(inventory.contains("Inventory version: `13`"))
         listOf(
             CONTENT_BASELINE_SHA,
             CONTENT_BASELINE_PARENT_SHA,
@@ -30,7 +30,8 @@ class CrossDatabaseOperationInventoryContractTest {
             "PR_184=MERGED_BY_SQUASH_HISTORICAL",
             "PR_186=MERGED_BY_SQUASH_HISTORICAL",
             "PR_187=MERGED_BY_SQUASH_HISTORICAL",
-            "PR_188=MERGED_BY_SQUASH_HISTORICAL"
+            "PR_188=MERGED_BY_SQUASH_HISTORICAL",
+            "PR_189=MERGED_BY_SQUASH_HISTORICAL"
         ).forEach { token -> assertTrue("Missing inventory token $token", inventory.contains(token)) }
 
         assertTrue(inventory.contains("RestCycleRepository.kt` | `INTEGRATED_PROTOCOL` | REST-001 local consolidation and REST-002 repair-proposal convergence"))
@@ -40,9 +41,12 @@ class CrossDatabaseOperationInventoryContractTest {
         assertTrue(inventory.contains("memory.repair_proposed"))
         assertTrue(inventory.contains("repair_execution=not_implemented"))
         assertTrue(inventory.contains("REST-BOOT-001 reuses `CanonicalConsumerReadPort.readRestCyclePlanningInput` read-only"))
+        assertTrue(inventory.contains("LocalNervousSystemRepository` is not reclassified as an XOP owner"))
+        assertTrue(inventory.contains("CanonicalConsumerReadPort.readHealthInput"))
         val remaining = inventory.substringAfter("## Remaining operations").substringBefore("## Integrated guarantees")
         assertFalse(remaining.contains("REST-001"))
         assertFalse(remaining.contains("REST-002"))
+        assertFalse(remaining.contains("legacy health consumer boundary"))
     }
 
     @Test
@@ -57,7 +61,7 @@ class CrossDatabaseOperationInventoryContractTest {
     }
 
     @Test
-    fun integratedRestReadinessAndRemainingHealthRecallWorkAreExplicit() {
+    fun integratedHealthLegacyConvergenceAndRemainingRecallWorkAreExplicit() {
         val root = repositoryRoot()
         val inventory = inventoryFile(root).readText()
         REQUIRED_ENTRY_POINTS.forEach { (path, entryPoints) ->
@@ -76,12 +80,16 @@ class CrossDatabaseOperationInventoryContractTest {
             "REST_BOOT_READINESS=INTEGRATED",
             "RECALL_BOOT_READINESS=OPEN",
             "BOOTSTRAP_HEALTH_DERIVATION=INTEGRATED",
+            "HEALTH_LEGACY_CONSUMER_CONVERGENCE=INTEGRATED",
+            "HEALTH_CAN_READ_CANONICAL_MEMORY=true",
+            "HEALTH_CAN_WRITE_CANONICAL_MEMORY=false",
+            "HEALTH_CAN_WRITE_LEGACY_MEMORY_EVENTS=false",
             "HEALTH_CONVERGENCE=OPEN",
             "HEALTH_CONVERGED=false",
             "HEALTH_STATE=WAITING_FOR_DEPENDENCIES",
             "F3.3"
         ).forEach { token -> assertTrue("Missing readiness/debt token $token", inventory.contains(token)) }
-        assertTrue(inventory.contains("LocalNervousSystemRepository.recordHealthCheckIfDegraded"))
+        assertFalse(inventory.contains("LocalNervousSystemRepository.recordHealthCheckIfDegraded"))
         assertFalse(inventory.contains("REST_BOOT_READINESS=OPEN"))
         assertFalse(inventory.contains("HEALTH_CONVERGENCE=INTEGRATED"))
     }
@@ -125,8 +133,8 @@ class CrossDatabaseOperationInventoryContractTest {
 
     private companion object {
         const val INVENTORY_PATH = "docs/F3_CROSS_DATABASE_OPERATION_INVENTORY.md"
-        const val CONTENT_BASELINE_SHA = "CONTENT_BASELINE_SHA=32a183e7821de49a4958c52d75693c43ee99b2e1"
-        const val CONTENT_BASELINE_PARENT_SHA = "CONTENT_BASELINE_PARENT_SHA=0e06cd99c72db66a72d6f36345a2dae6d63c4c1f"
+        const val CONTENT_BASELINE_SHA = "CONTENT_BASELINE_SHA=77af62a545f72161c0ff47d74c0de6e1d1f4f251"
+        const val CONTENT_BASELINE_PARENT_SHA = "CONTENT_BASELINE_PARENT_SHA=32a183e7821de49a4958c52d75693c43ee99b2e1"
         const val COG_AUDITED_SOURCE_HEAD = "7bdbda2aa4b7568695ba8e98be54d506d42c99d5"
         const val ORCH_AUDITED_SOURCE_HEAD = "0348dccb561e576d17c45e7f8b1e38717332772b"
         const val ORCH_001_AUDITED_SOURCE_HEAD = "fe188fdee8eae901434a255051b6fa4f852b929b"

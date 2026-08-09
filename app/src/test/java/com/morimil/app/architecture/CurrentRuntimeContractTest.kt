@@ -12,7 +12,7 @@ class CurrentRuntimeContractTest {
     }
 
     @Test
-    fun contractUsesPostBootstrapHealthRestReadinessTruthAndStableMainResolution() {
+    fun contractUsesPostHealthLegacyConvergenceTruthAndStableMainResolution() {
         listOf(
             CONTENT_BASELINE_SHA,
             CONTENT_BASELINE_PARENT_SHA,
@@ -32,7 +32,8 @@ class CurrentRuntimeContractTest {
             "PR_184=MERGED_BY_SQUASH_HISTORICAL",
             "PR_186=MERGED_BY_SQUASH_HISTORICAL",
             "PR_187=MERGED_BY_SQUASH_HISTORICAL",
-            "PR_188=MERGED_BY_SQUASH_HISTORICAL"
+            "PR_188=MERGED_BY_SQUASH_HISTORICAL",
+            "PR_189=MERGED_BY_SQUASH_HISTORICAL"
         ).forEach { token -> assertTrue("Missing runtime token $token", contract.contains(token)) }
 
         assertTrue(contract.contains("| `MorimilDatabase` | `15` |"))
@@ -87,7 +88,7 @@ class CurrentRuntimeContractTest {
     }
 
     @Test
-    fun phaseTableIntegratesRestReadinessButKeepsHealthConsumerAndRecallOpen() {
+    fun phaseTableIntegratesHealthLegacyConsumerButKeepsGlobalHealthAndRecallOpen() {
         listOf(
             "RECALL_001=INTEGRATED",
             "REST_BOOT_READINESS=INTEGRATED",
@@ -98,12 +99,18 @@ class CurrentRuntimeContractTest {
             "REST_REPAIR_PROPOSAL_CONVERGED=true",
             "REST_REPAIR_EXECUTION_IMPLEMENTED=false",
             "BOOTSTRAP_HEALTH_DERIVATION=INTEGRATED",
+            "HEALTH_LEGACY_CONSUMER_CONVERGENCE=INTEGRATED",
+            "HEALTH_CAN_READ_CANONICAL_MEMORY=true",
+            "HEALTH_CAN_WRITE_CANONICAL_MEMORY=false",
+            "HEALTH_CAN_WRITE_LEGACY_MEMORY_EVENTS=false",
             "HEALTH_CONVERGENCE=OPEN",
             "HEALTH_CONVERGED=false",
             "HEALTH_STATE=WAITING_FOR_DEPENDENCIES",
             "F3_3=OPEN"
         ).forEach { assertTrue("Missing phase token $it", contract.contains(it)) }
-        assertTrue(contract.contains("LocalNervousSystemRepository.recordHealthCheckIfDegraded"))
+        assertTrue(contract.contains("LocalNervousSystemRepository.observeHealth"))
+        assertTrue(contract.contains("CanonicalConsumerReadPort.readHealthInput"))
+        assertFalse(contract.contains("LocalNervousSystemRepository.recordHealthCheckIfDegraded"))
         assertFalse(contract.contains("REST_BOOT_READINESS=OPEN"))
         assertFalse(contract.contains("HEALTH_CONVERGENCE=INTEGRATED"))
         assertFalse(contract.contains("REST_001_002=OPEN"))
@@ -114,21 +121,32 @@ class CurrentRuntimeContractTest {
     }
 
     @Test
-    fun legacyHealthDebtAndSovereigntyRemainVisible() {
+    fun canonicalHealthBoundaryAndSovereigntyRemainVisible() {
         val health = productionFile("com/morimil/app/data/repository/LocalNervousSystemRepository.kt").readText()
         listOf(
+            "CanonicalConsumerReadPort",
+            "readHealthInput",
+            "observeHealth",
+            "CanonicalReadResult.Ready",
+            "CanonicalReadResult.Blocked"
+        ).forEach { token -> assertTrue("Missing canonical health boundary $token", health.contains(token)) }
+        listOf(
             "MemoryDao",
+            "MemoryRepository",
+            "MorimilDatabase",
+            "MemoryEventEntity",
             "countGenesisCore()",
             "countLocalIdentity()",
             "countMemoryEvents()",
             "loadMemoryContext(20)",
             "memoryRepository.recordSystemMemoryEvent("
-        ).forEach { token -> assertTrue("Missing legacy health boundary $token", health.contains(token)) }
+        ).forEach { token -> assertFalse("Legacy health boundary returned: $token", health.contains(token)) }
         listOf(
             "instanceId != bodyId",
             "ownership_conferred=false",
             "guardian_role=custodian_witness",
             "future F5 successor Body",
+            "Health-specific mutation testing is not established",
             "REST-specific mutation testing is not established",
             "RECALL-specific mutation testing is not established",
             "REST repair execution remains intentionally not implemented",
@@ -149,8 +167,8 @@ class CurrentRuntimeContractTest {
             ?: error("Repository file not found: $relativePath")
 
     private companion object {
-        const val CONTENT_BASELINE_SHA = "CONTENT_BASELINE_SHA=32a183e7821de49a4958c52d75693c43ee99b2e1"
-        const val CONTENT_BASELINE_PARENT_SHA = "CONTENT_BASELINE_PARENT_SHA=0e06cd99c72db66a72d6f36345a2dae6d63c4c1f"
+        const val CONTENT_BASELINE_SHA = "CONTENT_BASELINE_SHA=77af62a545f72161c0ff47d74c0de6e1d1f4f251"
+        const val CONTENT_BASELINE_PARENT_SHA = "CONTENT_BASELINE_PARENT_SHA=32a183e7821de49a4958c52d75693c43ee99b2e1"
         const val COG_AUDITED_SOURCE_HEAD = "7bdbda2aa4b7568695ba8e98be54d506d42c99d5"
         const val ORCH_AUDITED_SOURCE_HEAD = "0348dccb561e576d17c45e7f8b1e38717332772b"
         const val ORCH_001_AUDITED_SOURCE_HEAD = "fe188fdee8eae901434a255051b6fa4f852b929b"

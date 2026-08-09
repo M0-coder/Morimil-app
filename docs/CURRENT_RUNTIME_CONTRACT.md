@@ -1,8 +1,8 @@
 # Document status: CURRENT
 
-> **Content baseline SHA:** `32a183e7821de49a4958c52d75693c43ee99b2e1`.
+> **Content baseline SHA:** `77af62a545f72161c0ff47d74c0de6e1d1f4f251`.
 >
-> **Content baseline parent SHA:** `0e06cd99c72db66a72d6f36345a2dae6d63c4c1f`.
+> **Content baseline parent SHA:** `32a183e7821de49a4958c52d75693c43ee99b2e1`.
 >
 > **Current main resolution:** external Git ref `refs/heads/main`.
 >
@@ -52,13 +52,15 @@
 >
 > **PR #188:** merged by squash for REST boot-readiness canonical probing.
 >
+> **PR #189:** merged by squash for post-REST-readiness/bootstrap-Health CURRENT reconciliation.
+>
 > A versioned CURRENT document records a known content baseline. The moving SHA of protected `main` is resolved externally and is not predicted by the commit that contains this document.
 
 # Current runtime contract
 
 ```text
-CONTENT_BASELINE_SHA=32a183e7821de49a4958c52d75693c43ee99b2e1
-CONTENT_BASELINE_PARENT_SHA=0e06cd99c72db66a72d6f36345a2dae6d63c4c1f
+CONTENT_BASELINE_SHA=77af62a545f72161c0ff47d74c0de6e1d1f4f251
+CONTENT_BASELINE_PARENT_SHA=32a183e7821de49a4958c52d75693c43ee99b2e1
 CURRENT_MAIN_RESOLUTION=EXTERNAL_GIT_REF
 MERGE_SHA_EVIDENCE=EXTERNAL
 PR_172=MERGED_BY_SQUASH_HISTORICAL
@@ -77,6 +79,7 @@ PR_184=MERGED_BY_SQUASH_HISTORICAL
 PR_186=MERGED_BY_SQUASH_HISTORICAL
 PR_187=MERGED_BY_SQUASH_HISTORICAL
 PR_188=MERGED_BY_SQUASH_HISTORICAL
+PR_189=MERGED_BY_SQUASH_HISTORICAL
 ```
 
 ## Identity and Body boundary
@@ -158,7 +161,9 @@ REST startup readiness is integrated without creating a new authority or mutatio
 
 PR #187 removed the former tautological bootstrap `healthState=READY`. `GenesisUltraRuntimeHealthConvergence.evaluate(...)` now derives the bootstrap report's health state from legacy convergence plus REST and RECALL subsystem state, and `GenesisUltraRuntimeBootstrapReport` rejects inconsistent forged health. Since RECALL readiness remains open, current bootstrap health is `WAITING_FOR_DEPENDENCIES`.
 
-That bootstrap correction does **not** close all F1 health convergence. `LocalNervousSystemRepository.recordHealthCheckIfDegraded` still derives legacy health counts through `MemoryDao` (`genesis_core`, local identity, `memory_events`, living snapshot/context reads) and may persist alerts through `MemoryRepository.recordSystemMemoryEvent`. This legacy consumer/write boundary remains explicit work and prevents `HEALTH_CONVERGENCE` from being declared closed.
+The broader F1 Local Nervous System legacy boundary is now converged without creating a new writer. `LocalNervousSystemRepository.observeHealth` consumes only `CanonicalConsumerReadPort.readHealthInput`; it no longer receives `MemoryDao`, `MemoryRepository`, `MorimilDatabase`, `MemoryEventEntity`, or `MemoryOrganReconciliationReport` as Health authority. Its result is a derived `LocalNervousSystemObservation` containing a Health report and operational `LocalHealthTelemetry`. That telemetry explicitly declares `memory_authority=false`, `canonical_memory_write=false`, and `legacy_memory_event_write=false` and is not persisted by this boundary.
+
+Canonical NOT_READY/RETRYABLE evidence cannot produce a healthy Local Nervous System result and BLOCKED evidence is critical. Canonical Instance/Body/epoch/snapshot, birth root, integrity, bounded event-count and quarantine signals remain read-only evidence. `CanonicalHealthInput.recentVerifiedEventCount` is intentionally not consumed by Health until its metadata-only projection semantics are separately hardened.
 
 ## Integrated COG-001 through COG-004
 
@@ -254,6 +259,10 @@ REST_002=INTEGRATED
 REST_REPAIR_PROPOSAL_CONVERGED=true
 REST_REPAIR_EXECUTION_IMPLEMENTED=false
 BOOTSTRAP_HEALTH_DERIVATION=INTEGRATED
+HEALTH_LEGACY_CONSUMER_CONVERGENCE=INTEGRATED
+HEALTH_CAN_READ_CANONICAL_MEMORY=true
+HEALTH_CAN_WRITE_CANONICAL_MEMORY=false
+HEALTH_CAN_WRITE_LEGACY_MEMORY_EVENTS=false
 HEALTH_CONVERGENCE=OPEN
 HEALTH_CONVERGED=false
 HEALTH_STATE=WAITING_FOR_DEPENDENCIES
@@ -270,7 +279,7 @@ local_instance_identity
 memory_events
 ```
 
-The existing `LocalNervousSystemRepository` legacy read/write boundary is debt to retire or migrate, not permission to add new compatibility authority.
+Local Nervous System Health now uses the verified canonical read boundary and has no permission to write compatibility or canonical memory.
 
 ## Normal reasoning runtime
 
@@ -289,10 +298,10 @@ Auxiliary providers return unverified advisory output and cannot become Morimil'
 
 | Phase | Evidence-backed state |
 | --- | --- |
-| F1 | F1-A, BOOT, RECALL repository convergence, ORCH-001, REST-001, REST-002 proposal convergence, bootstrap Health derivation and REST-BOOT-001 are integrated; `#86` remains open for the legacy `LocalNervousSystemRepository` health boundary, RECALL startup readiness and final legacy convergence. |
+| F1 | F1-A, BOOT, RECALL repository convergence, ORCH-001, REST-001, REST-002 proposal convergence, bootstrap Health derivation, REST-BOOT-001 and Local Nervous System read-only Health convergence are integrated; `#86` remains open for RECALL startup readiness and final F1/F3.2 convergence/reaudit. |
 | F2 | Closed for canonical verified memory and bounded promotion/convergence. |
 | F3.1 | ProjectVault protected outbox/recovery integrated. |
-| F3.2 | Integrated for ProjectVault, COG-001..004, ORCH-001..004, AGENT-001..006, BOOT-001, RECALL-001 derived rebuild, REST-001, REST-002 proposal convergence and REST startup readiness. Bootstrap Health derivation is truthful, but F1 health convergence and RECALL startup readiness remain open. |
+| F3.2 | Integrated for ProjectVault, COG-001..004, ORCH-001..004, AGENT-001..006, BOOT-001, RECALL-001 derived rebuild, REST-001, REST-002 proposal convergence, REST startup readiness and Local Nervous System canonical Health observation. Global Health and RECALL startup readiness remain open because RECALL is still waiting. |
 | F3.3 | Open. Irreversible legacy removal has not begun. |
 | F4 | Open: sovereign durable continuation. |
 | F5 | Open: signed export, dry-run restore, Body succession, writer transfer/revocation. |
@@ -305,19 +314,20 @@ REST-001 PR-associated validation completed all five governed workflows successf
 
 REST-002 PR-associated validation completed all five governed workflows successfully for source head `2ecca3f48d5e0ef27bd927da3986292daf7f7e2c`: Android CI #723, Genesis Body Preparation #703, Reference Checks #547, CodeQL #436, and SBOM #434. Its process-death recovery evidence demonstrated an already persisted proposal receipt recovering exactly once while the migration remains proposal-only and no repair executes.
 
-PR #187 validation completed all five governed workflows successfully for source head `f1697227241459f316bd562756e15ae3ce02c90d`: Android CI #732, Genesis Body Preparation #710, Reference Checks #556, CodeQL #445, and SBOM #443. Those tests prove the bootstrap Health report waits when a dependency is not ready, converges only when its modeled dependencies are ready, and rejects forged READY state. They do not prove migration of `LocalNervousSystemRepository` away from legacy memory authority.
+PR #187 validation completed all five governed workflows successfully for source head `f1697227241459f316bd562756e15ae3ce02c90d`: Android CI #732, Genesis Body Preparation #710, Reference Checks #556, CodeQL #445, and SBOM #443. Those tests prove the bootstrap Health report waits when a dependency is not ready, converges only when its modeled dependencies are ready, and rejects forged READY state. They do not by themselves prove Local Nervous System convergence.
 
 REST-BOOT-001 PR-associated validation completed all five governed workflows successfully for source head `dd7a92a011fd4c453775df6ec307638b05313ec9`: Android CI #738, Genesis Body Preparation #715, Reference Checks #562, CodeQL #451, and SBOM #449. JVM tests directly cover READY, NOT_READY, RETRYABLE and BLOCKED readiness dispositions; API30/API35 managed-device validation passed, while physical ARM64-only tests remain skipped in emulator CI.
 
-The global mutation pilot remained report-only. REST-specific mutation testing is not established and is not inferred from that pilot.
+The global mutation pilot remained report-only. Health-specific, REST-specific and RECALL-specific mutation testing are not established and are not inferred from that pilot.
 
 Residual hardening remains visible:
 
-- `LocalNervousSystemRepository.recordHealthCheckIfDegraded` still reads legacy health data through `MemoryDao` and can write a legacy system memory event through `MemoryRepository`; F1 health convergence remains open;
+- RECALL startup readiness remains open and startup does not automatically seed recall;
+- bootstrap Health currently remains `WAITING_FOR_DEPENDENCIES` because RECALL startup readiness is not yet proven;
+- Health-specific mutation testing is not established;
+- `CanonicalHealthInput.recentVerifiedEventCount` is intentionally excluded from Health decisions until its current metadata-only semantics are separately hardened;
 - REST-specific mutation testing is not established;
 - RECALL-specific mutation testing is not established;
-- BOOT still reports recall readiness as waiting and startup does not automatically seed recall;
-- bootstrap Health currently remains `WAITING_FOR_DEPENDENCIES` because RECALL startup readiness is not yet proven;
 - REST repair execution remains intentionally not implemented by REST-002;
 - ORCH-specific mutation testing remains unestablished;
 - BOOT/AGENT-specific mutation testing remains unestablished;

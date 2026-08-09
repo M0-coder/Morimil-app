@@ -1,12 +1,14 @@
 package com.morimil.app.core.health
 
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class LocalNervousSystemHealthTest {
     @Test
-    fun healthyLocalMemoryReportsHealthy() {
+    fun verifiedCanonicalLivingMemoryReportsHealthy() {
         val report = LocalNervousSystemHealth.build(
             input = baseInput(),
             generatedAtMillis = 1000L
@@ -14,80 +16,137 @@ class LocalNervousSystemHealthTest {
 
         assertEquals(LocalHealthStatus.HEALTHY, report.status)
         assertEquals("low", report.riskLevel)
-        assertEquals("nervous_system.health_ok", report.eventType())
-        assertTrue(!report.hasAlert)
+        assertFalse(report.hasAlert)
+        assertTrue(report.signals.any { signal ->
+            signal.name == "canonical_memory_integrity" && signal.status == LocalHealthStatus.HEALTHY
+        })
     }
 
     @Test
-    fun brokenMemoryChainReportsCritical() {
+    fun blockedCanonicalEvidenceFailsClosedAsCritical() {
         val report = LocalNervousSystemHealth.build(
-            input = baseInput(memoryChainVerified = false),
+            input = baseInput(
+                livingMemory = blockedInput()
+            ),
             generatedAtMillis = 1000L
         )
 
         assertEquals(LocalHealthStatus.CRITICAL, report.status)
-        assertEquals("critical", report.riskLevel)
-        assertEquals("nervous_system.health_critical", report.eventType())
-        assertTrue(report.signals.any { signal -> signal.probableCause == "integrity_verification_failed" })
+        assertTrue(report.hasAlert)
+        assertTrue(report.signals.any { signal -> signal.probableCause == "canonical_evidence_blocked" })
     }
 
     @Test
-    fun missingSnapshotReportsDegraded() {
+    fun retryableCanonicalReadCannotReportHealthy() {
         val report = LocalNervousSystemHealth.build(
-            input = baseInput(livingSnapshotCount = 0),
+            input = baseInput(
+                livingMemory = LocalLivingMemoryHealthInput(
+                    readStatus = LivingMemoryReadStatus.RETRYABLE,
+                    failureCode = "SNAPSHOT_CHANGED_DURING_READ",
+                    diagnosticCode = "canonical_read_snapshot_changed_during_read"
+                )
+            ),
             generatedAtMillis = 1000L
         )
 
         assertEquals(LocalHealthStatus.DEGRADED, report.status)
-        assertEquals("medium", report.riskLevel)
-        assertEquals("nervous_system.health_degraded", report.eventType())
-        assertTrue(report.signals.any { signal -> signal.probableCause == "snapshot_missing" })
+        assertTrue(report.signals.any { signal -> signal.probableCause == "canonical_snapshot_retryable" })
     }
 
     @Test
-    fun slowChainScanReportsDegraded() {
+    fun quarantineEvidenceReportsDegraded() {
         val report = LocalNervousSystemHealth.build(
-            input = baseInput(chainScanLatencyMillis = 2_000L),
+            input = baseInput(
+                livingMemory = readyInput(postBirthEventCount = 4, quarantineEventCount = 1)
+            ),
             generatedAtMillis = 1000L
         )
 
         assertEquals(LocalHealthStatus.DEGRADED, report.status)
-        assertTrue(report.signals.any { signal -> signal.name == "memory_chain_scan_latency" && signal.probableCause == "latency_above_threshold" })
+        assertTrue(report.signals.any { signal -> signal.probableCause == "quarantine_events_present" })
+    }
+
+    @Test
+    fun inconsistentCanonicalCountsReportCritical() {
+        val report = LocalNervousSystemHealth.build(
+            input = baseInput(
+                livingMemory = readyInput(
+                    totalCanonicalEventCount = 2,
+                    postBirthEventCount = 4
+                )
+            ),
+            generatedAtMillis = 1000L
+        )
+
+        assertEquals(LocalHealthStatus.CRITICAL, report.status)
+        assertTrue(report.signals.any { signal -> signal.probableCause == "canonical_event_counts_inconsistent" })
+    }
+
+    @Test
+    fun operationalTelemetryExplicitlyHasNoMemoryAuthority() {
+        val report = LocalNervousSystemHealth.build(
+            input = baseInput(),
+            generatedAtMillis = 1000L
+        )
+
+        val telemetry = report.operationalTelemetry("unit_test")
+        val evidence = JSONObject(telemetry.evidenceJson)
+
+        assertEquals("nervous_system.health_ok", telemetry.type)
+        assertEquals("morimil.local_nervous_system.v2", evidence.getString("schema"))
+        assertEquals("operational_health", evidence.getString("class"))
+        assertFalse(evidence.getBoolean("memory_authority"))
+        assertFalse(evidence.getBoolean("canonical_memory_write"))
+        assertFalse(evidence.getBoolean("legacy_memory_event_write"))
+    }
+
+    @Test
+    fun slowCanonicalReadReportsDegraded() {
+        val report = LocalNervousSystemHealth.build(
+            input = baseInput(canonicalReadLatencyMillis = 2_000L),
+            generatedAtMillis = 1000L
+        )
+
+        assertEquals(LocalHealthStatus.DEGRADED, report.status)
+        assertTrue(report.signals.any { signal ->
+            signal.name == "canonical_memory_read_latency" && signal.probableCause == "latency_above_threshold"
+        })
     }
 
     private fun baseInput(
-        genesisCoreCount: Int = 1,
-        localIdentityCount: Int = 1,
-        memoryEventCount: Int = 4,
-        messageCount: Int = 2,
-        livingSnapshotCount: Int = 1,
-        recentContextCount: Int = 4,
-        memoryChainVerified: Boolean = true,
-        capsuleChainVerified: Boolean = true,
-        organReconciliationHasIssues: Boolean = false,
-        orphanedLinkCount: Int = 0,
-        orphanedRecallCount: Int = 0,
-        orphanedCapsuleCount: Int = 0,
-        migrationMissingRefCount: Int = 0,
-        chainScanLatencyMillis: Long = 100L,
-        healthCheckLatencyMillis: Long = 20L
+        livingMemory: LocalLivingMemoryHealthInput = readyInput(),
+        canonicalReadLatencyMillis: Long = 20L
     ): LocalNervousSystemInput {
         return LocalNervousSystemInput(
-            genesisCoreCount = genesisCoreCount,
-            localIdentityCount = localIdentityCount,
-            memoryEventCount = memoryEventCount,
-            messageCount = messageCount,
-            livingSnapshotCount = livingSnapshotCount,
-            recentContextCount = recentContextCount,
-            memoryChainVerified = memoryChainVerified,
-            capsuleChainVerified = capsuleChainVerified,
-            organReconciliationHasIssues = organReconciliationHasIssues,
-            orphanedLinkCount = orphanedLinkCount,
-            orphanedRecallCount = orphanedRecallCount,
-            orphanedCapsuleCount = orphanedCapsuleCount,
-            migrationMissingRefCount = migrationMissingRefCount,
-            chainScanLatencyMillis = chainScanLatencyMillis,
-            healthCheckLatencyMillis = healthCheckLatencyMillis
+            livingMemory = livingMemory,
+            canonicalReadLatencyMillis = canonicalReadLatencyMillis
+        )
+    }
+
+    private fun readyInput(
+        totalCanonicalEventCount: Int = 5,
+        postBirthEventCount: Int = 4,
+        quarantineEventCount: Int = 0
+    ): LocalLivingMemoryHealthInput {
+        return LocalLivingMemoryHealthInput(
+            readStatus = LivingMemoryReadStatus.READY,
+            instanceId = "instance-health-001",
+            writerBodyId = "body-health-001",
+            writerEpochId = "epoch-health-001",
+            snapshotDigest = "sha256:${"a".repeat(64)}",
+            birthRootPresent = true,
+            canonicalMemoryVerified = true,
+            totalCanonicalEventCount = totalCanonicalEventCount,
+            postBirthEventCount = postBirthEventCount,
+            quarantineEventCount = quarantineEventCount
+        )
+    }
+
+    private fun blockedInput(): LocalLivingMemoryHealthInput {
+        return LocalLivingMemoryHealthInput(
+            readStatus = LivingMemoryReadStatus.BLOCKED,
+            failureCode = "CHAIN_CORRUPT",
+            diagnosticCode = "canonical_read_previous_hash_mismatch"
         )
     }
 }

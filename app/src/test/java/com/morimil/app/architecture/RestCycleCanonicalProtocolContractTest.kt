@@ -92,7 +92,7 @@ class RestCycleCanonicalProtocolContractTest {
     }
 
     @Test
-    fun currentDocsRecordIntegratedRestReadinessButKeepHealthConsumerAndRecallOpen() {
+    fun currentDocsRecordHealthLegacyConvergenceWhileGlobalHealthAndRecallStayOpen() {
         val f1 = repositoryFile("docs/F1_CANONICAL_CONSUMER_CONVERGENCE.md").readText()
         val inventory = repositoryFile("docs/F3_CROSS_DATABASE_OPERATION_INVENTORY.md").readText()
         assertTrue(f1.contains("F1_REST_001=INTEGRATED_IN_MAIN"))
@@ -102,16 +102,22 @@ class RestCycleCanonicalProtocolContractTest {
         assertTrue(f1.contains("REST_BOOT_READINESS=INTEGRATED"))
         assertTrue(f1.contains("RECALL_BOOT_READINESS=OPEN"))
         assertTrue(f1.contains("BOOTSTRAP_HEALTH_DERIVATION=INTEGRATED"))
+        assertTrue(f1.contains("HEALTH_LEGACY_CONSUMER_CONVERGENCE=INTEGRATED"))
+        assertTrue(f1.contains("HEALTH_CAN_READ_CANONICAL_MEMORY=true"))
+        assertTrue(f1.contains("HEALTH_CAN_WRITE_CANONICAL_MEMORY=false"))
+        assertTrue(f1.contains("HEALTH_CAN_WRITE_LEGACY_MEMORY_EVENTS=false"))
         assertTrue(f1.contains("HEALTH_CONVERGENCE=OPEN"))
         assertTrue(f1.contains("HEALTH_CONVERGED=false"))
         assertTrue(f1.contains("HEALTH_STATE=WAITING_FOR_DEPENDENCIES"))
-        assertTrue(f1.contains("LocalNervousSystemRepository.recordHealthCheckIfDegraded"))
+        assertTrue(f1.contains("CanonicalConsumerReadPort.readHealthInput"))
+        assertFalse(f1.contains("LocalNervousSystemRepository.recordHealthCheckIfDegraded"))
         assertFalse(f1.contains("REST_BOOT_READINESS=OPEN"))
         assertFalse(f1.contains("HEALTH_CONVERGENCE=INTEGRATED"))
         assertFalse(f1.contains("REST_002=OPEN"))
         val remaining = inventory.substringAfter("## Remaining operations").substringBefore("## Integrated guarantees")
         assertFalse(remaining.contains("REST-001"))
         assertFalse(remaining.contains("REST-002"))
+        assertTrue(remaining.contains("RECALL startup readiness"))
     }
 
     private fun production(relative: String): String =

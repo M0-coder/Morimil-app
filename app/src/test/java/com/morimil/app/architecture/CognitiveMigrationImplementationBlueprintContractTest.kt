@@ -11,7 +11,7 @@ class CognitiveMigrationImplementationBlueprintContractTest {
     }
 
     @Test
-    fun blueprintIsCurrentAndRecordsPostBootstrapHealthRestReadinessTruth() {
+    fun blueprintIsCurrentAndRecordsHealthLegacyConvergenceTruth() {
         assertTrue(blueprint.startsWith("# Document status: CURRENT"))
         assertTrue(blueprint.contains("implemented and audited design", true))
         listOf(
@@ -33,6 +33,7 @@ class CognitiveMigrationImplementationBlueprintContractTest {
             "PR_186=MERGED_BY_SQUASH_HISTORICAL",
             "PR_187=MERGED_BY_SQUASH_HISTORICAL",
             "PR_188=MERGED_BY_SQUASH_HISTORICAL",
+            "PR_189=MERGED_BY_SQUASH_HISTORICAL",
             "COG_001_004=INTEGRATED_IN_MAIN",
             "ORCH_001=INTEGRATED_IN_MAIN",
             "ORCH_002_004=INTEGRATED_IN_MAIN",
@@ -46,10 +47,15 @@ class CognitiveMigrationImplementationBlueprintContractTest {
             "REST_BOOT_READINESS=INTEGRATED",
             "RECALL_BOOT_READINESS=OPEN",
             "BOOTSTRAP_HEALTH_DERIVATION=INTEGRATED",
+            "HEALTH_LEGACY_CONSUMER_CONVERGENCE=INTEGRATED",
+            "HEALTH_CAN_READ_CANONICAL_MEMORY=true",
+            "HEALTH_CAN_WRITE_CANONICAL_MEMORY=false",
+            "HEALTH_CAN_WRITE_LEGACY_MEMORY_EVENTS=false",
             "HEALTH_CONVERGENCE=OPEN",
             "HEALTH_CONVERGED=false",
             "HEALTH_STATE=WAITING_FOR_DEPENDENCIES"
         ).forEach { token -> assertTrue("Missing blueprint token $token", blueprint.contains(token)) }
+        assertFalse(blueprint.contains("LocalNervousSystemRepository.recordHealthCheckIfDegraded"))
         assertFalse(blueprint.contains("REST_BOOT_READINESS=OPEN"))
         assertFalse(blueprint.contains("HEALTH_CONVERGENCE=INTEGRATED"))
         assertFalse(blueprint.contains("REST_002=OPEN"))
@@ -69,8 +75,9 @@ class CognitiveMigrationImplementationBlueprintContractTest {
         assertTrue(blueprint.contains("PR #187 integrated dependency-derived bootstrap Health"))
         assertTrue(blueprint.contains("PR #188 integrated REST startup readiness"))
         listOf(
-            "LocalNervousSystemRepository.recordHealthCheckIfDegraded",
-            "F1 health convergence itself remains open",
+            "F1 Local Nervous System legacy-consumer convergence is integrated",
+            "LocalNervousSystemRepository.observeHealth",
+            "CanonicalConsumerReadPort.readHealthInput",
             "RECALL startup-readiness convergence",
             "full F1/F3.2 reaudit",
             "F3.3 legacy removal remains open",
@@ -119,7 +126,8 @@ class CognitiveMigrationImplementationBlueprintContractTest {
             "Room-backed multi-coordinator concurrency",
             "rollback snapshot",
             "UPDATE-trigger replacement",
-            "REST-specific mutation testing is not established"
+            "REST-specific and Health-specific mutation testing are not established",
+            "CanonicalHealthInput.recentVerifiedEventCount"
         ).forEach { token -> assertTrue("Missing blueprint token $token", blueprint.contains(token, true)) }
     }
 
@@ -138,8 +146,8 @@ class CognitiveMigrationImplementationBlueprintContractTest {
             ?: error("Repository file not found: $relativePath")
 
     private companion object {
-        const val CONTENT_BASELINE_SHA = "CONTENT_BASELINE_SHA=32a183e7821de49a4958c52d75693c43ee99b2e1"
-        const val CONTENT_BASELINE_PARENT_SHA = "CONTENT_BASELINE_PARENT_SHA=0e06cd99c72db66a72d6f36345a2dae6d63c4c1f"
+        const val CONTENT_BASELINE_SHA = "CONTENT_BASELINE_SHA=77af62a545f72161c0ff47d74c0de6e1d1f4f251"
+        const val CONTENT_BASELINE_PARENT_SHA = "CONTENT_BASELINE_PARENT_SHA=32a183e7821de49a4958c52d75693c43ee99b2e1"
         const val COG_AUDITED_SOURCE_HEAD = "7bdbda2aa4b7568695ba8e98be54d506d42c99d5"
         const val ORCH_AUDITED_SOURCE_HEAD = "0348dccb561e576d17c45e7f8b1e38717332772b"
         const val ORCH_001_AUDITED_SOURCE_HEAD = "fe188fdee8eae901434a255051b6fa4f852b929b"

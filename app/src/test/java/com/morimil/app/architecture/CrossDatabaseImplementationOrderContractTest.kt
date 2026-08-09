@@ -7,7 +7,7 @@ import org.junit.Test
 
 class CrossDatabaseImplementationOrderContractTest {
     @Test
-    fun implementationOrderRecordsRestReadinessBeforeRemainingHealthAndRecallWork() {
+    fun implementationOrderRecordsHealthLegacyConvergenceBeforeRemainingRecallWork() {
         val inventory = repositoryFile("docs/F3_CROSS_DATABASE_OPERATION_INVENTORY.md").readText()
         val section = inventory.substringAfter("## Implementation order after STOP S5")
 
@@ -21,7 +21,7 @@ class CrossDatabaseImplementationOrderContractTest {
         val rest002 = section.indexOf("`REST-002` — integrated canonical proposal-only XOP")
         val bootstrapHealth = section.indexOf("Bootstrap dependency-derived Health — integrated by PR #187")
         val restReadiness = section.indexOf("`REST-BOOT-001` — integrated canonical read-only startup readiness")
-        val healthLegacy = section.indexOf("F1 health legacy-consumer convergence for `LocalNervousSystemRepository`")
+        val healthLegacy = section.indexOf("F1 Health legacy-consumer convergence — integrated as canonical read-only observation with no memory writer")
         val recallReadiness = section.indexOf("RECALL startup-readiness convergence")
         val reaudit = section.indexOf("Full F1/F3.2 reaudit")
         val f33 = section.indexOf("F3.3 only after every F3.2/readiness dependency")
@@ -58,6 +58,7 @@ class CrossDatabaseImplementationOrderContractTest {
 
         assertFalse(section.contains("`REST-001` and `REST-002`"))
         assertFalse(section.contains("`REST-001` — next bounded convergence work"))
+        assertFalse(section.contains("F1 health legacy-consumer convergence for `LocalNervousSystemRepository`"))
         assertFalse(section.contains("Health convergence and REST/RECALL startup-readiness"))
     }
 
@@ -74,6 +75,10 @@ class CrossDatabaseImplementationOrderContractTest {
         assertTrue(inventory.contains("REST_BOOT_READINESS=INTEGRATED"))
         assertTrue(inventory.contains("RECALL_BOOT_READINESS=OPEN"))
         assertTrue(inventory.contains("BOOTSTRAP_HEALTH_DERIVATION=INTEGRATED"))
+        assertTrue(inventory.contains("HEALTH_LEGACY_CONSUMER_CONVERGENCE=INTEGRATED"))
+        assertTrue(inventory.contains("HEALTH_CAN_READ_CANONICAL_MEMORY=true"))
+        assertTrue(inventory.contains("HEALTH_CAN_WRITE_CANONICAL_MEMORY=false"))
+        assertTrue(inventory.contains("HEALTH_CAN_WRITE_LEGACY_MEMORY_EVENTS=false"))
         assertTrue(inventory.contains("HEALTH_CONVERGENCE=OPEN"))
         assertTrue(inventory.contains("HEALTH_CONVERGED=false"))
         assertTrue(inventory.contains("HEALTH_STATE=WAITING_FOR_DEPENDENCIES"))
