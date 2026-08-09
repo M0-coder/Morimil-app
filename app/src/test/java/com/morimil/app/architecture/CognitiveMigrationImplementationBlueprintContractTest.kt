@@ -11,7 +11,7 @@ class CognitiveMigrationImplementationBlueprintContractTest {
     }
 
     @Test
-    fun blueprintIsCurrentAndRecordsPostOrchTruth() {
+    fun blueprintIsCurrentAndRecordsPostRest001Truth() {
         assertTrue(blueprint.startsWith("# Document status: CURRENT"))
         assertTrue(blueprint.contains("implemented and audited design", true))
         listOf(
@@ -25,15 +25,17 @@ class CognitiveMigrationImplementationBlueprintContractTest {
             AGENT_AUDITED_SOURCE_HEAD,
             BOOT_AUDITED_SOURCE_HEAD,
             RECALL_AUDITED_SOURCE_HEAD,
-            "PR_178=MERGED_BY_SQUASH_HISTORICAL",
-            "PR_179=MERGED_BY_SQUASH_HISTORICAL",
-            "PR_180=MERGED_BY_SQUASH_HISTORICAL",
+            REST_001_AUDITED_SOURCE_HEAD,
+            "PR_181=MERGED_BY_SQUASH_HISTORICAL",
+            "PR_182=MERGED_BY_SQUASH_HISTORICAL",
             "COG_001_004=INTEGRATED_IN_MAIN",
             "ORCH_001=INTEGRATED_IN_MAIN",
             "ORCH_002_004=INTEGRATED_IN_MAIN",
             "AGENT_001_006=INTEGRATED_IN_MAIN",
             "BOOT_001=INTEGRATED_IN_MAIN",
             "RECALL_001=INTEGRATED_IN_MAIN",
+            "REST_001=INTEGRATED_IN_MAIN",
+            "REST_002=OPEN",
             "RECALL_BOOT_READINESS=OPEN"
         ).forEach { token -> assertTrue("Missing blueprint token $token", blueprint.contains(token)) }
     }
@@ -45,15 +47,15 @@ class CognitiveMigrationImplementationBlueprintContractTest {
         val specializedBoundary = blueprint.indexOf("-> CognitiveMigrationCanonicalReadPort", commonBoundary)
         assertTrue(identityAuthority >= 0 && commonBoundary > identityAuthority && specializedBoundary > commonBoundary)
         assertTrue(blueprint.contains("ProjectVault remains separate"))
-        assertTrue(blueprint.contains("PR #176 integrated BOOT-001"))
         assertTrue(blueprint.contains("PR #178 integrated RECALL-001"))
         assertTrue(blueprint.contains("PR #180 integrated ORCH-001 seed convergence"))
-        listOf("REST-001/002", "health convergence", "recall startup-readiness", "F3.3 legacy removal remains open").forEach {
+        assertTrue(blueprint.contains("PR #182 integrated REST-001 canonical planning and durable execution"))
+        listOf("REST-002", "health convergence", "recall startup-readiness", "F3.3 legacy removal remains open").forEach {
             assertTrue("Missing remaining scope $it", blueprint.contains(it, true))
         }
+        assertFalse(blueprint.contains("REST_001_002=OPEN"))
+        assertFalse(blueprint.contains("REST_001=OPEN"))
         assertFalse(blueprint.contains("RECALL_001=OPEN"))
-        assertFalse(blueprint.contains("BOOT_001=OPEN"))
-        assertFalse(blueprint.contains("ORCH_001=OPEN"))
     }
 
     @Test
@@ -86,12 +88,12 @@ class CognitiveMigrationImplementationBlueprintContractTest {
             "reloads after lost CAS",
             "rejects stale blocking",
             "COG recovery cannot consume ORCH or AGENT rows",
-            "BOOT likewise remain owner-scoped",
+            "REST recovery is owner-scoped",
             "Room-backed multi-coordinator concurrency",
             "rollback snapshot",
-            "UPDATE-trigger replacement"
+            "UPDATE-trigger replacement",
+            "REST-specific mutation testing is not established"
         ).forEach { token -> assertTrue("Missing blueprint token $token", blueprint.contains(token, true)) }
-        assertFalse(blueprint.contains("BOOT, RECALL, ORCH-001, REST", true))
     }
 
     private fun assertInOrder(text: String, markers: List<String>) {
@@ -109,13 +111,14 @@ class CognitiveMigrationImplementationBlueprintContractTest {
             ?: error("Repository file not found: $relativePath")
 
     private companion object {
-        const val CONTENT_BASELINE_SHA = "CONTENT_BASELINE_SHA=6e0444b698bdc5c557ec3ea83f48d7980da1a36b"
-        const val CONTENT_BASELINE_PARENT_SHA = "CONTENT_BASELINE_PARENT_SHA=bdbb5b2a040b728508948cd3cfbd8807b40a12f6"
+        const val CONTENT_BASELINE_SHA = "CONTENT_BASELINE_SHA=2d16c5c3197d492d5daed3707e97a68caa0011a6"
+        const val CONTENT_BASELINE_PARENT_SHA = "CONTENT_BASELINE_PARENT_SHA=d7e679b9f8e0b34d44a5e702c02c436f21e4eaee"
         const val COG_AUDITED_SOURCE_HEAD = "7bdbda2aa4b7568695ba8e98be54d506d42c99d5"
         const val ORCH_AUDITED_SOURCE_HEAD = "0348dccb561e576d17c45e7f8b1e38717332772b"
         const val ORCH_001_AUDITED_SOURCE_HEAD = "fe188fdee8eae901434a255051b6fa4f852b929b"
         const val AGENT_AUDITED_SOURCE_HEAD = "74e072b911db692041d3716af9d0511b83ad70b7"
         const val BOOT_AUDITED_SOURCE_HEAD = "c7710635fa172108cce87b3f7a76d6e037095864"
         const val RECALL_AUDITED_SOURCE_HEAD = "fae8a0df3c29775317986877bce2b8eda8593d27"
+        const val REST_001_AUDITED_SOURCE_HEAD = "3661450325237fcadb86098ec16ee45cd039bc0b"
     }
 }
