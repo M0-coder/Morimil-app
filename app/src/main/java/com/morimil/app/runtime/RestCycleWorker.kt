@@ -83,7 +83,7 @@ object RestCycleScheduler {
             repeatInterval = REPEAT_INTERVAL_HOURS,
             repeatIntervalTimeUnit = TimeUnit.HOURS,
             flexTimeInterval = FLEX_INTERVAL_HOURS,
-            flexTimeIntervalTimeUnit = TimeUnit.HOURS
+            flexTimeIntervalUnit = TimeUnit.HOURS
         )
             .setInitialDelay(INITIAL_DELAY_MINUTES, TimeUnit.MINUTES)
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, BACKOFF_MINUTES, TimeUnit.MINUTES)
