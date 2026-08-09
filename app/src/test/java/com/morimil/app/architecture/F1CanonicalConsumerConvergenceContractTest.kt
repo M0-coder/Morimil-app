@@ -7,10 +7,10 @@ import org.junit.Test
 
 class F1CanonicalConsumerConvergenceContractTest {
     @Test
-    fun inventoryRecordsRest002ProposalIntegrationWithoutClosingIssue86() {
+    fun inventoryRecordsHealthAndRestReadinessWithoutClosingIssue86() {
         val inventory = inventoryFile().readText()
         assertTrue(inventory.startsWith("# Document status: CURRENT"))
-        assertTrue(inventory.contains("Inventory version: `11`"))
+        assertTrue(inventory.contains("Inventory version: `12`"))
         listOf(
             CONTENT_BASELINE_SHA,
             CONTENT_BASELINE_PARENT_SHA,
@@ -24,10 +24,12 @@ class F1CanonicalConsumerConvergenceContractTest {
             RECALL_AUDITED_SOURCE_HEAD,
             REST_001_AUDITED_SOURCE_HEAD,
             REST_002_AUDITED_SOURCE_HEAD,
-            "PR_181=MERGED_BY_SQUASH_HISTORICAL",
-            "PR_182=MERGED_BY_SQUASH_HISTORICAL",
-            "PR_183=MERGED_BY_SQUASH_HISTORICAL",
+            HEALTH_001_AUDITED_SOURCE_HEAD,
+            REST_BOOT_001_AUDITED_SOURCE_HEAD,
             "PR_184=MERGED_BY_SQUASH_HISTORICAL",
+            "PR_186=MERGED_BY_SQUASH_HISTORICAL",
+            "PR_187=MERGED_BY_SQUASH_HISTORICAL",
+            "PR_188=MERGED_BY_SQUASH_HISTORICAL",
             "F1_RECALL_001=INTEGRATED_IN_MAIN",
             "F1_ORCH_001=INTEGRATED_IN_MAIN",
             "F1_REST_001=INTEGRATED_IN_MAIN",
@@ -38,11 +40,16 @@ class F1CanonicalConsumerConvergenceContractTest {
             "REST_EXECUTION_CONVERGED=true",
             "REST_REPAIR_PROPOSAL_CONVERGED=true",
             "REST_REPAIR_EXECUTION_IMPLEMENTED=false",
-            "REST_BOOT_READINESS=OPEN",
+            "REST_BOOT_READINESS=INTEGRATED",
             "RECALL_BOOT_READINESS=OPEN",
+            "HEALTH_CONVERGENCE=INTEGRATED",
+            "HEALTH_CONVERGED=false",
+            "HEALTH_STATE=WAITING_FOR_DEPENDENCIES",
             "ISSUE_86=OPEN"
         ).forEach { token -> assertTrue("Missing F1 token $token", inventory.contains(token)) }
         assertTrue(inventory.contains("This document does not close `#86`"))
+        assertFalse(inventory.contains("REST_BOOT_READINESS=OPEN"))
+        assertFalse(inventory.contains("HEALTH_CONVERGENCE=OPEN"))
         assertFalse(inventory.contains("F1_RECALL_001=OPEN"))
         assertFalse(inventory.contains("F1_ORCH_001=OPEN"))
         assertFalse(inventory.contains("F1_REST_001=OPEN"))
@@ -63,6 +70,7 @@ class F1CanonicalConsumerConvergenceContractTest {
         assertTrue(rest.contains("readRestCyclePlanningInput"))
         assertTrue(rest.contains("RestCycleProtocolTypes.OWNER_TYPE"))
         assertTrue(rest.contains("planRestRepairProposalIfNeeded"))
+        assertTrue(rest.contains("isBootstrapReady"))
         listOf(
             "loadGenesisCore(",
             "loadLocalIdentity(",
@@ -74,20 +82,25 @@ class F1CanonicalConsumerConvergenceContractTest {
     }
 
     @Test
-    fun restProposalIsIntegratedWhileHealthAndStartupReadinessRemainOpen() {
+    fun healthAndRestReadinessAreIntegratedWhileRecallReadinessRemainsOpen() {
         val inventory = inventoryFile().readText()
         listOf(
             "LocalNervousSystemRepository",
-            "REST_BOOT_READINESS=OPEN",
+            "HEALTH-001 is integrated",
+            "REST-BOOT-001 is integrated",
+            "REST_BOOT_READINESS=INTEGRATED",
             "RECALL_BOOT_READINESS=OPEN",
             "REST_REPAIR_PROPOSAL_CONVERGED=true",
             "REST_REPAIR_EXECUTION_IMPLEMENTED=false",
-            "HEALTH_CONVERGED=false"
+            "HEALTH_CONVERGENCE=INTEGRATED",
+            "HEALTH_CONVERGED=false",
+            "HEALTH_STATE=WAITING_FOR_DEPENDENCIES"
         ).forEach { token -> assertTrue("Missing remaining convergence token $token", inventory.contains(token)) }
         assertTrue(inventory.contains("REST_PLANNING_CONVERGED=true"))
         assertTrue(inventory.contains("REST_EXECUTION_CONVERGED=true"))
         assertTrue(inventory.contains("BOOT still reports `recallState=WAITING_FOR_CANONICAL_MEMORY_ADAPTER`"))
-        assertTrue(inventory.contains("`restCycleState=WAITING_FOR_CANONICAL_MEMORY_ADAPTER`"))
+        assertTrue(inventory.contains("RestCycleRepository.isBootstrapReady(identity)"))
+        assertFalse(inventory.contains("`restCycleState=WAITING_FOR_CANONICAL_MEMORY_ADAPTER`"))
     }
 
     @Test
@@ -110,8 +123,8 @@ class F1CanonicalConsumerConvergenceContractTest {
             ?: error("Repository file not found: $relativePath")
 
     private companion object {
-        const val CONTENT_BASELINE_SHA = "CONTENT_BASELINE_SHA=e05ae7a08b1a88d2fbc0d4f2dff8ff06d282c908"
-        const val CONTENT_BASELINE_PARENT_SHA = "CONTENT_BASELINE_PARENT_SHA=9585e94a690d4f00d591f81d14e56aedefda3341"
+        const val CONTENT_BASELINE_SHA = "CONTENT_BASELINE_SHA=32a183e7821de49a4958c52d75693c43ee99b2e1"
+        const val CONTENT_BASELINE_PARENT_SHA = "CONTENT_BASELINE_PARENT_SHA=0e06cd99c72db66a72d6f36345a2dae6d63c4c1f"
         const val COG_AUDITED_SOURCE_HEAD = "7bdbda2aa4b7568695ba8e98be54d506d42c99d5"
         const val ORCH_AUDITED_SOURCE_HEAD = "0348dccb561e576d17c45e7f8b1e38717332772b"
         const val ORCH_001_AUDITED_SOURCE_HEAD = "fe188fdee8eae901434a255051b6fa4f852b929b"
@@ -120,5 +133,7 @@ class F1CanonicalConsumerConvergenceContractTest {
         const val RECALL_AUDITED_SOURCE_HEAD = "fae8a0df3c29775317986877bce2b8eda8593d27"
         const val REST_001_AUDITED_SOURCE_HEAD = "3661450325237fcadb86098ec16ee45cd039bc0b"
         const val REST_002_AUDITED_SOURCE_HEAD = "2ecca3f48d5e0ef27bd927da3986292daf7f7e2c"
+        const val HEALTH_001_AUDITED_SOURCE_HEAD = "f1697227241459f316bd562756e15ae3ce02c90d"
+        const val REST_BOOT_001_AUDITED_SOURCE_HEAD = "dd7a92a011fd4c453775df6ec307638b05313ec9"
     }
 }
