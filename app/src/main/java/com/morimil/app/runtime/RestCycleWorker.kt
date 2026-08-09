@@ -21,6 +21,7 @@ class RestCycleWorker(
         val runRestCycle = MorimilAppContainer.from(applicationContext).runRestCycleUseCase
 
         return runCatching {
+            runRestCycle.planRepairProposalIfNeeded()
             val didConsolidate = runRestCycle()
             RestCycleNotifier.notifyRestCycleChecked(
                 context = applicationContext,
@@ -82,7 +83,7 @@ object RestCycleScheduler {
             repeatInterval = REPEAT_INTERVAL_HOURS,
             repeatIntervalTimeUnit = TimeUnit.HOURS,
             flexTimeInterval = FLEX_INTERVAL_HOURS,
-            flexTimeIntervalUnit = TimeUnit.HOURS
+            flexTimeIntervalTimeUnit = TimeUnit.HOURS
         )
             .setInitialDelay(INITIAL_DELAY_MINUTES, TimeUnit.MINUTES)
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, BACKOFF_MINUTES, TimeUnit.MINUTES)
