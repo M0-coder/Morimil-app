@@ -51,7 +51,10 @@ class GenesisUltraRuntimeBootstrapCoordinatorTest {
         assertEquals(7, report.agentProfileCount)
         assertEquals(4, report.orchestratorDeviceCount)
         assertEquals(2, report.canonicalMemoryEventCount)
-        assertEquals(GenesisUltraRuntimeSubsystemState.READY, report.healthState)
+        assertEquals(
+            GenesisUltraRuntimeHealthState.WAITING_FOR_DEPENDENCIES,
+            report.healthState
+        )
         assertEquals(
             GenesisUltraRuntimeSubsystemState.WAITING_FOR_CANONICAL_MEMORY_ADAPTER,
             report.restCycleState
@@ -61,6 +64,68 @@ class GenesisUltraRuntimeBootstrapCoordinatorTest {
             report.recallState
         )
         assertTrue(report.legacyCounts.isEmpty)
+    }
+
+    @Test
+    fun healthWaitsUntilBothRuntimeDependenciesAreReady() {
+        assertEquals(
+            GenesisUltraRuntimeHealthState.WAITING_FOR_DEPENDENCIES,
+            GenesisUltraRuntimeHealthConvergence.evaluate(
+                legacyMemoryConverged = true,
+                restCycleState = GenesisUltraRuntimeSubsystemState.READY,
+                recallState = GenesisUltraRuntimeSubsystemState.WAITING_FOR_CANONICAL_MEMORY_ADAPTER
+            )
+        )
+        assertEquals(
+            GenesisUltraRuntimeHealthState.WAITING_FOR_DEPENDENCIES,
+            GenesisUltraRuntimeHealthConvergence.evaluate(
+                legacyMemoryConverged = true,
+                restCycleState = GenesisUltraRuntimeSubsystemState.WAITING_FOR_CANONICAL_MEMORY_ADAPTER,
+                recallState = GenesisUltraRuntimeSubsystemState.READY
+            )
+        )
+        assertEquals(
+            GenesisUltraRuntimeHealthState.WAITING_FOR_DEPENDENCIES,
+            GenesisUltraRuntimeHealthConvergence.evaluate(
+                legacyMemoryConverged = false,
+                restCycleState = GenesisUltraRuntimeSubsystemState.READY,
+                recallState = GenesisUltraRuntimeSubsystemState.READY
+            )
+        )
+    }
+
+    @Test
+    fun healthConvergesOnlyWhenLegacyRestAndRecallAreReady() {
+        assertEquals(
+            GenesisUltraRuntimeHealthState.READY,
+            GenesisUltraRuntimeHealthConvergence.evaluate(
+                legacyMemoryConverged = true,
+                restCycleState = GenesisUltraRuntimeSubsystemState.READY,
+                recallState = GenesisUltraRuntimeSubsystemState.READY
+            )
+        )
+    }
+
+    @Test
+    fun bootstrapReportRejectsForgedReadyHealthWhileDependenciesWait() {
+        val failure = runCatching {
+            GenesisUltraRuntimeBootstrapReport(
+                instanceId = "instance_test",
+                companionName = "Morimil",
+                workspaceId = "instance_test",
+                projectId = "morimil_app:instance_test",
+                agentProfileCount = 0,
+                orchestratorDeviceCount = 0,
+                canonicalMemoryEventCount = 0,
+                legacyMemoryConverged = true,
+                healthState = GenesisUltraRuntimeHealthState.READY,
+                restCycleState = GenesisUltraRuntimeSubsystemState.WAITING_FOR_CANONICAL_MEMORY_ADAPTER,
+                recallState = GenesisUltraRuntimeSubsystemState.WAITING_FOR_CANONICAL_MEMORY_ADAPTER,
+                legacyCounts = GenesisUltraRuntimeLegacyCounts(0, 0)
+            )
+        }.exceptionOrNull()
+
+        assertEquals("runtime_bootstrap_health_state_inconsistent", failure?.message)
     }
 
     @Test

@@ -18,6 +18,10 @@ class GenesisUltraRuntimeBootstrapConvergenceContractTest {
         assertTrue(report.legacyMemoryConverged)
         assertEquals(1, report.legacyCounts.localIdentityCount)
         assertEquals(1, report.legacyCounts.genesisCoreCount)
+        assertEquals(
+            GenesisUltraRuntimeHealthState.WAITING_FOR_DEPENDENCIES,
+            report.healthState
+        )
     }
 
     @Test
@@ -39,6 +43,8 @@ class GenesisUltraRuntimeBootstrapConvergenceContractTest {
         legacyMemoryConverged: Boolean,
         legacyCounts: GenesisUltraRuntimeLegacyCounts
     ): GenesisUltraRuntimeBootstrapReport {
+        val restCycleState = GenesisUltraRuntimeSubsystemState.WAITING_FOR_CANONICAL_MEMORY_ADAPTER
+        val recallState = GenesisUltraRuntimeSubsystemState.WAITING_FOR_CANONICAL_MEMORY_ADAPTER
         return GenesisUltraRuntimeBootstrapReport(
             instanceId = INSTANCE_ID,
             companionName = "Morimil",
@@ -48,9 +54,13 @@ class GenesisUltraRuntimeBootstrapConvergenceContractTest {
             orchestratorDeviceCount = 4,
             canonicalMemoryEventCount = 3,
             legacyMemoryConverged = legacyMemoryConverged,
-            healthState = GenesisUltraRuntimeSubsystemState.READY,
-            restCycleState = GenesisUltraRuntimeSubsystemState.WAITING_FOR_CANONICAL_MEMORY_ADAPTER,
-            recallState = GenesisUltraRuntimeSubsystemState.WAITING_FOR_CANONICAL_MEMORY_ADAPTER,
+            healthState = GenesisUltraRuntimeHealthConvergence.evaluate(
+                legacyMemoryConverged = legacyMemoryConverged,
+                restCycleState = restCycleState,
+                recallState = recallState
+            ),
+            restCycleState = restCycleState,
+            recallState = recallState,
             legacyCounts = legacyCounts
         )
     }
