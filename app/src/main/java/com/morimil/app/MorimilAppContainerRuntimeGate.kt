@@ -9,7 +9,10 @@ internal val MorimilAppContainer.genesisUltraRuntimeBootstrapCoordinator:
     get() = GenesisUltraRuntimeBootstrapCoordinator.production(
         memoryDatabase = memoryDatabase,
         organDatabase = organDatabase,
-        protocol = runtimeBootstrapProtocolCoordinator
+        protocol = runtimeBootstrapProtocolCoordinator,
+        probeRestCycleReady = { identity ->
+            restCycleRepository.isBootstrapReady(identity)
+        }
     )
 
 /** Startup gate backed by canonical identity, memory convergence and Ultra bootstrap. */
@@ -72,7 +75,9 @@ internal val MorimilAppContainer.genesisUltraRuntimeStartupGate:
                 val vaultRecovery = projectVaultRecovery.recoverPendingOperations()
                 check(vaultRecovery.blockedCount == 0) { "project_vault_outbox_blocked" }
                 // BOOT-001 recovery is owner-scoped inside bootstrap and intentionally
-                // runs only after legacy memory convergence is known durable.
+                // runs only after legacy memory convergence is known durable. REST readiness
+                // is then probed read-only through the same verified canonical planning boundary
+                // used by RestCycleRepository; RECALL readiness remains a separate front.
                 bootstrap.bootstrap(identity)
                 Unit
             }
