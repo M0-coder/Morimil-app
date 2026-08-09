@@ -2,11 +2,11 @@
 
 # F1 canonical consumer convergence inventory
 
-Inventory version: `9`
+Inventory version: `10`
 
-Content baseline SHA: `6e0444b698bdc5c557ec3ea83f48d7980da1a36b`
+Content baseline SHA: `2d16c5c3197d492d5daed3707e97a68caa0011a6`
 
-Content baseline parent SHA: `bdbb5b2a040b728508948cd3cfbd8807b40a12f6`
+Content baseline parent SHA: `d7e679b9f8e0b34d44a5e702c02c436f21e4eaee`
 
 Current protected `main` is resolved externally from `refs/heads/main`; its moving SHA is not embedded as normative truth in this document.
 
@@ -22,6 +22,8 @@ Audited BOOT source head: `c7710635fa172108cce87b3f7a76d6e037095864`
 
 Audited RECALL source head: `fae8a0df3c29775317986877bce2b8eda8593d27`
 
+Audited REST-001 source head: `3661450325237fcadb86098ec16ee45cd039bc0b`
+
 PR `#176`: merged by squash for BOOT-001.
 
 PR `#177`: merged by squash for post-BOOT CURRENT reconciliation.
@@ -32,13 +34,17 @@ PR `#179`: merged by squash for post-RECALL CURRENT reconciliation.
 
 PR `#180`: merged by squash for ORCH-001.
 
+PR `#181`: merged by squash for post-ORCH CURRENT reconciliation.
+
+PR `#182`: merged by squash for REST-001 canonical planning and durable execution.
+
 Tracking: open `#86` and completed canonical-memory dependency `#87`.
 
 Gate truth: `STOP_S5=CLOSED`.
 
 ```text
-CONTENT_BASELINE_SHA=6e0444b698bdc5c557ec3ea83f48d7980da1a36b
-CONTENT_BASELINE_PARENT_SHA=bdbb5b2a040b728508948cd3cfbd8807b40a12f6
+CONTENT_BASELINE_SHA=2d16c5c3197d492d5daed3707e97a68caa0011a6
+CONTENT_BASELINE_PARENT_SHA=d7e679b9f8e0b34d44a5e702c02c436f21e4eaee
 CURRENT_MAIN_RESOLUTION=EXTERNAL_GIT_REF
 MERGE_SHA_EVIDENCE=EXTERNAL
 PR_172=MERGED_BY_SQUASH_HISTORICAL
@@ -50,9 +56,11 @@ PR_177=MERGED_BY_SQUASH_HISTORICAL
 PR_178=MERGED_BY_SQUASH_HISTORICAL
 PR_179=MERGED_BY_SQUASH_HISTORICAL
 PR_180=MERGED_BY_SQUASH_HISTORICAL
+PR_181=MERGED_BY_SQUASH_HISTORICAL
+PR_182=MERGED_BY_SQUASH_HISTORICAL
 ```
 
-This document does not close `#86`. F1-A is integrated. COG-001..004, ORCH-001..004, AGENT-001..006, BOOT-001 and the RECALL-001 canonical derived-read path now consume committed Genesis Ultra identity and/or verified canonical memory without reopening legacy identity authority. RestCycle, health, startup-level recall readiness and final legacy retirement remain incomplete.
+This document does not close `#86`. F1-A is integrated. COG-001..004, ORCH-001..004, AGENT-001..006, BOOT-001, RECALL-001 and REST-001 now consume committed Genesis Ultra identity and/or verified canonical memory without reopening legacy identity authority. REST-002, health convergence, startup-level recall readiness and final legacy retirement remain incomplete.
 
 ## Authority and scope
 
@@ -75,7 +83,7 @@ GenesisUltraRuntimeIdentityRepository + CanonicalMemoryRepository
     -> CanonicalConsumerReadPort
 ```
 
-Bounded F3 canonical adapters — `CanonicalCognitiveMigrationCommitPort`, `CanonicalOrchestrationCommitPort`, `CanonicalAgentLifecycleCommitPort`, and `CanonicalRuntimeBootstrapCommitPort` — are specialized exact-ensure writers, not identity sources.
+Bounded F3 canonical adapters — `CanonicalCognitiveMigrationCommitPort`, `CanonicalOrchestrationCommitPort`, `CanonicalAgentLifecycleCommitPort`, `CanonicalRuntimeBootstrapCommitPort`, and `CanonicalRestCycleCommitPort` — are specialized exact-ensure writers, not identity sources.
 
 ## Integrated downstream consumers
 
@@ -91,11 +99,15 @@ Bounded F3 canonical adapters — `CanonicalCognitiveMigrationCommitPort`, `Cano
 
 RECALL remains a rebuildable projection, not memory authority. `targetEventHash` is the canonical idempotency key; `recallId` is only local projection/topology identity. Canonical NOT_READY produces no mutation; blocked verification fails closed.
 
+`RestCycleRepository` is integrated for REST-001. Planning now uses committed `GenesisUltraRuntimeIdentityRepository` plus `CanonicalConsumerReadPort.readRestCyclePlanningInput`; it no longer receives or reads `MorimilDatabase`, `MemoryRepository`, `MemoryIntegrityCore`, `MemoryDao`, `genesis_core`, `local_instance_identity`, `memory_events`, or the legacy memory audit chain as authority.
+
+REST-001 executes under owner-scoped `rest_cycle` XOP. The deterministic `rest_cycle.execute` operation exact-ensures a single canonical `rest_cycle.local_consolidation` event through `CanonicalRestCycleCommitPort`. Only after the exact receipt is verified are migration completion, `canonical_memory_event` links, and the autobiographical snapshot finalized atomically in `MemoryOrganDatabase`. The autobiographical snapshot is a rebuildable local projection, not canonical memory or identity authority. Process-death recovery is owner-scoped and replay-safe.
+
 ## Remaining convergence work
 
-### F1-REST-001 — `RestCycleRepository.runLocalRestCycleIfDue`
+### F1-REST-002 — repair proposal convergence
 
-Legacy planning dependencies include `loadGenesisCore`, `loadLocalIdentity`, `loadMemoryContext`, and legacy audit reads. Planning must move to verified canonical input before its protocol can be considered converged.
+REST-002 remains separate from the integrated REST-001 execution path. Repair proposals must not regain legacy identity/memory authority, become hidden canonical writers, or bypass the deterministic owner protocol.
 
 ### F1-HEALTH-001 — `LocalNervousSystemRepository.recordHealthCheckIfDegraded`
 
@@ -126,14 +138,15 @@ No placeholder and no Body ID may substitute for canonical `instanceId`.
 5. BOOT-001 — integrated.
 6. RECALL-001 canonical derived read/rebuild — integrated.
 7. ORCH-001 canonical identity-gated seed — integrated.
-8. REST-001/002, health, and recall startup-readiness convergence.
-9. F3.3 irreversible legacy removal only after separate authorization.
+8. REST-001 canonical planning and owner-scoped durable XOP — integrated.
+9. REST-002, health convergence and recall startup-readiness.
+10. F3.3 irreversible legacy removal only after separate authorization.
 
 ## Current closure state
 
 ```text
-CONTENT_BASELINE_SHA=6e0444b698bdc5c557ec3ea83f48d7980da1a36b
-CONTENT_BASELINE_PARENT_SHA=bdbb5b2a040b728508948cd3cfbd8807b40a12f6
+CONTENT_BASELINE_SHA=2d16c5c3197d492d5daed3707e97a68caa0011a6
+CONTENT_BASELINE_PARENT_SHA=d7e679b9f8e0b34d44a5e702c02c436f21e4eaee
 CURRENT_MAIN_RESOLUTION=EXTERNAL_GIT_REF
 MERGE_SHA_EVIDENCE=EXTERNAL
 F1_A_COMMON_READ_BOUNDARY=INTEGRATED
@@ -145,14 +158,18 @@ AGENT_001_006_CANONICAL_WRITE_PATH=INTEGRATED_IN_MAIN
 BOOT_001_CANONICAL_WRITE_PATH=INTEGRATED_IN_MAIN
 F1_RECALL_001=INTEGRATED_IN_MAIN
 RECALL_CANONICAL_READ_PATH=INTEGRATED_IN_MAIN
+F1_REST_001=INTEGRATED_IN_MAIN
+REST_001_CANONICAL_XOP=INTEGRATED_IN_MAIN
+REST_PLANNING_CONVERGED=true
+REST_EXECUTION_CONVERGED=true
+REST_002=OPEN
 ISSUE_86=OPEN
 ISSUE_87=CLOSED
 BOOT_CONVERGED=true
 RECALL_CONVERGED=false
 RECALL_BOOT_READINESS=OPEN
-REST_PLANNING_CONVERGED=false
-REST_EXECUTION_CONVERGED=false
 HEALTH_CONVERGED=false
+HEALTH_CONVERGENCE=OPEN
 LEGACY_GATES_REMOVED=false
 F3_3=OPEN
 STOP_S5=CLOSED
