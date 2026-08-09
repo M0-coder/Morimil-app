@@ -2,11 +2,11 @@
 
 # F1 canonical consumer convergence inventory
 
-Inventory version: `12`
+Inventory version: `13`
 
-Content baseline SHA: `32a183e7821de49a4958c52d75693c43ee99b2e1`
+Content baseline SHA: `77af62a545f72161c0ff47d74c0de6e1d1f4f251`
 
-Content baseline parent SHA: `0e06cd99c72db66a72d6f36345a2dae6d63c4c1f`
+Content baseline parent SHA: `32a183e7821de49a4958c52d75693c43ee99b2e1`
 
 Current protected `main` is resolved externally from `refs/heads/main`; its moving SHA is not embedded as normative truth in this document.
 
@@ -54,13 +54,15 @@ PR `#187`: merged by squash for dependency-derived bootstrap Health instead of a
 
 PR `#188`: merged by squash for REST boot-readiness canonical probing.
 
+PR `#189`: merged by squash for post-REST-readiness/bootstrap-Health CURRENT reconciliation.
+
 Tracking: open `#86` and completed canonical-memory dependency `#87`.
 
 Gate truth: `STOP_S5=CLOSED`.
 
 ```text
-CONTENT_BASELINE_SHA=32a183e7821de49a4958c52d75693c43ee99b2e1
-CONTENT_BASELINE_PARENT_SHA=0e06cd99c72db66a72d6f36345a2dae6d63c4c1f
+CONTENT_BASELINE_SHA=77af62a545f72161c0ff47d74c0de6e1d1f4f251
+CONTENT_BASELINE_PARENT_SHA=32a183e7821de49a4958c52d75693c43ee99b2e1
 CURRENT_MAIN_RESOLUTION=EXTERNAL_GIT_REF
 MERGE_SHA_EVIDENCE=EXTERNAL
 PR_172=MERGED_BY_SQUASH_HISTORICAL
@@ -79,9 +81,10 @@ PR_184=MERGED_BY_SQUASH_HISTORICAL
 PR_186=MERGED_BY_SQUASH_HISTORICAL
 PR_187=MERGED_BY_SQUASH_HISTORICAL
 PR_188=MERGED_BY_SQUASH_HISTORICAL
+PR_189=MERGED_BY_SQUASH_HISTORICAL
 ```
 
-This document does not close `#86`. F1-A is integrated. COG-001..004, ORCH-001..004, AGENT-001..006, BOOT-001, RECALL-001, REST-001 and REST-002 consume committed Genesis Ultra identity and/or verified canonical memory without reopening legacy identity authority. REST-BOOT-001 canonical startup readiness is integrated, and PR #187 makes bootstrap health dependency-derived rather than tautologically READY. F1 health consumer convergence, startup-level RECALL readiness and final legacy retirement remain incomplete.
+This document does not close `#86`. F1-A is integrated. COG-001..004, ORCH-001..004, AGENT-001..006, BOOT-001, RECALL-001, REST-001 and REST-002 consume committed Genesis Ultra identity and/or verified canonical memory without reopening legacy identity authority. REST-BOOT-001 canonical startup readiness is integrated, PR #187 makes bootstrap health dependency-derived rather than tautologically READY, and the Local Nervous System now observes verified canonical living-memory signals without memory-write authority. Startup-level RECALL readiness and final F1/F3.2 reaudit remain incomplete.
 
 ## Authority and scope
 
@@ -130,19 +133,25 @@ PR #187 integrates dependency-derived **bootstrap** health. `GenesisUltraRuntime
 
 REST-BOOT-001 is integrated as a read-only readiness probe. `RestCycleRepository.isBootstrapReady(identity)` invokes `CanonicalConsumerReadPort.readRestCyclePlanningInput`, treats canonical NOT_READY as waiting without mutation, fails closed on RETRYABLE/BLOCKED evidence, and validates ready planning through the same `requireCanonicalPlanning(identity, planning)` boundary used by REST execution. The bootstrap promotes only REST when this evidence is verified; it does not promote RECALL or execute a REST cycle.
 
+### F1-HEALTH-001 — canonical living-memory observer
+
+`LocalNervousSystemRepository` now consumes only `CanonicalConsumerReadPort.readHealthInput`. It no longer receives `MemoryDao`, `MemoryRepository`, `MorimilDatabase`, `MemoryEventEntity`, or `MemoryOrganReconciliationReport` as Health authority and it performs no automatic `memory_events` or canonical-memory write.
+
+Health is derived from verified read disposition plus canonical Instance/Body/epoch/snapshot, birth-root, integrity, bounded event-count and quarantine signals. NOT_READY/RETRYABLE cannot report healthy and BLOCKED evidence is critical. The returned `LocalHealthTelemetry` is derived operational telemetry only; it explicitly carries `memory_authority=false`, `canonical_memory_write=false`, and `legacy_memory_event_write=false` and is not persisted by this boundary.
+
+`CanonicalHealthInput.recentVerifiedEventCount` is intentionally not promoted into the Health decision in this convergence because its current projection semantics can include metadata-only events. Ambiguous evidence remains outside living-memory Health truth until its contract is separately hardened.
+
+Therefore the legacy Health consumer/write convergence is integrated without making the Local Nervous System an XOP owner, identity source, or canonical-memory writer.
+
 ## Remaining convergence work
-
-### F1-HEALTH-001 — `LocalNervousSystemRepository.recordHealthCheckIfDegraded`
-
-This pre-existing F1 boundary remains open despite the bootstrap-health correction in PR #187. `LocalNervousSystemRepository` still derives `genesisCoreCount`, `localIdentityCount`, `memoryEventCount`, `livingSnapshotCount` and recent context from `MemoryDao`, and when degraded may persist an alert through `MemoryRepository.recordSystemMemoryEvent`.
-
-Legacy counts and legacy `memory_events` writes must not become alternate identity or canonical-memory authority. This consumer requires an explicit migration/retirement disposition before `HEALTH_CONVERGENCE` can close.
 
 ### Recall startup readiness
 
 RECALL-001's repository boundary is integrated, but BOOT still reports `recallState=WAITING_FOR_CANONICAL_MEMORY_ADAPTER` and startup does not automatically seed/declare recall ready. That residual must remain visible; integration of the repository does not justify claiming end-to-end recall startup readiness.
 
-Bootstrap Health currently remains `WAITING_FOR_DEPENDENCIES` until RECALL startup readiness is proven. This is truthful bootstrap state, not evidence that F1 health consumer convergence has closed.
+Bootstrap Health currently remains `WAITING_FOR_DEPENDENCIES` until RECALL startup readiness is proven. Global `HEALTH_CONVERGENCE` therefore remains open even though the legacy Local Nervous System read/write boundary is converged.
+
+A full F1/F3.2 reaudit remains required after RECALL startup readiness before irreversible F3.3 retirement can be evaluated.
 
 ## Compatibility prohibition
 
@@ -154,7 +163,7 @@ local_instance_identity
 memory_events
 ```
 
-No placeholder and no Body ID may substitute for canonical `instanceId`. The existing LocalNervousSystem legacy read/write boundary is debt to migrate or retire, not permission to extend compatibility authority.
+No placeholder and no Body ID may substitute for canonical `instanceId`. Local Nervous System Health now observes the canonical read boundary without authority to recreate or write compatibility memory.
 
 ## Required convergence order
 
@@ -169,7 +178,7 @@ No placeholder and no Body ID may substitute for canonical `instanceId`. The exi
 9. REST-002 canonical proposal-only convergence — integrated.
 10. Bootstrap dependency-derived health — integrated by PR #187.
 11. REST-BOOT-001 canonical startup readiness — integrated.
-12. F1 health legacy-consumer convergence for `LocalNervousSystemRepository`.
+12. F1 Health legacy-consumer convergence — integrated as read-only canonical living-memory observation.
 13. RECALL startup-readiness convergence.
 14. Reaudit F1/F3.2 closure.
 15. F3.3 irreversible legacy removal only after separate authorization.
@@ -177,8 +186,8 @@ No placeholder and no Body ID may substitute for canonical `instanceId`. The exi
 ## Current closure state
 
 ```text
-CONTENT_BASELINE_SHA=32a183e7821de49a4958c52d75693c43ee99b2e1
-CONTENT_BASELINE_PARENT_SHA=0e06cd99c72db66a72d6f36345a2dae6d63c4c1f
+CONTENT_BASELINE_SHA=77af62a545f72161c0ff47d74c0de6e1d1f4f251
+CONTENT_BASELINE_PARENT_SHA=32a183e7821de49a4958c52d75693c43ee99b2e1
 CURRENT_MAIN_RESOLUTION=EXTERNAL_GIT_REF
 MERGE_SHA_EVIDENCE=EXTERNAL
 F1_A_COMMON_READ_BOUNDARY=INTEGRATED
@@ -205,6 +214,10 @@ RECALL_CONVERGED=false
 REST_BOOT_READINESS=INTEGRATED
 RECALL_BOOT_READINESS=OPEN
 BOOTSTRAP_HEALTH_DERIVATION=INTEGRATED
+HEALTH_LEGACY_CONSUMER_CONVERGENCE=INTEGRATED
+HEALTH_CAN_READ_CANONICAL_MEMORY=true
+HEALTH_CAN_WRITE_CANONICAL_MEMORY=false
+HEALTH_CAN_WRITE_LEGACY_MEMORY_EVENTS=false
 HEALTH_CONVERGED=false
 HEALTH_CONVERGENCE=OPEN
 HEALTH_STATE=WAITING_FOR_DEPENDENCIES
