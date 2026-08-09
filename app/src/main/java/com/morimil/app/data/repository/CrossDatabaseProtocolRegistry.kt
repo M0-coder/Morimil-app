@@ -114,11 +114,14 @@ internal object RuntimeBootstrapProtocolTypes {
 internal object RestCycleProtocolTypes {
     const val OWNER_TYPE = "rest_cycle"
     const val EXECUTE = "rest_cycle.execute"
+    const val PROPOSE_REPAIR = "rest_cycle.propose_repair"
     const val EXECUTED_EVENT = "rest_cycle.local_consolidation"
+    const val REPAIR_PROPOSED_EVENT = "memory.repair_proposed"
     const val VERSION = 1
 
     val CLOSED_REGISTRY = mapOf(
-        EXECUTE to EXECUTED_EVENT
+        EXECUTE to EXECUTED_EVENT,
+        PROPOSE_REPAIR to REPAIR_PROPOSED_EVENT
     )
 
     val REGISTRY = CrossDatabaseProtocolRegistry(
