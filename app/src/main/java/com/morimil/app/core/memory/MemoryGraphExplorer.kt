@@ -243,7 +243,7 @@ object MemoryGraphExplorer {
                         gapId = "capsule:${capsule.capsuleId}:source_not_loaded",
                         severity = "watch",
                         title = "Capsula con recuerdo fuente no cargado",
-                        detail = "${capsule.title} apunta a ${sourceHash?.take(24)}"
+                        detail = "${capsule.title} apunta a ${sourceHash.take(24)}"
                     )
                 }
                 addNode(
