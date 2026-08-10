@@ -96,24 +96,24 @@ internal class LegacyMemoryConvergenceCoordinator private constructor(
 
         val (localIdentityCount, genesisCoreCount) = loadLegacyIdentityCounts()
         if (events.isEmpty()) {
-    if (localIdentityCount != 0 || genesisCoreCount != 0) {
-        block(
-            identity = identity,
-            events = events,
-            dryRunDigest = dryRunDigest,
-            failureCode = "legacy_convergence_identity_without_memory"
-        )
-        error("legacy_convergence_identity_without_memory")
-    }
-    val complete = completeState(
-        identity = identity,
-        events = events,
-        dryRunDigest = dryRunDigest,
-        importedCount = 0
-    )
-    saveState(complete)
-    return report(LegacyMemoryConvergenceOutcome.NO_LEGACY_MEMORY, complete)
-}
+            if (localIdentityCount != 0 || genesisCoreCount != 0) {
+                block(
+                    identity = identity,
+                    events = events,
+                    dryRunDigest = dryRunDigest,
+                    failureCode = "legacy_convergence_identity_without_memory"
+                )
+                error("legacy_convergence_identity_without_memory")
+            }
+            val complete = completeState(
+                identity = identity,
+                events = events,
+                dryRunDigest = dryRunDigest,
+                importedCount = 0
+            )
+            saveState(complete)
+            return report(LegacyMemoryConvergenceOutcome.NO_LEGACY_MEMORY, complete)
+        }
 
         if (!verifyLegacyChain(events)) {
             block(
@@ -442,7 +442,8 @@ internal class LegacyMemoryConvergenceCoordinator private constructor(
             canonicalRepository: CanonicalMemoryRepository,
             clockMillis: () -> Long = System::currentTimeMillis
         ): LegacyMemoryConvergenceCoordinator {
-            val memoryDao = database.memoryDao()
+            val conflictProbe = LegacyBirthConflictProbe.production(database)
+            val legacyArchive = LegacyMemoryArchiveReadPort.production(database)
             val convergenceDao = database.legacyMemoryConvergenceDao()
             return LegacyMemoryConvergenceCoordinator(
                 countReadOnlyTriggers = {
@@ -460,9 +461,10 @@ internal class LegacyMemoryConvergenceCoordinator private constructor(
                     }
                 },
                 loadLegacyIdentityCounts = {
-                    memoryDao.countLocalIdentity() to memoryDao.countGenesisCore()
+                    val counts = conflictProbe.inspect()
+                    counts.localIdentityCount to counts.genesisCoreCount
                 },
-                loadLegacyEvents = memoryDao::loadMemoryEventAuditChain,
+                loadLegacyEvents = legacyArchive::loadAuditChain,
                 verifyLegacyChain = { events ->
                     memoryIntegrityCore.verifyMemoryEventChain(events)
                 },
