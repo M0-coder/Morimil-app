@@ -11,6 +11,9 @@ class F33ALegacyRuntimeSurfaceContractTest {
         val repository = productionSource(
             "com/morimil/app/data/repository/MemoryRepository.kt"
         ).readText()
+        val memoryLinkRepository = productionSource(
+            "com/morimil/app/data/repository/MemoryLinkRepository.kt"
+        ).readText()
         val viewModel = productionSource(
             "com/morimil/app/ui/MorimilViewModel.kt"
         ).readText()
@@ -47,6 +50,25 @@ class F33ALegacyRuntimeSurfaceContractTest {
                 repository.contains(token)
             )
         }
+
+        listOf(
+            "MemoryEventEntity",
+            "linkRestCycleToEvents",
+            "const val MEMORY_EVENT_NODE_TYPE = \"memory_event\""
+        ).forEach { token ->
+            assertFalse(
+                "Legacy memory-link routing remains in MemoryLinkRepository: $token",
+                memoryLinkRepository.contains(token)
+            )
+        }
+        assertTrue(
+            memoryLinkRepository.contains(
+                "const val CANONICAL_MEMORY_EVENT_NODE_TYPE = \"canonical_memory_event\""
+            )
+        )
+        assertTrue(
+            memoryLinkRepository.contains("nodeType = CANONICAL_MEMORY_EVENT_NODE_TYPE")
+        )
 
         listOf(
             "LocalInstanceIdentityEntity",
