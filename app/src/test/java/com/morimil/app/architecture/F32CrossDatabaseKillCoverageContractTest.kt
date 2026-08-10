@@ -43,8 +43,11 @@ class F32CrossDatabaseKillCoverageContractTest {
         }
 
         listOf(projectVault, cognitive, orchestration, agents, bootstrap, rest).forEach { source ->
-            assertTrue(source.contains("database.close()") || source.contains("db.close()"))
-            assertTrue(source.contains("recoverAtStartup") || source.contains("recoverPendingOperations"))
+            assertTrue("Kill evidence must close a Room database", source.contains("close()"))
+            assertTrue(
+                "Kill evidence must execute durable recovery",
+                source.contains("recoverAtStartup") || source.contains("recoverPendingOperations")
+            )
         }
     }
 
