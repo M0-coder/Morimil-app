@@ -166,13 +166,13 @@ internal class GenesisUltraBirthPreparationCoordinator(
 ) {
     suspend fun inspect(): GenesisUltraBirthPreparationAssessment {
         beforeInspect()
-        val memoryDao = database.memoryDao()
+        val legacyConflicts = LegacyBirthConflictProbe.production(database).inspect()
         val facts = GenesisUltraBirthPreparationFacts(
             persistedBirthState = GenesisUltraAuthorizedBirthStateAudit(database).readState(),
             bodyIdentityRootState = bodyIdentityRootStore.readState(),
             guardianTrustAnchorState = guardianTrustAnchorStore.readState(),
-            legacyLocalIdentityCount = memoryDao.countLocalIdentity(),
-            legacyGenesisCoreCount = memoryDao.countGenesisCore(),
+            legacyLocalIdentityCount = legacyConflicts.localIdentityCount,
+            legacyGenesisCoreCount = legacyConflicts.genesisCoreCount,
             canonicalMemoryEventCount = database.genesisUltraMemoryDao().countAll()
         )
         return GenesisUltraBirthPreparationClassifier.assess(facts)
