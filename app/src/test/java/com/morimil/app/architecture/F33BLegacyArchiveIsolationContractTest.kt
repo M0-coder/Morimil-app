@@ -83,14 +83,18 @@ class F33BLegacyArchiveIsolationContractTest {
     }
 
     @Test
-    fun normalProductPresentationCannotDependOnLegacyReadBoundaries() {
+    fun normalProductRuntimeCannotBypassLegacyReadBoundaries() {
         val productionRoot = productionRoot()
-        val allowed = setOf(
+        val allowedBoundaryUsers = setOf(
             "com/morimil/app/data/genesis/ultra/LegacyArchiveReadBoundaries.kt",
             "com/morimil/app/data/genesis/ultra/LegacyMemoryConvergenceCoordinator.kt",
             "com/morimil/app/data/genesis/ultra/GenesisUltraBirthPreparationCoordinator.kt",
             "com/morimil/app/data/genesis/ultra/GenesisUltraAtomicBirthPersistence.kt",
             "com/morimil/app/runtime/GenesisUltraRuntimeBootstrapCoordinator.kt"
+        )
+        val allowedDaoAccessorUsers = setOf(
+            "com/morimil/app/data/genesis/ultra/LegacyArchiveReadBoundaries.kt",
+            "com/morimil/app/data/local/MorimilDatabase.kt"
         )
         val violations = productionRoot.walkTopDown()
             .filter { it.isFile && it.extension == "kt" }
@@ -98,15 +102,18 @@ class F33BLegacyArchiveIsolationContractTest {
                 file.relativeTo(productionRoot).invariantSeparatorsPath to file.readText()
             }
             .filter { (path, source) ->
-                path !in allowed &&
+                val boundaryEscape = path !in allowedBoundaryUsers &&
                     (source.contains("LegacyBirthConflictProbe") ||
                         source.contains("LegacyMemoryArchiveReadPort"))
+                val daoBypass = path !in allowedDaoAccessorUsers &&
+                    source.contains("legacyArchiveReadDao()")
+                boundaryEscape || daoBypass
             }
             .map { (path, _) -> path }
             .toList()
 
         assertTrue(
-            "Legacy read boundaries escaped migration/birth-safety quarantine: ${violations.joinToString()}",
+            "Legacy archive read access escaped migration/birth-safety quarantine: ${violations.joinToString()}",
             violations.isEmpty()
         )
     }
