@@ -1,6 +1,6 @@
 package com.morimil.app.domain.usecase
 
-import com.morimil.app.data.local.MemoryEventEntity
+import com.morimil.app.data.repository.CanonicalMemoryPresentationEvent
 import com.morimil.app.data.repository.MemoryRepository
 
 class AppendLivingMemoryUseCase(
@@ -19,7 +19,7 @@ class AppendLivingMemoryUseCase(
     }
 
     suspend fun appendMemoryReview(
-        targetEvent: MemoryEventEntity,
+        targetEvent: CanonicalMemoryPresentationEvent,
         action: String,
         note: String
     ) {
