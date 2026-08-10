@@ -57,8 +57,9 @@ class GenesisUltraAndroidBodyIdentityRootStoreTest {
 
     @Test
     fun provisionsStableRootBeforeAnyLegacyOrUltraIdentityExists() = runBlocking {
-        assertEquals(0, database.memoryDao().countLocalIdentity())
-        assertEquals(0, database.memoryDao().countGenesisCore())
+        val legacyArchiveDao = database.legacyArchiveReadDao()
+        assertEquals(0, legacyArchiveDao.countLocalIdentity())
+        assertEquals(0, legacyArchiveDao.countGenesisCore())
         assertEquals(GenesisUltraBodyIdentityRootState.ABSENT, keyStore().readState())
 
         val original = keyStore().provisionBeforeBirth()
@@ -81,8 +82,8 @@ class GenesisUltraAndroidBodyIdentityRootStoreTest {
             original.keyEpochId,
             GenesisUltraBodyIdentityRoot.keyEpochIdFor(original.publicKeyRef)
         )
-        assertEquals(0, database.memoryDao().countLocalIdentity())
-        assertEquals(0, database.memoryDao().countGenesisCore())
+        assertEquals(0, legacyArchiveDao.countLocalIdentity())
+        assertEquals(0, legacyArchiveDao.countGenesisCore())
     }
 
     @Test
