@@ -123,8 +123,9 @@ class GenesisUltraBirthCandidateConstructionCoordinatorTest {
 
         assertEquals(GenesisUltraPersistedBirthState.ABSENT, GenesisUltraAtomicBirthStore(database).readState())
         assertEquals(0, database.genesisUltraMemoryDao().countAll())
-        assertEquals(0, database.memoryDao().countLocalIdentity())
-        assertEquals(0, database.memoryDao().countGenesisCore())
+        val legacyArchiveDao = database.legacyArchiveReadDao()
+        assertEquals(0, legacyArchiveDao.countLocalIdentity())
+        assertEquals(0, legacyArchiveDao.countGenesisCore())
         assertEquals(
             GenesisUltraBirthPreparationStatus.READY_FOR_SIGNED_CANDIDATE,
             preparationCoordinator.inspect().status
@@ -163,7 +164,7 @@ class GenesisUltraBirthCandidateConstructionCoordinatorTest {
         assertTrue(entropyFailure?.message.orEmpty().contains("entropy_all_zero"))
         assertEquals(GenesisUltraPersistedBirthState.ABSENT, GenesisUltraAtomicBirthStore(database).readState())
         assertEquals(0, database.genesisUltraMemoryDao().countAll())
-        assertEquals(0, database.memoryDao().countLocalIdentity())
+        assertEquals(0, database.legacyArchiveReadDao().countLocalIdentity())
     }
 
     private fun coordinator(
