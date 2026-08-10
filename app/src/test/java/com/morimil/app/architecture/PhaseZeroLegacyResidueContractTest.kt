@@ -11,18 +11,18 @@ class PhaseZeroLegacyResidueContractTest {
         val integrationGate = sourceFile(
             "src/main/java/com/morimil/app/data/genesis/GenesisUltraIntegrationGate.kt"
         ).readText()
-        val genesisReader = sourceFile(
-            "src/main/java/com/morimil/app/data/genesis/GenesisReader.kt"
-        ).readText()
         val memoryOrganDatabase = sourceFile(
             "src/main/java/com/morimil/app/data/local/MemoryOrganDatabase.kt"
         ).readText()
+        val legacyGenesisReader = optionalSourceFile(
+            "src/main/java/com/morimil/app/data/genesis/GenesisReader.kt"
+        )
 
         assertFalse(
             Regex("fun\\s+requireBirthReady\\s*\\(\\s*\\)\\s*:\\s*Nothing")
                 .containsMatchIn(integrationGate)
         )
-        assertFalse(genesisReader.contains("fun installGenesisBundle("))
+        assertFalse("Legacy GenesisReader must not remain in production sources", legacyGenesisReader.isFile)
         assertFalse(memoryOrganDatabase.contains("Room.databaseBuilder("))
         assertTrue(memoryOrganDatabase.contains("MemoryOrganDatabaseEncryption.open(context)"))
     }
@@ -46,6 +46,13 @@ class PhaseZeroLegacyResidueContractTest {
             File("app/$relativePath")
         ).firstOrNull(File::isFile)
             ?: error("Source file not found: $relativePath")
+    }
+
+    private fun optionalSourceFile(relativePath: String): File {
+        return sequenceOf(
+            File(relativePath),
+            File("app/$relativePath")
+        ).first { candidate -> candidate.parentFile?.exists() == true }
     }
 
     private fun productionSourceRoot(): File {
