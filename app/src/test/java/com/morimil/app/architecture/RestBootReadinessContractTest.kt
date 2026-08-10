@@ -28,19 +28,17 @@ class RestBootReadinessContractTest {
     }
 
     @Test
-    fun runtimeBootstrapComposesTheRestProbeWithoutPromotingRecall() {
+    fun runtimeBootstrapComposesIndependentReadOnlyRestAndRecallProbes() {
         val gate = productionRoot("MorimilAppContainerRuntimeGate.kt")
         val bootstrap = production("runtime/GenesisUltraRuntimeBootstrapCoordinator.kt")
 
         assertTrue(gate.contains("probeRestCycleReady = { identity ->"))
         assertTrue(gate.contains("restCycleRepository.isBootstrapReady(identity)"))
+        assertTrue(gate.contains("probeRecallReady = { identity ->"))
+        assertTrue(gate.contains("recallScheduleRepository.isBootstrapReady(identity)"))
         assertTrue(bootstrap.contains("val restCycleState = if (probeRestCycleReady(identity))"))
-        assertTrue(
-            bootstrap.contains(
-                "val recallState =\n            GenesisUltraRuntimeSubsystemState.WAITING_FOR_CANONICAL_MEMORY_ADAPTER"
-            )
-        )
-        assertFalse(gate.contains("recallScheduleRepository.isBootstrapReady"))
+        assertTrue(bootstrap.contains("val recallState = if (probeRecallReady(identity))"))
+        assertFalse(gate.contains("seedFromRecentMemoryIfNeeded"))
     }
 
     private fun production(relative: String): String =

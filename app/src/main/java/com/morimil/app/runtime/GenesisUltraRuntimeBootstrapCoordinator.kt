@@ -123,7 +123,8 @@ internal class GenesisUltraRuntimeBootstrapCoordinator private constructor(
     private val countOrchestratorDevices: suspend () -> Int,
     private val countCanonicalMemoryEvents: suspend () -> Int,
     private val isLegacyMemoryConverged: suspend (String) -> Boolean = { false },
-    private val probeRestCycleReady: suspend (GenesisUltraRuntimeIdentity) -> Boolean = { false }
+    private val probeRestCycleReady: suspend (GenesisUltraRuntimeIdentity) -> Boolean = { false },
+    private val probeRecallReady: suspend (GenesisUltraRuntimeIdentity) -> Boolean = { false }
 ) {
     suspend fun bootstrap(
         identity: GenesisUltraRuntimeIdentity,
@@ -149,8 +150,11 @@ internal class GenesisUltraRuntimeBootstrapCoordinator private constructor(
         } else {
             GenesisUltraRuntimeSubsystemState.WAITING_FOR_CANONICAL_MEMORY_ADAPTER
         }
-        val recallState =
+        val recallState = if (probeRecallReady(identity)) {
+            GenesisUltraRuntimeSubsystemState.READY
+        } else {
             GenesisUltraRuntimeSubsystemState.WAITING_FOR_CANONICAL_MEMORY_ADAPTER
+        }
         val healthState = GenesisUltraRuntimeHealthConvergence.evaluate(
             legacyMemoryConverged = convergedAfter,
             restCycleState = restCycleState,
@@ -180,7 +184,8 @@ internal class GenesisUltraRuntimeBootstrapCoordinator private constructor(
             memoryDatabase: MorimilDatabase,
             organDatabase: MemoryOrganDatabase,
             protocol: CrossDatabaseOperationCoordinator,
-            probeRestCycleReady: suspend (GenesisUltraRuntimeIdentity) -> Boolean = { false }
+            probeRestCycleReady: suspend (GenesisUltraRuntimeIdentity) -> Boolean = { false },
+            probeRecallReady: suspend (GenesisUltraRuntimeIdentity) -> Boolean = { false }
         ): GenesisUltraRuntimeBootstrapCoordinator {
             val memoryDao = memoryDatabase.memoryDao()
             val organDao = organDatabase.memoryOrganDao()
@@ -250,7 +255,8 @@ internal class GenesisUltraRuntimeBootstrapCoordinator private constructor(
                         state.legacyReadOnly &&
                         state.failureCode == null
                 },
-                probeRestCycleReady = probeRestCycleReady
+                probeRestCycleReady = probeRestCycleReady,
+                probeRecallReady = probeRecallReady
             )
         }
 
@@ -264,7 +270,8 @@ internal class GenesisUltraRuntimeBootstrapCoordinator private constructor(
             countOrchestratorDevices: suspend () -> Int,
             countCanonicalMemoryEvents: suspend () -> Int,
             isLegacyMemoryConverged: suspend (String) -> Boolean = { false },
-            probeRestCycleReady: suspend (GenesisUltraRuntimeIdentity) -> Boolean = { false }
+            probeRestCycleReady: suspend (GenesisUltraRuntimeIdentity) -> Boolean = { false },
+            probeRecallReady: suspend (GenesisUltraRuntimeIdentity) -> Boolean = { false }
         ): GenesisUltraRuntimeBootstrapCoordinator {
             return GenesisUltraRuntimeBootstrapCoordinator(
                 inspectLegacyCounts = inspectLegacyCounts,
@@ -273,7 +280,8 @@ internal class GenesisUltraRuntimeBootstrapCoordinator private constructor(
                 countOrchestratorDevices = countOrchestratorDevices,
                 countCanonicalMemoryEvents = countCanonicalMemoryEvents,
                 isLegacyMemoryConverged = isLegacyMemoryConverged,
-                probeRestCycleReady = probeRestCycleReady
+                probeRestCycleReady = probeRestCycleReady,
+                probeRecallReady = probeRecallReady
             )
         }
     }

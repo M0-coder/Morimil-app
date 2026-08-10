@@ -7,6 +7,7 @@ import com.morimil.app.data.genesis.ultra.CanonicalReadFailure
 import com.morimil.app.data.genesis.ultra.CanonicalReadResult
 import com.morimil.app.data.genesis.ultra.CanonicalRecallCandidate
 import com.morimil.app.data.genesis.ultra.CanonicalRecallCandidateBatch
+import com.morimil.app.data.genesis.ultra.GenesisUltraRuntimeIdentity
 import com.morimil.app.data.local.MemoryOrganDatabase
 import com.morimil.app.data.local.RecallScheduleEntity
 import kotlinx.coroutines.flow.Flow
@@ -20,6 +21,20 @@ class RecallScheduleRepository internal constructor(
     private val memoryLinkRepository = MemoryLinkRepository(organDatabase)
 
     val activeRecallSchedules: Flow<List<RecallScheduleEntity>> = organDao.observeActiveRecallSchedules()
+
+    /**
+     * Read-only startup probe. A verified empty candidate batch is READY: startup readiness
+     * proves that RECALL can read and bind canonical living-memory state, not that a recall
+     * projection must already exist or that startup should create one.
+     */
+    internal suspend fun isBootstrapReady(identity: GenesisUltraRuntimeIdentity): Boolean {
+        val batch = RecallBootstrapReadiness.resolve(
+            canonicalReadPort.readRecallCandidates(CANONICAL_CANDIDATE_LIMIT)
+        ) ?: return false
+        requireCanonicalBatch(batch)
+        RecallBootstrapReadiness.requireIdentityBinding(identity, batch)
+        return true
+    }
 
     suspend fun seedFromRecentMemoryIfNeeded(limit: Int = 10): Int {
         require(limit in 1..CANONICAL_CANDIDATE_LIMIT) { "canonical_recall_seed_limit_invalid" }
