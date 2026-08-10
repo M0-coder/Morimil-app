@@ -7,7 +7,6 @@ import com.morimil.app.ai.IntrinsicSystemPromptBuilder
 import com.morimil.app.ai.ReasoningClient
 import com.morimil.app.data.genesis.GenesisIdentity
 import com.morimil.app.data.genesis.ultra.GenesisUltraRuntimeIdentity
-import com.morimil.app.data.local.LocalInstanceIdentityEntity
 import com.morimil.app.data.local.ReasoningTurnAuthor
 import com.morimil.app.data.local.ReasoningTurnEntity
 import com.morimil.app.genesisUltraRuntimeIdentityRepository
@@ -29,7 +28,6 @@ internal class MorimilChatCoordinator(
     @Suppress("UNUSED_PARAMETER") application: Application,
     private val container: MorimilAppContainer,
     private val scope: CoroutineScope,
-    @Suppress("UNUSED_PARAMETER") localIdentity: StateFlow<LocalInstanceIdentityEntity?>,
     private val messages: StateFlow<List<ReasoningTurnEntity>>,
     private val observeTask: suspend (String, suspend () -> Unit) -> Result<Unit>
 ) {
@@ -84,19 +82,6 @@ internal class MorimilChatCoordinator(
             }
             _genesisResult.value = result
         }
-    }
-
-    /**
-     * Retained only as a fail-closed binary/source compatibility boundary.
-     * Genesis Ultra birth must never install the legacy bundle or call
-     * MemoryRepository.birthLocalIdentity().
-     */
-    suspend fun bornInstance(
-        @Suppress("UNUSED_PARAMETER") alias: String
-    ): Result<Unit> = withContext(Dispatchers.IO) {
-        Result.failure(
-            IllegalStateException("legacy_local_birth_path_disabled_use_genesis_ultra")
-        )
     }
 
     fun sendMessage(body: String) {
