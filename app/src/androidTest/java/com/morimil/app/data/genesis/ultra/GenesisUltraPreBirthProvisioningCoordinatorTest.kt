@@ -118,8 +118,9 @@ class GenesisUltraPreBirthProvisioningCoordinatorTest {
         assertEquals(PINNED_AT_MILLIS, ready.guardianReceipt?.pinnedAtMillis)
         assertFalse(ready.assessment.birthCommitAuthorized)
         assertEquals(GenesisUltraPersistedBirthState.ABSENT, ready.assessment.facts.persistedBirthState)
-        assertEquals(0, database.memoryDao().countLocalIdentity())
-        assertEquals(0, database.memoryDao().countGenesisCore())
+        val legacyArchiveDao = database.legacyArchiveReadDao()
+        assertEquals(0, legacyArchiveDao.countLocalIdentity())
+        assertEquals(0, legacyArchiveDao.countGenesisCore())
         assertEquals(0, database.genesisUltraMemoryDao().countAll())
     }
 
