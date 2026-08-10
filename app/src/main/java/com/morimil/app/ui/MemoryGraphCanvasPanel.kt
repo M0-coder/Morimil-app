@@ -32,17 +32,18 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.morimil.app.core.memory.MemoryGraphEventView
 import com.morimil.app.core.memory.MemoryGraphExplorer
 import com.morimil.app.core.memory.MemoryGraphExplorerEdge
 import com.morimil.app.core.memory.MemoryGraphExplorerNode
 import com.morimil.app.core.memory.MemoryGraphExplorerSnapshot
 import com.morimil.app.data.local.DecisionLogEntity
 import com.morimil.app.data.local.KnowledgeCapsuleEntity
-import com.morimil.app.data.local.MemoryEventEntity
 import com.morimil.app.data.local.MemoryLinkEntity
 import com.morimil.app.data.local.MigrationRecordEntity
 import com.morimil.app.data.local.ProjectStateEntity
 import com.morimil.app.data.local.RecallScheduleEntity
+import com.morimil.app.data.repository.CanonicalMemoryPresentationEvent
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
@@ -51,9 +52,9 @@ import kotlin.math.sqrt
 @Composable
 fun MemoryGraphCanvasPanel(
     selectedEventHash: String?,
-    selectedEvent: MemoryEventEntity?,
-    graphEvents: List<MemoryEventEntity>,
-    allEvents: List<MemoryEventEntity>,
+    selectedEvent: CanonicalMemoryPresentationEvent?,
+    graphEvents: List<CanonicalMemoryPresentationEvent>,
+    allEvents: List<CanonicalMemoryPresentationEvent>,
     links: List<MemoryLinkEntity>,
     knowledgeCapsules: List<KnowledgeCapsuleEntity>,
     recalls: List<RecallScheduleEntity>,
@@ -69,16 +70,31 @@ fun MemoryGraphCanvasPanel(
 
     val canvasEvents = remember(mode, selectedEventHash, graphEvents, allEvents) {
         when (mode) {
-            MemoryGraphExplorer.MODE_FOCUS -> (graphEvents + allEvents.filter { event -> event.eventHash == selectedEventHash })
-                .distinctBy { event -> event.eventHash }
+            MemoryGraphExplorer.MODE_FOCUS ->
+                (graphEvents + allEvents.filter { event -> event.eventHash == selectedEventHash })
+                    .distinctBy { event -> event.eventHash }
             else -> allEvents
         }
     }
-    val snapshot = remember(mode, selectedEventHash, canvasEvents, links, knowledgeCapsules, recalls, migrations, projects, decisions, activeLayers) {
+    val graphInputs = remember(canvasEvents) {
+        canvasEvents.map(CanonicalMemoryPresentationEvent::toGraphEventView)
+    }
+    val snapshot = remember(
+        mode,
+        selectedEventHash,
+        graphInputs,
+        links,
+        knowledgeCapsules,
+        recalls,
+        migrations,
+        projects,
+        decisions,
+        activeLayers
+    ) {
         MemoryGraphExplorer.build(
             mode = mode,
             selectedEventHash = selectedEventHash,
-            events = canvasEvents,
+            events = graphInputs,
             links = links,
             capsules = knowledgeCapsules,
             recalls = recalls,
@@ -88,10 +104,15 @@ fun MemoryGraphCanvasPanel(
             activeLayers = activeLayers
         )
     }
-    val selectedGraphNode = selectedGraphNodeId?.let { id -> snapshot.nodes.firstOrNull { node -> node.nodeId == id } }
+    val selectedGraphNode = selectedGraphNodeId?.let { id ->
+        snapshot.nodes.firstOrNull { node -> node.nodeId == id }
+    }
 
     Text("Grafo de memoria v2", style = MaterialTheme.typography.titleMedium)
-    Text("Mapa global, foco y huecos. No dibuja toda la base cruda: prioriza organos, decisiones, capsulas, recalls y recuerdos relevantes.")
+    Text(
+        "Mapa global, foco y huecos sobre eventos canónicos verificados y órganos derivados; " +
+            "el archivo legacy no participa como memoria viva."
+    )
 
     if (snapshot.isEmpty) {
         MemoryGraphEmptyCard()
@@ -99,7 +120,10 @@ fun MemoryGraphCanvasPanel(
     }
 
     ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
             MemoryGraphModeRow(mode = mode, onModeChange = { nextMode ->
                 mode = nextMode
                 selectedGraphNodeId = selectedEventHash
@@ -149,14 +173,29 @@ fun MemoryGraphCanvasPanel(
 @Composable
 private fun MemoryGraphModeRow(mode: String, onModeChange: (String) -> Unit) {
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        MemoryGraphChip("global", attention = mode == MemoryGraphExplorer.MODE_GLOBAL, onClick = { onModeChange(MemoryGraphExplorer.MODE_GLOBAL) })
-        MemoryGraphChip("foco", attention = mode == MemoryGraphExplorer.MODE_FOCUS, onClick = { onModeChange(MemoryGraphExplorer.MODE_FOCUS) })
-        MemoryGraphChip("huecos", attention = mode == MemoryGraphExplorer.MODE_GAPS, onClick = { onModeChange(MemoryGraphExplorer.MODE_GAPS) })
+        MemoryGraphChip(
+            "global",
+            attention = mode == MemoryGraphExplorer.MODE_GLOBAL,
+            onClick = { onModeChange(MemoryGraphExplorer.MODE_GLOBAL) }
+        )
+        MemoryGraphChip(
+            "foco",
+            attention = mode == MemoryGraphExplorer.MODE_FOCUS,
+            onClick = { onModeChange(MemoryGraphExplorer.MODE_FOCUS) }
+        )
+        MemoryGraphChip(
+            "huecos",
+            attention = mode == MemoryGraphExplorer.MODE_GAPS,
+            onClick = { onModeChange(MemoryGraphExplorer.MODE_GAPS) }
+        )
     }
 }
 
 @Composable
-private fun MemoryGraphLayerFilters(activeLayers: Set<String>, onToggleLayer: (String) -> Unit) {
+private fun MemoryGraphLayerFilters(
+    activeLayers: Set<String>,
+    onToggleLayer: (String) -> Unit
+) {
     val layers = listOf(
         MemoryGraphExplorer.LAYER_PROJECTS to "proyectos",
         MemoryGraphExplorer.LAYER_DECISIONS to "decisiones",
@@ -171,7 +210,11 @@ private fun MemoryGraphLayerFilters(activeLayers: Set<String>, onToggleLayer: (S
         layers.chunked(3).forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 row.forEach { (layer, label) ->
-                    MemoryGraphChip(label, attention = layer in activeLayers, onClick = { onToggleLayer(layer) })
+                    MemoryGraphChip(
+                        label,
+                        attention = layer in activeLayers,
+                        onClick = { onToggleLayer(layer) }
+                    )
                 }
             }
         }
@@ -203,9 +246,12 @@ private fun MemoryGraphNarrativePath(snapshot: MemoryGraphExplorerSnapshot) {
 @Composable
 private fun MemoryGraphEmptyCard() {
     ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
             Text("Canvas de memoria", style = MaterialTheme.typography.titleMedium)
-            Text("La semilla aun no tiene recuerdos conectados aqui.")
+            Text("La memoria canónica aún no tiene nodos visibles aquí.")
             AssistChip(onClick = {}, label = { Text("esperando_links") })
         }
     }
@@ -273,7 +319,8 @@ private fun MemoryGraphCanvas(
                 modifier = Modifier
                     .fillMaxSize()
                     .semantics {
-                        contentDescription = "Grafo de memoria v2. Pellizcar para zoom, arrastrar para mover, tocar nodo para inspeccionar."
+                        contentDescription =
+                            "Grafo de memoria v2. Pellizcar para zoom, arrastrar para mover, tocar nodo para inspeccionar."
                     }
                     .transformable(transformState)
                     .pointerInput(snapshot, positions, zoom, panOffset) {
@@ -284,9 +331,15 @@ private fun MemoryGraphCanvas(
                                 zoom = zoom,
                                 pivot = Offset(widthPx / 2f, heightPx / 2f)
                             )
-                            val nearest = positions.minByOrNull { (_, offset) -> distance(offset, graphTap) }
-                            if (nearest != null && distance(nearest.value, graphTap) <= TAP_RADIUS_PX) {
-                                snapshot.nodes.firstOrNull { node -> node.nodeId == nearest.key }?.let(onSelectNode)
+                            val nearest = positions.minByOrNull { (_, offset) ->
+                                distance(offset, graphTap)
+                            }
+                            if (nearest != null &&
+                                distance(nearest.value, graphTap) <= TAP_RADIUS_PX
+                            ) {
+                                snapshot.nodes
+                                    .firstOrNull { node -> node.nodeId == nearest.key }
+                                    ?.let(onSelectNode)
                             }
                         }
                     }
@@ -301,7 +354,10 @@ private fun MemoryGraphCanvas(
                         val target = positions[edge.targetId]
                         if (source != null && target != null) {
                             drawLine(
-                                color = graphEdgeColor(edge).copy(alpha = (0.25f + (edge.strength.toFloat() * 0.5f)).coerceAtMost(0.9f)),
+                                color = graphEdgeColor(edge).copy(
+                                    alpha = (0.25f + (edge.strength.toFloat() * 0.5f))
+                                        .coerceAtMost(0.9f)
+                                ),
                                 start = source,
                                 end = target,
                                 strokeWidth = 2f + (edge.strength.toFloat() * 4f)
@@ -349,20 +405,28 @@ private fun MemoryGraphCanvas(
 private fun MemoryGraphNodeInspector(
     snapshot: MemoryGraphExplorerSnapshot,
     node: MemoryGraphExplorerNode?,
-    selectedEvent: MemoryEventEntity?,
+    selectedEvent: CanonicalMemoryPresentationEvent?,
     onSelectEventHash: (String) -> Unit
 ) {
-    val inspectedNode = node ?: snapshot.nodes.firstOrNull { it.selected } ?: snapshot.nodes.firstOrNull()
+    val inspectedNode = node
+        ?: snapshot.nodes.firstOrNull { it.selected }
+        ?: snapshot.nodes.firstOrNull()
     if (inspectedNode == null) return
     val connections = MemoryGraphExplorer.connectionsForNode(snapshot, inspectedNode.nodeId)
 
     Text("Inspector de nodo", style = MaterialTheme.typography.titleMedium)
     ElevatedCard {
-        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 MemoryGraphChip(inspectedNode.nodeType, color = graphNodeColor(inspectedNode))
                 MemoryGraphChip(inspectedNode.layer)
-                MemoryGraphChip(inspectedNode.health, attention = inspectedNode.health != "ok")
+                MemoryGraphChip(
+                    inspectedNode.health,
+                    attention = inspectedNode.health != "ok"
+                )
             }
             Text(inspectedNode.title, style = MaterialTheme.typography.titleMedium)
             Text(inspectedNode.subtitle.take(260))
@@ -374,7 +438,10 @@ private fun MemoryGraphNodeInspector(
                 Button(onClick = { onSelectEventHash(hash) }) { Text("Abrir recuerdo fuente") }
             }
             connections.take(6).forEach { edge ->
-                Text("${edge.relation} -> ${otherEnd(edge, inspectedNode.nodeId).take(28)} / ${edge.health} / ${edge.reason.take(120)}")
+                Text(
+                    "${edge.relation} -> ${otherEnd(edge, inspectedNode.nodeId).take(28)} / " +
+                        "${edge.health} / ${edge.reason.take(120)}"
+                )
             }
         }
     }
@@ -386,7 +453,10 @@ private fun MemoryGraphGapPanel(snapshot: MemoryGraphExplorerSnapshot) {
     Text("Huecos detectados", style = MaterialTheme.typography.titleMedium)
     snapshot.gaps.take(6).forEach { gap ->
         ElevatedCard {
-            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Column(
+                modifier = Modifier.padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     MemoryGraphChip(gap.severity, attention = gap.severity != "ok")
                     MemoryGraphChip(gap.gapId.take(24))
@@ -404,7 +474,7 @@ private fun MemoryGraphNodeList(
     onSelectNode: (MemoryGraphExplorerNode) -> Unit
 ) {
     if (snapshot.isEmpty) {
-        Text("La semilla aun no tiene nodos visibles aqui.")
+        Text("La memoria canónica aún no tiene nodos visibles aquí.")
         return
     }
 
@@ -412,7 +482,11 @@ private fun MemoryGraphNodeList(
     snapshot.nodes.take(12).forEach { node ->
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                MemoryGraphChip(node.layer, color = graphNodeColor(node), onClick = { onSelectNode(node) })
+                MemoryGraphChip(
+                    node.layer,
+                    color = graphNodeColor(node),
+                    onClick = { onSelectNode(node) }
+                )
                 MemoryGraphChip("salud=${node.health}", attention = node.health != "ok")
                 MemoryGraphChip("peso=${"%.2f".format(node.weight)}")
             }
@@ -420,6 +494,19 @@ private fun MemoryGraphNodeList(
             Text(node.subtitle.take(160), style = MaterialTheme.typography.bodySmall)
         }
     }
+}
+
+private fun CanonicalMemoryPresentationEvent.toGraphEventView(): MemoryGraphEventView {
+    return MemoryGraphEventView(
+        eventHash = eventHash,
+        sequence = sequence,
+        eventType = eventType,
+        memoryKind = memoryKind,
+        importance = importance,
+        confidence = confidence,
+        userConfirmed = userConfirmed,
+        body = body
+    )
 }
 
 private fun layoutGraphNodes(
@@ -431,7 +518,8 @@ private fun layoutGraphNodes(
 
     val center = Offset(widthPx / 2f, heightPx / 2f)
     val positions = linkedMapOf<String, Offset>()
-    val identity = nodes.firstOrNull { it.layer == MemoryGraphExplorer.LAYER_IDENTITY } ?: nodes.first()
+    val identity = nodes.firstOrNull { it.layer == MemoryGraphExplorer.LAYER_IDENTITY }
+        ?: nodes.first()
     positions[identity.nodeId] = center
 
     val grouped = nodes.filter { it.nodeId != identity.nodeId }.groupBy { it.layer }
@@ -449,9 +537,12 @@ private fun layoutGraphNodes(
     rings.forEachIndexed { ringIndex, layer ->
         val layerNodes = grouped[layer].orEmpty()
         if (layerNodes.isEmpty()) return@forEachIndexed
-        val ringRadius = (maxRadius * ((ringIndex + 1).coerceAtMost(4) / 4f)).coerceAtLeast(72f)
+        val ringRadius = (maxRadius * ((ringIndex + 1).coerceAtMost(4) / 4f))
+            .coerceAtLeast(72f)
         layerNodes.forEachIndexed { index, node ->
-            val angle = (-PI / 2.0) + ((2.0 * PI * index) / layerNodes.size.toDouble()) + (ringIndex * 0.22)
+            val angle = (-PI / 2.0) +
+                ((2.0 * PI * index) / layerNodes.size.toDouble()) +
+                (ringIndex * 0.22)
             positions[node.nodeId] = Offset(
                 x = center.x + (cos(angle) * ringRadius).toFloat(),
                 y = center.y + (sin(angle) * ringRadius).toFloat()
@@ -500,7 +591,12 @@ private fun nodeRadius(node: MemoryGraphExplorerNode): Float {
     return if (node.layer == MemoryGraphExplorer.LAYER_IDENTITY) base + 7f else base
 }
 
-private fun screenToGraphOffset(tap: Offset, panOffset: Offset, zoom: Float, pivot: Offset): Offset {
+private fun screenToGraphOffset(
+    tap: Offset,
+    panOffset: Offset,
+    zoom: Float,
+    pivot: Offset
+): Offset {
     return Offset(
         x = ((tap.x - panOffset.x - pivot.x) / zoom) + pivot.x,
         y = ((tap.y - panOffset.y - pivot.y) / zoom) + pivot.y

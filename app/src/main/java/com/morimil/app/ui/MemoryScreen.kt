@@ -1,85 +1,35 @@
 package com.morimil.app.ui
 
-import android.Manifest
-import android.content.Intent
-import android.content.pm.PackageManager
-import android.os.Build
-import android.speech.RecognitionListener
-import android.speech.RecognizerIntent
-import android.speech.SpeechRecognizer
-import android.speech.tts.TextToSpeech
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.background
-import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.morimil.app.core.memory.MemoryBacklink
 import com.morimil.app.core.memory.MemoryBacklinkGraphBuilder
-import com.morimil.app.data.genesis.CurrentMobileAppCapabilities
-import com.morimil.app.data.genesis.GenesisIdentitySource
-import com.morimil.app.data.local.MemoryEventEntity
 import com.morimil.app.data.local.MemoryLinkEntity
 import com.morimil.app.data.local.MigrationRecordEntity
 import com.morimil.app.data.local.RecallScheduleEntity
+import com.morimil.app.data.repository.CanonicalMemoryPresentationEvent
 import com.morimil.app.runtime.RestCycleScheduleStatus
-import java.util.Locale
 
 @Composable
 fun MemoryScreen(viewModel: MemoryViewModel) {
@@ -105,9 +55,22 @@ fun MemoryScreen(viewModel: MemoryViewModel) {
         eventsByHash[hash] ?: selectedGraphEvents.firstOrNull { event -> event.eventHash == hash }
     }
 
-    Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    LaunchedEffect(Unit) {
+        viewModel.refreshCanonicalMemory()
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
         Text("Living Memory", style = MaterialTheme.typography.headlineMedium)
-        Text("Genesis Core inmutable + eventos append-only + organos locales de memoria.")
+        Text(
+            "Genesis Ultra verificado + eventos canónicos append-only + órganos locales derivados. " +
+                "El archivo legacy permanece sólo para migración."
+        )
         HealthStatusCard(
             health = organismHealth,
             onRefresh = viewModel::refreshOrganismHealth,
@@ -115,19 +78,26 @@ fun MemoryScreen(viewModel: MemoryViewModel) {
         )
         ProjectCard(
             "Historial de conversación",
-            "${messages.size} turnos operativos; no forman parte de la memoria canónica.",
+            "${messages.size} turnos operativos; no forman parte de la memoria canónica por defecto.",
             "separated"
         )
         snapshot?.let { liveSnapshot ->
             ProjectCard(
                 "Living snapshot",
-                "${liveSnapshot.eventCount} eventos de memoria viva. ${liveSnapshot.summary.take(260)}",
-                "updated=${liveSnapshot.updatedAtMillis}"
+                "${liveSnapshot.totalEventCount} eventos canónicos verificados; " +
+                    "post_birth=${liveSnapshot.postBirthEventCount}; " +
+                    "last_seq=${liveSnapshot.lastSequence}; " +
+                    "last_hash=${liveSnapshot.lastEventHash.take(24)}",
+                "verified-read-only"
             )
-        } ?: ProjectCard("Living snapshot", "Todavia no existe snapshot vivo.", "pending")
+        } ?: ProjectCard(
+            "Living snapshot",
+            "La proyección canónica todavía no está disponible para presentación.",
+            "pending"
+        )
         ProjectCard("Project state", "${projects.size} proyectos persistidos.", "connected")
         if (decisions.isEmpty()) {
-            ProjectCard("Decision log", "Sin decisiones registradas todavia.", "empty")
+            ProjectCard("Decision log", "Sin decisiones registradas todavía.", "empty")
         } else {
             decisions.take(3).forEach { decision ->
                 ProjectCard(decision.title, "Decision persisted locally.", decision.status)
@@ -155,11 +125,14 @@ fun MemoryScreen(viewModel: MemoryViewModel) {
         )
 
         Text("Memory review queue", style = MaterialTheme.typography.titleMedium)
-        Text("Los recuerdos son append-only. Aprobar, corregir o degradar crea una revision local nueva; no modifica el evento original.")
+        Text(
+            "Los recuerdos canónicos son append-only. Aprobar, corregir o degradar crea una " +
+                "revisión canónica nueva; no modifica el evento original."
+        )
         if (events.isEmpty()) {
-            ProjectCard("Memory events", "Sin eventos vivos todavia.", "empty")
+            ProjectCard("Memory events", "Sin eventos canónicos visibles todavía.", "empty")
         } else {
-            events.take(12).forEach { event ->
+            events.asReversed().take(12).forEach { event ->
                 MemoryEventReviewCard(
                     event = event,
                     selected = selectedMemoryEventHash == event.eventHash,
@@ -192,7 +165,11 @@ fun MemoryScreen(viewModel: MemoryViewModel) {
             selectedEvent = selectedMemoryEvent,
             graphEvents = selectedGraphEvents,
             allEvents = events,
-            links = if (selectedMemoryEventHash == null) recentLinks else selectedMemoryLinks + recentLinks,
+            links = if (selectedMemoryEventHash == null) {
+                recentLinks
+            } else {
+                selectedMemoryLinks + recentLinks
+            },
             knowledgeCapsules = knowledgeCapsules,
             recalls = recalls,
             migrations = migrations,
@@ -209,34 +186,52 @@ fun MemoryScreen(viewModel: MemoryViewModel) {
             onSelectEventHash = viewModel::selectMemoryEvent,
             onClearSelection = viewModel::clearSelectedMemoryEvent
         )
-        ProjectCard("Scope guardian", "Sin sincronizacion externa y sin ejecucion de PC.", "protected")
+        ProjectCard(
+            "Scope guardian",
+            "Guardian = custodio/testigo sin propiedad; Instance ≠ Body; memoria canónica ≠ archivo legacy.",
+            "protected"
+        )
     }
 }
 
 @Composable
 private fun MemoryEventReviewCard(
-    event: MemoryEventEntity,
+    event: CanonicalMemoryPresentationEvent,
     selected: Boolean,
     onSelect: (String) -> Unit,
-    onApprove: (MemoryEventEntity) -> Unit,
-    onDegrade: (MemoryEventEntity) -> Unit,
-    onRequestCorrection: (MemoryEventEntity) -> Unit
+    onApprove: (CanonicalMemoryPresentationEvent) -> Unit,
+    onDegrade: (CanonicalMemoryPresentationEvent) -> Unit,
+    onRequestCorrection: (CanonicalMemoryPresentationEvent) -> Unit
 ) {
-    val isQuarantine = event.memoryKind == "integrity_quarantine" || event.eventType == "memory_integrity.quarantine"
+    val isQuarantine = event.memoryKind == "integrity_quarantine" ||
+        event.eventType == "memory_integrity.quarantine"
     ElevatedCard(
         colors = CardDefaults.elevatedCardColors(
-            containerColor = if (isQuarantine) MaterialTheme.colorScheme.tertiaryContainer else MaterialTheme.colorScheme.surface
+            containerColor = if (isQuarantine) {
+                MaterialTheme.colorScheme.tertiaryContainer
+            } else {
+                MaterialTheme.colorScheme.surface
+            }
         )
     ) {
-        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 MemoryKindChip(event.memoryKind)
                 if (isQuarantine) StatusChip("cuarentena", attention = true)
             }
             Text(event.eventType, style = MaterialTheme.typography.titleMedium)
             Text(event.body.take(340))
-            Text("actor=${event.actor} importance=${event.importance} confidence=${event.confidence} hash=${event.eventHash.take(24)}")
-            Text("tags=${event.tagsJson.take(160)}")
+            Text(
+                "seq=${event.sequence} actor=${event.actor} source=${event.source} " +
+                    "importance=${event.importance} confidence=${event.confidence} " +
+                    "hash=${event.eventHash.take(24)}"
+            )
             if (selected) {
                 AssistChip(onClick = {}, label = { Text("Backlinks abiertos") })
             } else {
@@ -246,7 +241,7 @@ private fun MemoryEventReviewCard(
                 Button(onClick = { onApprove(event) }) { Text("Aprobar") }
                 Button(onClick = { onDegrade(event) }) { Text("Degradar ruido") }
             }
-            Button(onClick = { onRequestCorrection(event) }) { Text("Pedir correccion") }
+            Button(onClick = { onRequestCorrection(event) }) { Text("Pedir corrección") }
         }
     }
 }
@@ -288,7 +283,7 @@ private fun memoryKindContainerColor(memoryKind: String): Color {
 @Composable
 private fun RecallSchedulePanel(
     recalls: List<RecallScheduleEntity>,
-    eventsByHash: Map<String, MemoryEventEntity>,
+    eventsByHash: Map<String, CanonicalMemoryPresentationEvent>,
     onSeedRecalls: () -> Unit,
     onReinforceRecall: (Long) -> Unit,
     onPostponeRecall: (Long) -> Unit,
@@ -298,22 +293,48 @@ private fun RecallSchedulePanel(
     val now = System.currentTimeMillis()
     val overdue = recalls
         .filter { recall -> recall.dueAtMillis <= now }
-        .sortedWith(compareByDescending<RecallScheduleEntity> { it.priority }.thenBy { it.dueAtMillis })
+        .sortedWith(
+            compareByDescending<RecallScheduleEntity> { it.priority }
+                .thenBy { it.dueAtMillis }
+        )
     val future = recalls
         .filter { recall -> recall.dueAtMillis > now }
-        .sortedWith(compareBy<RecallScheduleEntity> { it.dueAtMillis }.thenByDescending { it.priority })
+        .sortedWith(
+            compareBy<RecallScheduleEntity> { it.dueAtMillis }
+                .thenByDescending { it.priority }
+        )
 
     Text("Recalls pendientes", style = MaterialTheme.typography.titleMedium)
-    Text("Recuerdos que conviene repasar para mantenerlos utiles sin convertir ruido en memoria fuerte.")
-    Button(onClick = onSeedRecalls) { Text(if (recalls.isEmpty()) "Crear recalls" else "Actualizar recalls") }
+    Text("Recalls derivados de eventos canónicos verificados.")
+    Button(onClick = onSeedRecalls) {
+        Text(if (recalls.isEmpty()) "Crear recalls" else "Actualizar recalls")
+    }
 
     if (recalls.isEmpty()) {
-        ProjectCard("Recall schedule", "No hay recalls activos todavia.", "empty")
+        ProjectCard("Recall schedule", "No hay recalls activos todavía.", "empty")
         return
     }
 
-    RecallScheduleSection("Vencidos ahora", "No hay recalls vencidos.", overdue.take(8), eventsByHash, onReinforceRecall, onPostponeRecall, onDegradeRecall, onOpenMemory)
-    RecallScheduleSection("Futuros", "No hay recalls futuros.", future.take(8), eventsByHash, onReinforceRecall, onPostponeRecall, onDegradeRecall, onOpenMemory)
+    RecallScheduleSection(
+        "Vencidos ahora",
+        "No hay recalls vencidos.",
+        overdue.take(8),
+        eventsByHash,
+        onReinforceRecall,
+        onPostponeRecall,
+        onDegradeRecall,
+        onOpenMemory
+    )
+    RecallScheduleSection(
+        "Futuros",
+        "No hay recalls futuros.",
+        future.take(8),
+        eventsByHash,
+        onReinforceRecall,
+        onPostponeRecall,
+        onDegradeRecall,
+        onOpenMemory
+    )
 }
 
 @Composable
@@ -321,7 +342,7 @@ private fun RecallScheduleSection(
     title: String,
     emptyText: String,
     recalls: List<RecallScheduleEntity>,
-    eventsByHash: Map<String, MemoryEventEntity>,
+    eventsByHash: Map<String, CanonicalMemoryPresentationEvent>,
     onReinforceRecall: (Long) -> Unit,
     onPostponeRecall: (Long) -> Unit,
     onDegradeRecall: (Long) -> Unit,
@@ -336,19 +357,32 @@ private fun RecallScheduleSection(
     recalls.forEach { recall ->
         val targetEvent = eventsByHash[recall.targetEventHash]
         ElevatedCard {
-            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("${recall.targetMemoryKind} / priority=${recall.priority}", style = MaterialTheme.typography.titleMedium)
+            Column(
+                modifier = Modifier.padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    "${recall.targetMemoryKind} / priority=${recall.priority}",
+                    style = MaterialTheme.typography.titleMedium
+                )
                 Text(recall.prompt.take(360))
-                Text("due=${recall.dueAtMillis} interval=${recall.intervalDays}d action=${recall.lastAction}")
+                Text(
+                    "due=${recall.dueAtMillis} interval=${recall.intervalDays}d " +
+                        "action=${recall.lastAction}"
+                )
                 Text("organ=${recall.source} link=${recall.targetEventHash.take(24)}")
-                targetEvent?.let { event -> Text("recuerdo=${event.memoryKind}: ${event.body.take(180)}") }
+                targetEvent?.let { event ->
+                    Text("recuerdo=${event.memoryKind}: ${event.body.take(180)}")
+                } ?: Text("Evento canónico fuera de la ventana visual; el hash sigue siendo resoluble.")
                 Text("reason=${recall.reason.take(180)}")
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(onClick = { onReinforceRecall(recall.recallId) }) { Text("Reforzar") }
                     Button(onClick = { onPostponeRecall(recall.recallId) }) { Text("Posponer") }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = { onOpenMemory(recall.targetEventHash) }) { Text("Abrir recuerdo") }
+                    Button(onClick = { onOpenMemory(recall.targetEventHash) }) {
+                        Text("Abrir recuerdo")
+                    }
                     Button(onClick = { onDegradeRecall(recall.recallId) }) { Text("Degradar") }
                 }
             }
@@ -364,43 +398,82 @@ private fun CognitiveMigrationPanel(
     onExecuteMigration: (String) -> Unit,
     onRollbackMigration: (String) -> Unit
 ) {
-    val cognitiveMigrations = migrations.filter { migration -> migration.migrationType == COGNITIVE_MIGRATION_TYPE }.take(8)
+    val cognitiveMigrations = migrations
+        .filter { migration -> migration.migrationType == COGNITIVE_MIGRATION_TYPE }
+        .take(8)
     Text("Migraciones cognitivas", style = MaterialTheme.typography.titleMedium)
     Text("Propuestas auditables para refinar memoria sin reescribir eventos originales.")
-    Button(onClick = onProposeMigration) { Text("Proponer migracion") }
+    Button(onClick = onProposeMigration) { Text("Proponer migración") }
 
     if (cognitiveMigrations.isEmpty()) {
-        ProjectCard("Auditoria cognitiva", "Todavia no hay migraciones cognitivas propuestas.", "empty")
+        ProjectCard(
+            "Auditoría cognitiva",
+            "Todavía no hay migraciones cognitivas propuestas.",
+            "empty"
+        )
         return
     }
 
     cognitiveMigrations.forEach { migration ->
         ElevatedCard {
-            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("${migration.status} / risk=${migration.riskLevel}", style = MaterialTheme.typography.titleMedium)
-                Text("approved=${migration.approvedByUser} chain=${migration.chainVerified} backup=${migration.backupRequired} rollback=${migration.rollbackAvailable}")
-                Text("pre=${migration.preSnapshotId} post=${migration.postSnapshotId?.take(32) ?: "pending"}")
-                Text("Diff logico", style = MaterialTheme.typography.titleMedium)
-                Text(migrationPlanSection(migration.expectedEffect, "diff_logico").ifBlank { "Sin diff visible." }.take(900))
-                Text("Capsulas propuestas", style = MaterialTheme.typography.titleMedium)
-                Text(migrationPlanSection(migration.expectedEffect, "capsulas_propuestas").ifBlank { "Sin capsulas propuestas." }.take(900))
+            Column(
+                modifier = Modifier.padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    "${migration.status} / risk=${migration.riskLevel}",
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Text(
+                    "approved=${migration.approvedByUser} chain=${migration.chainVerified} " +
+                        "backup=${migration.backupRequired} rollback=${migration.rollbackAvailable}"
+                )
+                Text(
+                    "pre=${migration.preSnapshotId} " +
+                        "post=${migration.postSnapshotId?.take(32) ?: "pending"}"
+                )
+                Text("Diff lógico", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    migrationPlanSection(migration.expectedEffect, "diff_logico")
+                        .ifBlank { "Sin diff visible." }
+                        .take(900)
+                )
+                Text("Cápsulas propuestas", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    migrationPlanSection(migration.expectedEffect, "capsulas_propuestas")
+                        .ifBlank { "Sin cápsulas propuestas." }
+                        .take(900)
+                )
                 Text("Backlinks propuestos", style = MaterialTheme.typography.titleMedium)
-                Text(migrationPlanSection(migration.expectedEffect, "backlinks_propuestos").ifBlank { "Sin backlinks propuestos." }.take(900))
-                Text("Auditoria y resultado", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    migrationPlanSection(migration.expectedEffect, "backlinks_propuestos")
+                        .ifBlank { "Sin backlinks propuestos." }
+                        .take(900)
+                )
+                Text("Auditoría y resultado", style = MaterialTheme.typography.titleMedium)
                 Text("steps=${migration.stepsJson.take(360)}")
                 Text("result=${migration.errorsJson.take(360)}")
                 Text("strategy=${migration.rollbackStrategy.take(360)}")
                 Text("affected=${migration.affectedArtifactsJson.take(360)}")
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (migration.status == "planned" && !migration.approvedByUser) {
-                        Button(onClick = { onApproveMigration(migration.migrationId) }) { Text("Aprobar") }
+                        Button(onClick = { onApproveMigration(migration.migrationId) }) {
+                            Text("Aprobar")
+                        }
                     }
                     if (migration.status == "approved") {
-                        Button(onClick = { onExecuteMigration(migration.migrationId) }) { Text("Ejecutar") }
+                        Button(onClick = { onExecuteMigration(migration.migrationId) }) {
+                            Text("Ejecutar")
+                        }
                     }
                 }
-                if (migration.rollbackAvailable && migration.status in setOf("approved", "completed", "failed")) {
-                    Button(onClick = { onRollbackMigration(migration.migrationId) }) { Text("Rollback") }
+                if (
+                    migration.rollbackAvailable &&
+                    migration.status in setOf("approved", "completed", "failed")
+                ) {
+                    Button(onClick = { onRollbackMigration(migration.migrationId) }) {
+                        Text("Rollback")
+                    }
                 }
             }
         }
@@ -439,9 +512,11 @@ private fun RestCycleHistoryPanel(
     onCancelSchedule: () -> Unit,
     onRefreshSchedule: () -> Unit
 ) {
-    val restCycles = migrations.filter { migration -> migration.migrationType == REST_CYCLE_MIGRATION_TYPE }.take(8)
+    val restCycles = migrations
+        .filter { migration -> migration.migrationType == REST_CYCLE_MIGRATION_TYPE }
+        .take(8)
     Text("Rest cycle", style = MaterialTheme.typography.titleMedium)
-    Text("Consolidaciones locales programadas, con aprobacion para cambios importantes.")
+    Text("Consolidaciones locales programadas, con aprobación para cambios importantes.")
     RestCycleSchedulePanel(
         status = scheduleStatus,
         onRunRestCycleNow = onRunRestCycleNow,
@@ -451,36 +526,61 @@ private fun RestCycleHistoryPanel(
     )
 
     if (restCycles.isEmpty()) {
-        ProjectCard("Historial de descanso", "Todavia no hay consolidaciones registradas.", "empty")
+        ProjectCard(
+            "Historial de descanso",
+            "Todavía no hay consolidaciones registradas.",
+            "empty"
+        )
         return
     }
 
     restCycles.forEach { migration ->
         val report = RestCycleReportUiStateBuilder.build(migration)
         ElevatedCard {
-            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("${migration.status} / risk=${migration.riskLevel}", style = MaterialTheme.typography.titleMedium)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(
+                modifier = Modifier.padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    "${migration.status} / risk=${migration.riskLevel}",
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     StatusChip("modo=${report.mode}")
                     StatusChip("riesgo=${report.risk}", attention = report.risk != "low")
-                    StatusChip("cadena=${report.fullChainVerified}", attention = report.fullChainVerified != "true")
+                    StatusChip(
+                        "cadena=${report.fullChainVerified}",
+                        attention = report.fullChainVerified != "true"
+                    )
                 }
                 Text(
                     "organos_con_alerta=${report.organReconciliation} " +
-                        "capsulas_ok=${report.capsuleChainVerified} eventos=${report.sourceEvents} utiles=${report.meaningfulEvents}"
+                        "capsulas_ok=${report.capsuleChainVerified} " +
+                        "eventos=${report.sourceEvents} utiles=${report.meaningfulEvents}"
                 )
                 Text("policy=${report.policyReason}")
-                report.tasks.take(6).forEach { task ->
-                    RestCycleTaskLine(task)
-                }
+                report.tasks.take(6).forEach { task -> RestCycleTaskLine(task) }
                 if (report.resultNotes.isNotEmpty()) {
                     Text("Resultado", style = MaterialTheme.typography.titleMedium)
                     report.resultNotes.take(6).forEach { note -> Text(note.take(180)) }
                 }
-                Text("approval_required=${report.approvalRequired} approved=${migration.approvedByUser} rollback=${migration.rollbackAvailable}")
+                Text(
+                    "approval_required=${report.approvalRequired} " +
+                        "approved=${migration.approvedByUser} " +
+                        "rollback=${migration.rollbackAvailable}"
+                )
                 Text("strategy=${migration.rollbackStrategy.take(220)}")
-                if (migration.status == "planned" && migration.approvalRequired && !migration.approvedByUser) {
-                    Button(onClick = { onApproveRestCycle(migration.migrationId) }) { Text("Aprobar consolidacion") }
+                if (
+                    migration.status == "planned" &&
+                    migration.approvalRequired &&
+                    !migration.approvedByUser
+                ) {
+                    Button(onClick = { onApproveRestCycle(migration.migrationId) }) {
+                        Text("Aprobar consolidación")
+                    }
                 }
             }
         }
@@ -496,22 +596,36 @@ private fun RestCycleSchedulePanel(
     onRefreshSchedule: () -> Unit
 ) {
     ElevatedCard {
-        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Programacion del descanso", style = MaterialTheme.typography.titleMedium)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text("Programación del descanso", style = MaterialTheme.typography.titleMedium)
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 StatusChip("estado=${status.stateLabel}", attention = status.needsAttention)
                 StatusChip("cada=${status.repeatIntervalHours}h")
                 StatusChip("flex=${status.flexIntervalHours}h")
             }
-            Text("inicio=${status.initialDelayMinutes}min bateria_ok=${status.requiresBatteryNotLow} storage_ok=${status.requiresStorageNotLow}")
+            Text(
+                "inicio=${status.initialDelayMinutes}min " +
+                    "bateria_ok=${status.requiresBatteryNotLow} " +
+                    "storage_ok=${status.requiresStorageNotLow}"
+            )
             status.errorMessage?.let { error -> Text("scheduler_error=${error.take(160)}") }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = onRunRestCycleNow) { Text("Ejecutar ahora") }
-                Button(onClick = onEnableSchedule) { Text(if (status.isScheduled) "Asegurar agenda" else "Activar") }
+                Button(onClick = onEnableSchedule) {
+                    Text(if (status.isScheduled) "Asegurar agenda" else "Activar")
+                }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = onRefreshSchedule) { Text("Actualizar estado") }
-                Button(enabled = status.isScheduled, onClick = onCancelSchedule) { Text("Pausar automatico") }
+                Button(enabled = status.isScheduled, onClick = onCancelSchedule) {
+                    Text("Pausar automático")
+                }
             }
         }
     }
@@ -519,7 +633,10 @@ private fun RestCycleSchedulePanel(
 
 @Composable
 private fun RestCycleTaskLine(task: RestCycleTaskUiState) {
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
         StatusChip(task.status, attention = task.risk != "low")
         Text("${task.name}: ${task.note}".take(160))
     }
@@ -528,32 +645,51 @@ private fun RestCycleTaskLine(task: RestCycleTaskUiState) {
 @Composable
 private fun MemoryBacklinksPanel(
     selectedEventHash: String?,
-    selectedEvent: MemoryEventEntity?,
+    selectedEvent: CanonicalMemoryPresentationEvent?,
     selectedLinks: List<MemoryLinkEntity>,
-    eventsByHash: Map<String, MemoryEventEntity>,
+    eventsByHash: Map<String, CanonicalMemoryPresentationEvent>,
     onSelectEventHash: (String) -> Unit,
     onClearSelection: () -> Unit
 ) {
     Text("Backlinks de memoria", style = MaterialTheme.typography.titleMedium)
     if (selectedEventHash == null) {
-        ProjectCard("Grafo de recuerdos", "Selecciona un recuerdo para ver que apunta a el y a que apunta.", "empty")
+        ProjectCard(
+            "Grafo de recuerdos",
+            "Selecciona un recuerdo canónico para ver qué apunta a él y a qué apunta.",
+            "empty"
+        )
         return
     }
 
     val graph = MemoryBacklinkGraphBuilder.buildForNode(
         nodeId = selectedEventHash,
-        nodeType = MEMORY_EVENT_NODE_TYPE,
+        nodeType = CANONICAL_MEMORY_EVENT_NODE_TYPE,
         links = selectedLinks
     )
 
     ElevatedCard {
-        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
             Text("Recuerdo seleccionado", style = MaterialTheme.typography.titleMedium)
             Text(selectedEvent?.body?.take(260) ?: selectedEventHash.take(32))
             Text("hash=${selectedEventHash.take(32)} links=${selectedLinks.size}")
             Button(onClick = onClearSelection) { Text("Cerrar") }
-            MemoryBacklinkSection("Este recuerdo apunta a...", "Este recuerdo todavia no apunta a otros nodos.", graph.outgoing, eventsByHash, onSelectEventHash)
-            MemoryBacklinkSection("Este recuerdo es mencionado por...", "Ningun nodo reciente apunta todavia a este recuerdo.", graph.incoming, eventsByHash, onSelectEventHash)
+            MemoryBacklinkSection(
+                "Este recuerdo apunta a...",
+                "Este recuerdo todavía no apunta a otros nodos.",
+                graph.outgoing,
+                eventsByHash,
+                onSelectEventHash
+            )
+            MemoryBacklinkSection(
+                "Este recuerdo es mencionado por...",
+                "Ningún nodo reciente apunta todavía a este recuerdo.",
+                graph.incoming,
+                eventsByHash,
+                onSelectEventHash
+            )
         }
     }
 }
@@ -563,7 +699,7 @@ private fun MemoryBacklinkSection(
     title: String,
     emptyText: String,
     backlinks: List<MemoryBacklink>,
-    eventsByHash: Map<String, MemoryEventEntity>,
+    eventsByHash: Map<String, CanonicalMemoryPresentationEvent>,
     onSelectEventHash: (String) -> Unit
 ) {
     Text(title, style = MaterialTheme.typography.titleMedium)
@@ -575,19 +711,45 @@ private fun MemoryBacklinkSection(
     backlinks.take(8).forEach { backlink ->
         val linkedEvent = eventsByHash[backlink.linkedNodeId]
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("${backlink.link.relation} / strength=${backlink.link.strength} / ${backlink.link.reason.take(120)}")
-            if (backlink.linkedNodeType == MEMORY_EVENT_NODE_TYPE) {
+            Text(
+                "${backlink.link.relation} / strength=${backlink.link.strength} / " +
+                    backlink.link.reason.take(120)
+            )
+            if (backlink.linkedNodeType == CANONICAL_MEMORY_EVENT_NODE_TYPE) {
                 Button(onClick = { onSelectEventHash(backlink.linkedNodeId) }) {
-                    Text(memoryNodeLabel(linkedEvent, backlink.linkedNodeId, backlink.linkedNodeType).take(90))
+                    Text(
+                        memoryNodeLabel(
+                            linkedEvent,
+                            backlink.linkedNodeId,
+                            backlink.linkedNodeType
+                        ).take(90)
+                    )
                 }
             } else {
-                AssistChip(onClick = {}, label = { Text(memoryNodeLabel(linkedEvent, backlink.linkedNodeId, backlink.linkedNodeType).take(90)) })
+                AssistChip(
+                    onClick = {},
+                    label = {
+                        Text(
+                            memoryNodeLabel(
+                                linkedEvent,
+                                backlink.linkedNodeId,
+                                backlink.linkedNodeType
+                            ).take(90)
+                        )
+                    }
+                )
             }
         }
     }
 }
 
-private fun memoryNodeLabel(event: MemoryEventEntity?, nodeId: String, nodeType: String): String {
+private fun memoryNodeLabel(
+    event: CanonicalMemoryPresentationEvent?,
+    nodeId: String,
+    nodeType: String
+): String {
     if (event == null) return "$nodeType ${nodeId.take(24)}"
     return "${event.memoryKind} / ${event.eventType}: ${event.body.take(90)}"
 }
+
+private const val CANONICAL_MEMORY_EVENT_NODE_TYPE = "canonical_memory_event"

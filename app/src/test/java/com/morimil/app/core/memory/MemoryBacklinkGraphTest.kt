@@ -1,13 +1,14 @@
 package com.morimil.app.core.memory
 
 import com.morimil.app.data.local.MemoryLinkEntity
+import com.morimil.app.data.repository.MemoryLinkRepository
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Test
 
 class MemoryBacklinkGraphTest {
     @Test
-    fun separatesOutgoingAndIncomingLinksForSelectedMemoryNode() {
+    fun separatesOutgoingAndIncomingLinksForSelectedCanonicalMemoryNode() {
         val links = listOf(
             link("selected", "project", "derived_from", 0.8, 10L),
             link("decision", "selected", "mentions", 0.9, 11L),
@@ -16,7 +17,7 @@ class MemoryBacklinkGraphTest {
 
         val graph = MemoryBacklinkGraphBuilder.buildForNode(
             nodeId = "selected",
-            nodeType = "memory_event",
+            nodeType = MemoryLinkRepository.CANONICAL_MEMORY_EVENT_NODE_TYPE,
             links = links
         )
 
@@ -37,7 +38,7 @@ class MemoryBacklinkGraphTest {
 
         val graph = MemoryBacklinkGraphBuilder.buildForNode(
             nodeId = "selected",
-            nodeType = "memory_event",
+            nodeType = MemoryLinkRepository.CANONICAL_MEMORY_EVENT_NODE_TYPE,
             links = links
         )
 
@@ -57,11 +58,11 @@ class MemoryBacklinkGraphTest {
         return MemoryLinkEntity(
             linkId = "$sourceId-$targetId-$relation",
             instanceId = "instance",
-            genesisCoreHash = "sha256:genesis",
+            genesisCoreHash = "evsha256:birth-root",
             sourceId = sourceId,
-            sourceType = "memory_event",
+            sourceType = MemoryLinkRepository.CANONICAL_MEMORY_EVENT_NODE_TYPE,
             targetId = targetId,
-            targetType = "memory_event",
+            targetType = MemoryLinkRepository.CANONICAL_MEMORY_EVENT_NODE_TYPE,
             relation = relation,
             strength = strength,
             reason = "test",

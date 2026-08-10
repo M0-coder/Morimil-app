@@ -1,15 +1,13 @@
 package com.morimil.app.data.genesis
 
 /**
- * What THIS app currently implements, at THIS phase. This is not part of the
- * Genesis contract -- Genesis defines who the agent is and what it may ever
- * be allowed to do; this defines what the mobile app has actually built so
- * far. It changes every phase; Genesis does not change with app phases.
+ * Capabilities of the current Android Body. This does not define Morimil's
+ * identity or freedom; it only describes what this Body can currently do.
  */
 data class MobileAppCapabilities(
-    val localMemory: Boolean,
+    val localCanonicalMemory: Boolean,
     val voicePushToTalk: Boolean,
-    val genesisReader: Boolean,
+    val canonicalGenesisUltraIdentity: Boolean,
     val externalReadOnlySync: Boolean,
     val externalWriteExecution: Boolean,
     val pcExecution: Boolean,
@@ -19,13 +17,13 @@ data class MobileAppCapabilities(
 
 object CurrentMobileAppCapabilities {
     val value = MobileAppCapabilities(
-        localMemory = true,
+        localCanonicalMemory = true,
         voicePushToTalk = true,
-        genesisReader = true,
+        canonicalGenesisUltraIdentity = true,
         externalReadOnlySync = false,
         externalWriteExecution = false,
         pcExecution = false,
         productionRelease = false,
-        currentAppPhase = "phase_genesis_mobile_seed_v1"
+        currentAppPhase = "f3_3a_canonical_runtime_surface"
     )
 }

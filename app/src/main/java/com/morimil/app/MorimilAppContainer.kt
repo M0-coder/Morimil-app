@@ -4,7 +4,6 @@ import android.content.Context
 import com.morimil.app.ai.ReasoningClient
 import com.morimil.app.ai.ReasoningConfigStore
 import com.morimil.app.core.memory.MemoryIntegrityCore
-import com.morimil.app.data.genesis.GenesisReader
 import com.morimil.app.data.genesis.ultra.GenesisUltraAndroidBodyIdentityRootStore
 import com.morimil.app.data.genesis.ultra.GenesisUltraAndroidGuardianTrustAnchorStore
 import com.morimil.app.data.genesis.ultra.GenesisUltraAndroidHostBirthConsentStore
@@ -185,7 +184,6 @@ class MorimilAppContainer(context: Context) {
     val memoryRepository: MemoryRepository by lazy {
         MemoryRepository(
             database = memoryDatabase,
-            memoryIntegrityCore = memoryIntegrityCore,
             livingMemoryPort = canonicalLivingMemoryPort
         )
     }
@@ -267,10 +265,6 @@ class MorimilAppContainer(context: Context) {
 
     val proposeCognitiveMigrationUseCase: ProposeCognitiveMigrationUseCase by lazy {
         ProposeCognitiveMigrationUseCase(cognitiveMigrationRepository)
-    }
-
-    val genesisReader: GenesisReader by lazy {
-        GenesisReader(appContext)
     }
 
     val secretVault: SecretVault by lazy {

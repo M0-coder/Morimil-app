@@ -2,7 +2,6 @@ package com.morimil.app.core.memory
 
 import com.morimil.app.data.local.DecisionLogEntity
 import com.morimil.app.data.local.KnowledgeCapsuleEntity
-import com.morimil.app.data.local.MemoryEventEntity
 import com.morimil.app.data.local.MemoryLinkEntity
 import com.morimil.app.data.local.MigrationRecordEntity
 import com.morimil.app.data.local.ProjectStateEntity
@@ -14,8 +13,8 @@ import org.junit.Test
 class MemoryGraphExplorerTest {
     @Test
     fun globalGraphBuildsTypedNodesAndDetectsGaps() {
-        val validHash = "sha256:valid"
-        val missingHash = "sha256:missing"
+        val validHash = "evsha256:valid"
+        val missingHash = "evsha256:missing"
         val snapshot = MemoryGraphExplorer.build(
             mode = MemoryGraphExplorer.MODE_GLOBAL,
             selectedEventHash = null,
@@ -39,7 +38,7 @@ class MemoryGraphExplorerTest {
 
     @Test
     fun focusGraphKeepsSelectedMemoryEvent() {
-        val selectedHash = "sha256:selected"
+        val selectedHash = "evsha256:selected"
         val snapshot = MemoryGraphExplorer.build(
             mode = MemoryGraphExplorer.MODE_FOCUS,
             selectedEventHash = selectedHash,
@@ -75,7 +74,7 @@ class MemoryGraphExplorerTest {
 
     @Test
     fun unloadedReferencesAreWatchNotCritical() {
-        val missingHash = "sha256:older-event-not-loaded"
+        val missingHash = "evsha256:older-event-not-loaded"
         val snapshot = MemoryGraphExplorer.build(
             mode = MemoryGraphExplorer.MODE_GLOBAL,
             selectedEventHash = null,
@@ -94,42 +93,33 @@ class MemoryGraphExplorerTest {
         assertTrue(snapshot.edges.none { edge -> edge.health == "critical" })
     }
 
-    private fun event(hash: String, memoryKind: String, body: String): MemoryEventEntity {
-        return MemoryEventEntity(
-            id = 1L,
-            genesisCoreId = "primary_genesis",
-            genesisCoreHash = "sha256:genesis",
-            previousEventHash = null,
+    private fun event(hash: String, memoryKind: String, body: String): MemoryGraphEventView {
+        return MemoryGraphEventView(
             eventHash = hash,
-            hashAlgorithm = "sha256",
-            canonicalization = "morimil.memory_event_hash.v3",
-            signatureAlgorithm = null,
-            eventSignature = null,
+            sequence = 1L,
             eventType = "test.event",
-            actor = "test",
-            source = "test",
-            contextTag = "test",
-            privacyVisibility = "private_local",
             memoryKind = memoryKind,
-            tagsJson = "[]",
-            evidenceJson = "{}",
+            importance = 90,
             confidence = 80,
             userConfirmed = true,
-            body = body,
-            importance = 90,
-            createdAtMillis = 1L
+            body = body
         )
     }
 
-    private fun link(linkId: String, sourceHash: String, targetHash: String, verificationState: String = "valid"): MemoryLinkEntity {
+    private fun link(
+        linkId: String,
+        sourceHash: String,
+        targetHash: String,
+        verificationState: String = "valid"
+    ): MemoryLinkEntity {
         return MemoryLinkEntity(
             linkId = linkId,
-            instanceId = "local",
-            genesisCoreHash = "sha256:genesis",
+            instanceId = "instance-test",
+            genesisCoreHash = "evsha256:birth-root",
             sourceId = sourceHash,
-            sourceType = "memory_event",
+            sourceType = MemoryGraphExplorer.MEMORY_EVENT_NODE_TYPE,
             targetId = targetHash,
-            targetType = "memory_event",
+            targetType = MemoryGraphExplorer.MEMORY_EVENT_NODE_TYPE,
             relation = "supports",
             strength = 0.8,
             reason = "test",
@@ -142,7 +132,11 @@ class MemoryGraphExplorerTest {
         )
     }
 
-    private fun capsule(capsuleId: String, title: String, sourceEventHash: String): KnowledgeCapsuleEntity {
+    private fun capsule(
+        capsuleId: String,
+        title: String,
+        sourceEventHash: String
+    ): KnowledgeCapsuleEntity {
         return KnowledgeCapsuleEntity(
             capsuleId = capsuleId,
             genesisCoreId = "primary_genesis",
@@ -171,7 +165,7 @@ class MemoryGraphExplorerTest {
     private fun recall(recallId: Long, targetEventHash: String): RecallScheduleEntity {
         return RecallScheduleEntity(
             recallId = recallId,
-            genesisCoreId = "primary_genesis",
+            genesisCoreId = "evsha256:birth-root",
             targetEventHash = targetEventHash,
             targetMemoryKind = "decision",
             prompt = "recordar",
@@ -181,7 +175,7 @@ class MemoryGraphExplorerTest {
             dueAtMillis = 1L,
             status = "active",
             lastAction = "created",
-            source = "test",
+            source = "canonical_memory_event",
             createdAtMillis = 1L,
             updatedAtMillis = 1L,
             lastReviewedAtMillis = null
@@ -191,8 +185,8 @@ class MemoryGraphExplorerTest {
     private fun migration(migrationId: String, affectedArtifactsJson: String): MigrationRecordEntity {
         return MigrationRecordEntity(
             migrationId = migrationId,
-            instanceId = "local",
-            genesisCoreHash = "sha256:genesis",
+            instanceId = "instance-test",
+            genesisCoreHash = "evsha256:birth-root",
             proposalId = null,
             migrationType = "test",
             fromVersion = "from",
