@@ -8,29 +8,50 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.morimil.app.core.memory.MemoryBacklink
+import com.morimil.app.core.memory.MemoryBacklinkGraphBuilder
 import com.morimil.app.data.local.MemoryLinkEntity
 import com.morimil.app.data.local.MigrationRecordEntity
 import com.morimil.app.data.local.RecallScheduleEntity
 import com.morimil.app.data.repository.CanonicalMemoryPresentationEvent
+import com.morimil.app.runtime.RestCycleScheduleStatus
 
 @Composable
 fun MemoryScreen(viewModel: MemoryViewModel) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val decisions = uiState.decisions
+    val messages = uiState.messages
+    val projects = uiState.projects
+    val snapshot = uiState.snapshot
+    val events = uiState.events
+    val recalls = uiState.recalls
+    val migrations = uiState.migrations
+    val selfSnapshot = uiState.selfSnapshot
+    val knowledgeCapsules = uiState.knowledgeCapsules
+    val recentLinks = uiState.recentLinks
+    val integrityAudit = uiState.integrityAudit
+    val restCycleScheduleStatus = uiState.restCycleScheduleStatus
+    val organismHealth = uiState.organismHealth
     val selectedMemoryEventHash by viewModel.selectedMemoryEventHash.collectAsStateWithLifecycle()
     val selectedMemoryLinks by viewModel.selectedMemoryLinks.collectAsStateWithLifecycle()
     val selectedGraphEvents by viewModel.selectedGraphEvents.collectAsStateWithLifecycle()
-    val eventsByHash = uiState.events.associateBy { event -> event.eventHash }
-    val selectedEvent = selectedMemoryEventHash?.let { hash ->
+    val eventsByHash = events.associateBy { event -> event.eventHash }
+    val selectedMemoryEvent = selectedMemoryEventHash?.let { hash ->
         eventsByHash[hash] ?: selectedGraphEvents.firstOrNull { event -> event.eventHash == hash }
     }
 
@@ -47,49 +68,54 @@ fun MemoryScreen(viewModel: MemoryViewModel) {
     ) {
         Text("Living Memory", style = MaterialTheme.typography.headlineMedium)
         Text(
-            "Memoria viva verificada de Genesis Ultra. El archivo legacy no se usa como identidad ni como memoria de runtime."
+            "Genesis Ultra verificado + eventos canónicos append-only + órganos locales derivados. " +
+                "El archivo legacy permanece sólo para migración."
         )
-
-        CanonicalSnapshotCard(uiState)
-
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = viewModel::refreshCanonicalMemory) { Text("Actualizar memoria") }
-            Button(onClick = viewModel::runMemoryIntegrityAudit) { Text("Auditar integridad") }
-        }
-
-        val audit = uiState.integrityAudit
-        ProjectCard(
-            "Integridad",
-            when {
-                audit.errorMessage != null -> audit.errorMessage
-                audit.memoryChainVerified == true && audit.capsuleChainVerified == true ->
-                    "Cadena canónica y cápsulas verificadas."
-                audit.memoryChainVerified == false || audit.capsuleChainVerified == false ->
-                    "La verificación requiere atención."
-                else -> "Aún no se ha ejecutado una auditoría manual."
-            }.orEmpty(),
-            when {
-                audit.errorMessage != null -> "error"
-                audit.memoryChainVerified == true && audit.capsuleChainVerified == true -> "verified"
-                audit.memoryChainVerified == false || audit.capsuleChainVerified == false -> "attention"
-                else -> "pending"
-            }
+        HealthStatusCard(
+            health = organismHealth,
+            onRefresh = viewModel::refreshOrganismHealth,
+            onRunIntegrityAudit = viewModel::runMemoryIntegrityAudit
         )
-
         ProjectCard(
             "Historial de conversación",
-            "${uiState.messages.size} turnos operativos; el transcript no es memoria canónica por defecto.",
+            "${messages.size} turnos operativos; no forman parte de la memoria canónica por defecto.",
             "separated"
         )
-        ProjectCard(
-            "Órganos derivados",
-            "${uiState.knowledgeCapsules.size} cápsulas, ${uiState.recentLinks.size} enlaces y " +
-                "${uiState.migrations.size} registros de migración.",
-            "rebuildable"
+        snapshot?.let { liveSnapshot ->
+            ProjectCard(
+                "Living snapshot",
+                "${liveSnapshot.totalEventCount} eventos canónicos verificados; " +
+                    "post_birth=${liveSnapshot.postBirthEventCount}; " +
+                    "last_seq=${liveSnapshot.lastSequence}; " +
+                    "last_hash=${liveSnapshot.lastEventHash.take(24)}",
+                "verified-read-only"
+            )
+        } ?: ProjectCard(
+            "Living snapshot",
+            "La proyección canónica todavía no está disponible para presentación.",
+            "pending"
+        )
+        ProjectCard("Project state", "${projects.size} proyectos persistidos.", "connected")
+        if (decisions.isEmpty()) {
+            ProjectCard("Decision log", "Sin decisiones registradas todavía.", "empty")
+        } else {
+            decisions.take(3).forEach { decision ->
+                ProjectCard(decision.title, "Decision persisted locally.", decision.status)
+            }
+        }
+
+        MemoryOrgansPanel(
+            selfSnapshot = selfSnapshot,
+            knowledgeCapsules = knowledgeCapsules,
+            links = recentLinks,
+            migrations = migrations,
+            audit = integrityAudit,
+            onRunIntegrityAudit = viewModel::runMemoryIntegrityAudit,
+            onOpenMemory = viewModel::selectMemoryEvent
         )
 
-        CanonicalRecallPanel(
-            recalls = uiState.recalls,
+        RecallSchedulePanel(
+            recalls = recalls,
             eventsByHash = eventsByHash,
             onSeedRecalls = viewModel::seedRecallScheduleIfNeeded,
             onReinforceRecall = viewModel::reinforceRecall,
@@ -98,16 +124,16 @@ fun MemoryScreen(viewModel: MemoryViewModel) {
             onOpenMemory = viewModel::selectMemoryEvent
         )
 
-        Text("Memoria canónica", style = MaterialTheme.typography.titleMedium)
-        if (uiState.events.isEmpty()) {
-            ProjectCard(
-                "Eventos verificados",
-                "No hay eventos post-birth disponibles para presentación.",
-                "empty"
-            )
+        Text("Memory review queue", style = MaterialTheme.typography.titleMedium)
+        Text(
+            "Los recuerdos canónicos son append-only. Aprobar, corregir o degradar crea una " +
+                "revisión canónica nueva; no modifica el evento original."
+        )
+        if (events.isEmpty()) {
+            ProjectCard("Memory events", "Sin eventos canónicos visibles todavía.", "empty")
         } else {
-            uiState.events.asReversed().take(16).forEach { event ->
-                CanonicalMemoryEventCard(
+            events.asReversed().take(12).forEach { event ->
+                MemoryEventReviewCard(
                     event = event,
                     selected = selectedMemoryEventHash == event.eventHash,
                     onSelect = viewModel::selectMemoryEvent,
@@ -118,63 +144,58 @@ fun MemoryScreen(viewModel: MemoryViewModel) {
             }
         }
 
-        CanonicalMemoryGraphPanel(
-            selectedEvent = selectedEvent,
-            selectedLinks = selectedMemoryLinks,
+        RestCycleHistoryPanel(
+            migrations = migrations,
+            scheduleStatus = restCycleScheduleStatus,
+            onApproveRestCycle = viewModel::approveRestCycleConsolidation,
+            onRunRestCycleNow = viewModel::runRestCycleNow,
+            onEnableSchedule = viewModel::enableRestCycleSchedule,
+            onCancelSchedule = viewModel::cancelRestCycleSchedule,
+            onRefreshSchedule = viewModel::refreshRestCycleScheduleStatus
+        )
+        CognitiveMigrationPanel(
+            migrations = migrations,
+            onProposeMigration = viewModel::proposeCognitiveMigration,
+            onApproveMigration = viewModel::approveCognitiveMigration,
+            onExecuteMigration = viewModel::executeCognitiveMigration,
+            onRollbackMigration = viewModel::rollbackCognitiveMigration
+        )
+        MemoryGraphCanvasPanel(
+            selectedEventHash = selectedMemoryEventHash,
+            selectedEvent = selectedMemoryEvent,
             graphEvents = selectedGraphEvents,
-            onSelect = viewModel::selectMemoryEvent,
-            onClear = viewModel::clearSelectedMemoryEvent
+            allEvents = events,
+            links = if (selectedMemoryEventHash == null) {
+                recentLinks
+            } else {
+                selectedMemoryLinks + recentLinks
+            },
+            knowledgeCapsules = knowledgeCapsules,
+            recalls = recalls,
+            migrations = migrations,
+            projects = projects,
+            decisions = decisions,
+            onSelectEventHash = viewModel::selectMemoryEvent,
+            onClearSelection = viewModel::clearSelectedMemoryEvent
         )
-
-        RestCyclePanel(
-            migrations = uiState.migrations,
-            scheduleState = uiState.restCycleScheduleStatus.stateLabel,
-            scheduleAttention = uiState.restCycleScheduleStatus.needsAttention,
-            onApprove = viewModel::approveRestCycleConsolidation,
-            onRunNow = viewModel::runRestCycleNow,
-            onEnable = viewModel::enableRestCycleSchedule,
-            onCancel = viewModel::cancelRestCycleSchedule,
-            onRefresh = viewModel::refreshRestCycleScheduleStatus
+        MemoryBacklinksPanel(
+            selectedEventHash = selectedMemoryEventHash,
+            selectedEvent = selectedMemoryEvent,
+            selectedLinks = selectedMemoryLinks,
+            eventsByHash = eventsByHash,
+            onSelectEventHash = viewModel::selectMemoryEvent,
+            onClearSelection = viewModel::clearSelectedMemoryEvent
         )
-
-        CognitiveMigrationPanelCanonical(
-            migrations = uiState.migrations,
-            onPropose = viewModel::proposeCognitiveMigration,
-            onApprove = viewModel::approveCognitiveMigration,
-            onExecute = viewModel::executeCognitiveMigration,
-            onRollback = viewModel::rollbackCognitiveMigration
-        )
-
         ProjectCard(
-            "Boundary",
-            "Instance ≠ Body. Guardian = custodio/testigo sin propiedad. Modelos y proveedores no son autoridad de identidad ni memoria.",
+            "Scope guardian",
+            "Guardian = custodio/testigo sin propiedad; Instance ≠ Body; memoria canónica ≠ archivo legacy.",
             "protected"
         )
     }
 }
 
 @Composable
-private fun CanonicalSnapshotCard(uiState: MemoryUiState) {
-    val snapshot = uiState.snapshot
-    if (snapshot == null) {
-        ProjectCard(
-            "Genesis Ultra memory",
-            "La proyección canónica todavía no está disponible para presentación.",
-            "waiting"
-        )
-        return
-    }
-    ProjectCard(
-        "Genesis Ultra memory",
-        "instance=${snapshot.instanceId.take(24)} · events=${snapshot.totalEventCount} · " +
-            "post_birth=${snapshot.postBirthEventCount} · last_seq=${snapshot.lastSequence} · " +
-            "last_hash=${snapshot.lastEventHash.take(24)}",
-        "verified-read-only"
-    )
-}
-
-@Composable
-private fun CanonicalMemoryEventCard(
+private fun MemoryEventReviewCard(
     event: CanonicalMemoryPresentationEvent,
     selected: Boolean,
     onSelect: (String) -> Unit,
@@ -182,37 +203,85 @@ private fun CanonicalMemoryEventCard(
     onDegrade: (CanonicalMemoryPresentationEvent) -> Unit,
     onRequestCorrection: (CanonicalMemoryPresentationEvent) -> Unit
 ) {
-    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+    val isQuarantine = event.memoryKind == "integrity_quarantine" ||
+        event.eventType == "memory_integrity.quarantine"
+    ElevatedCard(
+        colors = CardDefaults.elevatedCardColors(
+            containerColor = if (isQuarantine) {
+                MaterialTheme.colorScheme.tertiaryContainer
+            } else {
+                MaterialTheme.colorScheme.surface
+            }
+        )
+    ) {
         Column(
             modifier = Modifier.padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                MemoryKindChip(event.memoryKind)
+                if (isQuarantine) StatusChip("cuarentena", attention = true)
+            }
+            Text(event.eventType, style = MaterialTheme.typography.titleMedium)
+            Text(event.body.take(340))
             Text(
-                "${event.memoryKind} · seq=${event.sequence}",
-                style = MaterialTheme.typography.titleMedium
+                "seq=${event.sequence} actor=${event.actor} source=${event.source} " +
+                    "importance=${event.importance} confidence=${event.confidence} " +
+                    "hash=${event.eventHash.take(24)}"
             )
-            Text(event.eventType)
-            Text(event.body.take(360))
-            Text(
-                "actor=${event.actor} source=${event.source} i=${event.importance} " +
-                    "c=${event.confidence} hash=${event.eventHash.take(24)}"
-            )
+            if (selected) {
+                AssistChip(onClick = {}, label = { Text("Backlinks abiertos") })
+            } else {
+                Button(onClick = { onSelect(event.eventHash) }) { Text("Ver backlinks") }
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = { onSelect(event.eventHash) }) {
-                    Text(if (selected) "Backlinks abiertos" else "Ver backlinks")
-                }
                 Button(onClick = { onApprove(event) }) { Text("Aprobar") }
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = { onDegrade(event) }) { Text("Degradar ruido") }
-                Button(onClick = { onRequestCorrection(event) }) { Text("Pedir corrección") }
             }
+            Button(onClick = { onRequestCorrection(event) }) { Text("Pedir corrección") }
         }
     }
 }
 
 @Composable
-private fun CanonicalRecallPanel(
+private fun MemoryKindChip(memoryKind: String) {
+    val container = memoryKindContainerColor(memoryKind)
+    val labelColor = if (memoryKind == "chat_noise") {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    } else {
+        Color.White
+    }
+    AssistChip(
+        onClick = {},
+        label = { Text(memoryKind.ifBlank { "memory" }) },
+        colors = AssistChipDefaults.assistChipColors(
+            containerColor = container,
+            labelColor = labelColor
+        )
+    )
+}
+
+@Composable
+private fun memoryKindContainerColor(memoryKind: String): Color {
+    return when (memoryKind) {
+        "identity" -> Color(0xFF166534)
+        "decision" -> Color(0xFF0F766E)
+        "preference" -> Color(0xFF15803D)
+        "correction", "error_detected" -> Color(0xFFB45309)
+        "approval" -> Color(0xFF2563EB)
+        "rejection" -> Color(0xFF991B1B)
+        "learning" -> Color(0xFF6D4C41)
+        "integrity_quarantine" -> MaterialTheme.colorScheme.tertiary
+        "chat_noise" -> MaterialTheme.colorScheme.surfaceVariant
+        else -> MaterialTheme.colorScheme.secondary
+    }
+}
+
+@Composable
+private fun RecallSchedulePanel(
     recalls: List<RecallScheduleEntity>,
     eventsByHash: Map<String, CanonicalMemoryPresentationEvent>,
     onSeedRecalls: () -> Unit,
@@ -221,40 +290,99 @@ private fun CanonicalRecallPanel(
     onDegradeRecall: (Long) -> Unit,
     onOpenMemory: (String) -> Unit
 ) {
-    Text("Recalls", style = MaterialTheme.typography.titleMedium)
-    Text("Los recalls se resuelven contra hashes de eventos canónicos verificados.")
+    val now = System.currentTimeMillis()
+    val overdue = recalls
+        .filter { recall -> recall.dueAtMillis <= now }
+        .sortedWith(
+            compareByDescending<RecallScheduleEntity> { it.priority }
+                .thenBy { it.dueAtMillis }
+        )
+    val future = recalls
+        .filter { recall -> recall.dueAtMillis > now }
+        .sortedWith(
+            compareBy<RecallScheduleEntity> { it.dueAtMillis }
+                .thenByDescending { it.priority }
+        )
+
+    Text("Recalls pendientes", style = MaterialTheme.typography.titleMedium)
+    Text("Recalls derivados de eventos canónicos verificados.")
     Button(onClick = onSeedRecalls) {
         Text(if (recalls.isEmpty()) "Crear recalls" else "Actualizar recalls")
     }
 
     if (recalls.isEmpty()) {
-        ProjectCard("Recall schedule", "No hay recalls activos.", "empty")
+        ProjectCard("Recall schedule", "No hay recalls activos todavía.", "empty")
         return
     }
 
-    recalls.take(12).forEach { recall ->
-        val target = eventsByHash[recall.targetEventHash]
-        ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+    RecallScheduleSection(
+        "Vencidos ahora",
+        "No hay recalls vencidos.",
+        overdue.take(8),
+        eventsByHash,
+        onReinforceRecall,
+        onPostponeRecall,
+        onDegradeRecall,
+        onOpenMemory
+    )
+    RecallScheduleSection(
+        "Futuros",
+        "No hay recalls futuros.",
+        future.take(8),
+        eventsByHash,
+        onReinforceRecall,
+        onPostponeRecall,
+        onDegradeRecall,
+        onOpenMemory
+    )
+}
+
+@Composable
+private fun RecallScheduleSection(
+    title: String,
+    emptyText: String,
+    recalls: List<RecallScheduleEntity>,
+    eventsByHash: Map<String, CanonicalMemoryPresentationEvent>,
+    onReinforceRecall: (Long) -> Unit,
+    onPostponeRecall: (Long) -> Unit,
+    onDegradeRecall: (Long) -> Unit,
+    onOpenMemory: (String) -> Unit
+) {
+    Text(title, style = MaterialTheme.typography.titleMedium)
+    if (recalls.isEmpty()) {
+        Text(emptyText)
+        return
+    }
+
+    recalls.forEach { recall ->
+        val targetEvent = eventsByHash[recall.targetEventHash]
+        ElevatedCard {
             Column(
                 modifier = Modifier.padding(12.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
-                    "${recall.targetMemoryKind} · priority=${recall.priority}",
+                    "${recall.targetMemoryKind} / priority=${recall.priority}",
                     style = MaterialTheme.typography.titleMedium
                 )
                 Text(recall.prompt.take(360))
-                if (target != null) {
-                    Text("canonical_seq=${target.sequence}: ${target.body.take(180)}")
-                } else {
-                    Text("Evento canónico no cargado en la ventana actual: ${recall.targetEventHash.take(24)}")
-                }
+                Text(
+                    "due=${recall.dueAtMillis} interval=${recall.intervalDays}d " +
+                        "action=${recall.lastAction}"
+                )
+                Text("organ=${recall.source} link=${recall.targetEventHash.take(24)}")
+                targetEvent?.let { event ->
+                    Text("recuerdo=${event.memoryKind}: ${event.body.take(180)}")
+                } ?: Text("Evento canónico fuera de la ventana visual; el hash sigue siendo resoluble.")
+                Text("reason=${recall.reason.take(180)}")
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(onClick = { onReinforceRecall(recall.recallId) }) { Text("Reforzar") }
                     Button(onClick = { onPostponeRecall(recall.recallId) }) { Text("Posponer") }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = { onOpenMemory(recall.targetEventHash) }) { Text("Abrir recuerdo") }
+                    Button(onClick = { onOpenMemory(recall.targetEventHash) }) {
+                        Text("Abrir recuerdo")
+                    }
                     Button(onClick = { onDegradeRecall(recall.recallId) }) { Text("Degradar") }
                 }
             }
@@ -263,115 +391,365 @@ private fun CanonicalRecallPanel(
 }
 
 @Composable
-private fun CanonicalMemoryGraphPanel(
-    selectedEvent: CanonicalMemoryPresentationEvent?,
-    selectedLinks: List<MemoryLinkEntity>,
-    graphEvents: List<CanonicalMemoryPresentationEvent>,
-    onSelect: (String) -> Unit,
-    onClear: () -> Unit
+private fun CognitiveMigrationPanel(
+    migrations: List<MigrationRecordEntity>,
+    onProposeMigration: () -> Unit,
+    onApproveMigration: (String) -> Unit,
+    onExecuteMigration: (String) -> Unit,
+    onRollbackMigration: (String) -> Unit
 ) {
-    Text("Backlinks canónicos", style = MaterialTheme.typography.titleMedium)
-    if (selectedEvent == null) {
-        Text("Selecciona un evento canónico para inspeccionar enlaces derivados.")
+    val cognitiveMigrations = migrations
+        .filter { migration -> migration.migrationType == COGNITIVE_MIGRATION_TYPE }
+        .take(8)
+    Text("Migraciones cognitivas", style = MaterialTheme.typography.titleMedium)
+    Text("Propuestas auditables para refinar memoria sin reescribir eventos originales.")
+    Button(onClick = onProposeMigration) { Text("Proponer migración") }
+
+    if (cognitiveMigrations.isEmpty()) {
+        ProjectCard(
+            "Auditoría cognitiva",
+            "Todavía no hay migraciones cognitivas propuestas.",
+            "empty"
+        )
         return
     }
 
-    ProjectCard(
-        "Evento seleccionado",
-        "seq=${selectedEvent.sequence} · ${selectedEvent.eventType} · ${selectedEvent.eventHash.take(28)}",
-        "canonical"
-    )
-    Text("links=${selectedLinks.size} · canonical_events=${graphEvents.size}")
-    graphEvents
-        .filterNot { event -> event.eventHash == selectedEvent.eventHash }
-        .take(8)
-        .forEach { event ->
-            Button(onClick = { onSelect(event.eventHash) }) {
-                Text("seq=${event.sequence} · ${event.memoryKind} · ${event.eventHash.take(14)}")
-            }
-        }
-    Button(onClick = onClear) { Text("Cerrar backlinks") }
-}
-
-@Composable
-private fun RestCyclePanel(
-    migrations: List<MigrationRecordEntity>,
-    scheduleState: String,
-    scheduleAttention: Boolean,
-    onApprove: (String) -> Unit,
-    onRunNow: () -> Unit,
-    onEnable: () -> Unit,
-    onCancel: () -> Unit,
-    onRefresh: () -> Unit
-) {
-    Text("REST", style = MaterialTheme.typography.titleMedium)
-    ProjectCard(
-        "Scheduler",
-        "state=$scheduleState",
-        if (scheduleAttention) "attention" else "ready"
-    )
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Button(onClick = onRunNow) { Text("Ejecutar REST") }
-        Button(onClick = onRefresh) { Text("Actualizar") }
-    }
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Button(onClick = onEnable) { Text("Activar agenda") }
-        Button(onClick = onCancel) { Text("Cancelar agenda") }
-    }
-
-    migrations
-        .filter { migration -> migration.migrationType == REST_CYCLE_MIGRATION_TYPE }
-        .take(6)
-        .forEach { migration ->
-            ProjectCard(
-                "REST ${migration.status}",
-                migration.expectedEffect.take(260),
-                migration.migrationId.take(28)
-            )
-            if (migration.status == "planned") {
-                Button(onClick = { onApprove(migration.migrationId) }) { Text("Aprobar REST") }
-            }
-        }
-}
-
-@Composable
-private fun CognitiveMigrationPanelCanonical(
-    migrations: List<MigrationRecordEntity>,
-    onPropose: () -> Unit,
-    onApprove: (String) -> Unit,
-    onExecute: (String) -> Unit,
-    onRollback: (String) -> Unit
-) {
-    Text("Migraciones cognitivas", style = MaterialTheme.typography.titleMedium)
-    Text("Propuestas auditables; ningún refinamiento reescribe la memoria canónica existente.")
-    Button(onClick = onPropose) { Text("Proponer migración") }
-
-    migrations
-        .filter { migration -> migration.migrationType == COGNITIVE_MIGRATION_TYPE }
-        .take(8)
-        .forEach { migration ->
-            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-                Column(
-                    modifier = Modifier.padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        "${migration.status} · ${migration.riskLevel}",
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                    Text(migration.expectedEffect.take(300))
-                    when (migration.status) {
-                        "planned" -> Button(onClick = { onApprove(migration.migrationId) }) {
+    cognitiveMigrations.forEach { migration ->
+        ElevatedCard {
+            Column(
+                modifier = Modifier.padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    "${migration.status} / risk=${migration.riskLevel}",
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Text(
+                    "approved=${migration.approvedByUser} chain=${migration.chainVerified} " +
+                        "backup=${migration.backupRequired} rollback=${migration.rollbackAvailable}"
+                )
+                Text(
+                    "pre=${migration.preSnapshotId} " +
+                        "post=${migration.postSnapshotId?.take(32) ?: "pending"}"
+                )
+                Text("Diff lógico", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    migrationPlanSection(migration.expectedEffect, "diff_logico")
+                        .ifBlank { "Sin diff visible." }
+                        .take(900)
+                )
+                Text("Cápsulas propuestas", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    migrationPlanSection(migration.expectedEffect, "capsulas_propuestas")
+                        .ifBlank { "Sin cápsulas propuestas." }
+                        .take(900)
+                )
+                Text("Backlinks propuestos", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    migrationPlanSection(migration.expectedEffect, "backlinks_propuestos")
+                        .ifBlank { "Sin backlinks propuestos." }
+                        .take(900)
+                )
+                Text("Auditoría y resultado", style = MaterialTheme.typography.titleMedium)
+                Text("steps=${migration.stepsJson.take(360)}")
+                Text("result=${migration.errorsJson.take(360)}")
+                Text("strategy=${migration.rollbackStrategy.take(360)}")
+                Text("affected=${migration.affectedArtifactsJson.take(360)}")
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (migration.status == "planned" && !migration.approvedByUser) {
+                        Button(onClick = { onApproveMigration(migration.migrationId) }) {
                             Text("Aprobar")
                         }
-                        "approved" -> Button(onClick = { onExecute(migration.migrationId) }) {
+                    }
+                    if (migration.status == "approved") {
+                        Button(onClick = { onExecuteMigration(migration.migrationId) }) {
                             Text("Ejecutar")
                         }
-                        "completed" -> if (migration.rollbackAvailable) {
-                            Button(onClick = { onRollback(migration.migrationId) }) { Text("Rollback") }
-                        }
+                    }
+                }
+                if (
+                    migration.rollbackAvailable &&
+                    migration.status in setOf("approved", "completed", "failed")
+                ) {
+                    Button(onClick = { onRollbackMigration(migration.migrationId) }) {
+                        Text("Rollback")
                     }
                 }
             }
         }
+    }
 }
+
+private fun migrationPlanSection(plan: String, sectionName: String): String {
+    val header = "$sectionName:"
+    val lines = plan.lines()
+    val startIndex = lines.indexOfFirst { line -> line.trim() == header }
+    if (startIndex == -1) return ""
+
+    return lines
+        .drop(startIndex + 1)
+        .takeWhile { line -> !line.trim().isMigrationPlanHeader() }
+        .joinToString("\n")
+        .trim()
+}
+
+private fun String.isMigrationPlanHeader(): Boolean {
+    return this in setOf(
+        "diff_logico:",
+        "capsulas_propuestas:",
+        "backlinks_propuestos:",
+        "eventos_seleccionados:"
+    ) || startsWith("policy=")
+}
+
+@Composable
+private fun RestCycleHistoryPanel(
+    migrations: List<MigrationRecordEntity>,
+    scheduleStatus: RestCycleScheduleStatus,
+    onApproveRestCycle: (String) -> Unit,
+    onRunRestCycleNow: () -> Unit,
+    onEnableSchedule: () -> Unit,
+    onCancelSchedule: () -> Unit,
+    onRefreshSchedule: () -> Unit
+) {
+    val restCycles = migrations
+        .filter { migration -> migration.migrationType == REST_CYCLE_MIGRATION_TYPE }
+        .take(8)
+    Text("Rest cycle", style = MaterialTheme.typography.titleMedium)
+    Text("Consolidaciones locales programadas, con aprobación para cambios importantes.")
+    RestCycleSchedulePanel(
+        status = scheduleStatus,
+        onRunRestCycleNow = onRunRestCycleNow,
+        onEnableSchedule = onEnableSchedule,
+        onCancelSchedule = onCancelSchedule,
+        onRefreshSchedule = onRefreshSchedule
+    )
+
+    if (restCycles.isEmpty()) {
+        ProjectCard(
+            "Historial de descanso",
+            "Todavía no hay consolidaciones registradas.",
+            "empty"
+        )
+        return
+    }
+
+    restCycles.forEach { migration ->
+        val report = RestCycleReportUiStateBuilder.build(migration)
+        ElevatedCard {
+            Column(
+                modifier = Modifier.padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    "${migration.status} / risk=${migration.riskLevel}",
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    StatusChip("modo=${report.mode}")
+                    StatusChip("riesgo=${report.risk}", attention = report.risk != "low")
+                    StatusChip(
+                        "cadena=${report.fullChainVerified}",
+                        attention = report.fullChainVerified != "true"
+                    )
+                }
+                Text(
+                    "organos_con_alerta=${report.organReconciliation} " +
+                        "capsulas_ok=${report.capsuleChainVerified} " +
+                        "eventos=${report.sourceEvents} utiles=${report.meaningfulEvents}"
+                )
+                Text("policy=${report.policyReason}")
+                report.tasks.take(6).forEach { task -> RestCycleTaskLine(task) }
+                if (report.resultNotes.isNotEmpty()) {
+                    Text("Resultado", style = MaterialTheme.typography.titleMedium)
+                    report.resultNotes.take(6).forEach { note -> Text(note.take(180)) }
+                }
+                Text(
+                    "approval_required=${report.approvalRequired} " +
+                        "approved=${migration.approvedByUser} " +
+                        "rollback=${migration.rollbackAvailable}"
+                )
+                Text("strategy=${migration.rollbackStrategy.take(220)}")
+                if (
+                    migration.status == "planned" &&
+                    migration.approvalRequired &&
+                    !migration.approvedByUser
+                ) {
+                    Button(onClick = { onApproveRestCycle(migration.migrationId) }) {
+                        Text("Aprobar consolidación")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RestCycleSchedulePanel(
+    status: RestCycleScheduleStatus,
+    onRunRestCycleNow: () -> Unit,
+    onEnableSchedule: () -> Unit,
+    onCancelSchedule: () -> Unit,
+    onRefreshSchedule: () -> Unit
+) {
+    ElevatedCard {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text("Programación del descanso", style = MaterialTheme.typography.titleMedium)
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                StatusChip("estado=${status.stateLabel}", attention = status.needsAttention)
+                StatusChip("cada=${status.repeatIntervalHours}h")
+                StatusChip("flex=${status.flexIntervalHours}h")
+            }
+            Text(
+                "inicio=${status.initialDelayMinutes}min " +
+                    "bateria_ok=${status.requiresBatteryNotLow} " +
+                    "storage_ok=${status.requiresStorageNotLow}"
+            )
+            status.errorMessage?.let { error -> Text("scheduler_error=${error.take(160)}") }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = onRunRestCycleNow) { Text("Ejecutar ahora") }
+                Button(onClick = onEnableSchedule) {
+                    Text(if (status.isScheduled) "Asegurar agenda" else "Activar")
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = onRefreshSchedule) { Text("Actualizar estado") }
+                Button(enabled = status.isScheduled, onClick = onCancelSchedule) {
+                    Text("Pausar automático")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RestCycleTaskLine(task: RestCycleTaskUiState) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        StatusChip(task.status, attention = task.risk != "low")
+        Text("${task.name}: ${task.note}".take(160))
+    }
+}
+
+@Composable
+private fun MemoryBacklinksPanel(
+    selectedEventHash: String?,
+    selectedEvent: CanonicalMemoryPresentationEvent?,
+    selectedLinks: List<MemoryLinkEntity>,
+    eventsByHash: Map<String, CanonicalMemoryPresentationEvent>,
+    onSelectEventHash: (String) -> Unit,
+    onClearSelection: () -> Unit
+) {
+    Text("Backlinks de memoria", style = MaterialTheme.typography.titleMedium)
+    if (selectedEventHash == null) {
+        ProjectCard(
+            "Grafo de recuerdos",
+            "Selecciona un recuerdo canónico para ver qué apunta a él y a qué apunta.",
+            "empty"
+        )
+        return
+    }
+
+    val graph = MemoryBacklinkGraphBuilder.buildForNode(
+        nodeId = selectedEventHash,
+        nodeType = CANONICAL_MEMORY_EVENT_NODE_TYPE,
+        links = selectedLinks
+    )
+
+    ElevatedCard {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text("Recuerdo seleccionado", style = MaterialTheme.typography.titleMedium)
+            Text(selectedEvent?.body?.take(260) ?: selectedEventHash.take(32))
+            Text("hash=${selectedEventHash.take(32)} links=${selectedLinks.size}")
+            Button(onClick = onClearSelection) { Text("Cerrar") }
+            MemoryBacklinkSection(
+                "Este recuerdo apunta a...",
+                "Este recuerdo todavía no apunta a otros nodos.",
+                graph.outgoing,
+                eventsByHash,
+                onSelectEventHash
+            )
+            MemoryBacklinkSection(
+                "Este recuerdo es mencionado por...",
+                "Ningún nodo reciente apunta todavía a este recuerdo.",
+                graph.incoming,
+                eventsByHash,
+                onSelectEventHash
+            )
+        }
+    }
+}
+
+@Composable
+private fun MemoryBacklinkSection(
+    title: String,
+    emptyText: String,
+    backlinks: List<MemoryBacklink>,
+    eventsByHash: Map<String, CanonicalMemoryPresentationEvent>,
+    onSelectEventHash: (String) -> Unit
+) {
+    Text(title, style = MaterialTheme.typography.titleMedium)
+    if (backlinks.isEmpty()) {
+        Text(emptyText)
+        return
+    }
+
+    backlinks.take(8).forEach { backlink ->
+        val linkedEvent = eventsByHash[backlink.linkedNodeId]
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(
+                "${backlink.link.relation} / strength=${backlink.link.strength} / " +
+                    backlink.link.reason.take(120)
+            )
+            if (backlink.linkedNodeType == CANONICAL_MEMORY_EVENT_NODE_TYPE) {
+                Button(onClick = { onSelectEventHash(backlink.linkedNodeId) }) {
+                    Text(
+                        memoryNodeLabel(
+                            linkedEvent,
+                            backlink.linkedNodeId,
+                            backlink.linkedNodeType
+                        ).take(90)
+                    )
+                }
+            } else {
+                AssistChip(
+                    onClick = {},
+                    label = {
+                        Text(
+                            memoryNodeLabel(
+                                linkedEvent,
+                                backlink.linkedNodeId,
+                                backlink.linkedNodeType
+                            ).take(90)
+                        )
+                    }
+                )
+            }
+        }
+    }
+}
+
+private fun memoryNodeLabel(
+    event: CanonicalMemoryPresentationEvent?,
+    nodeId: String,
+    nodeType: String
+): String {
+    if (event == null) return "$nodeType ${nodeId.take(24)}"
+    return "${event.memoryKind} / ${event.eventType}: ${event.body.take(90)}"
+}
+
+private const val CANONICAL_MEMORY_EVENT_NODE_TYPE = "canonical_memory_event"
