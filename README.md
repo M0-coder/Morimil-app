@@ -17,9 +17,15 @@ Connected now:
   encrypted Room/SQLCipher persistence
   signed canonical memory with verification and quarantine
   explicit Guardian-approved transcript-to-memory promotion
-  derived memory-organ and recall scheduling infrastructure
-    (canonical rest-cycle/recall bootstrap is still pending)
-  process-death-safe ProjectVault outbox
+  common deterministic cross-database operation protocol for bounded
+    COG, ORCH, AGENT, BOOT and REST owners
+  process-death-safe protected ProjectVault outbox
+  canonical REST planning, durable execution and proposal-only repair evidence
+  canonical RECALL derived rebuild plus read-only startup readiness
+  dependency-derived bootstrap Health from legacy convergence plus verified
+    REST/RECALL readiness
+  Local Nervous System Health observation through verified canonical
+    living-memory signals without canonical or legacy memory-write authority
   voice controls
   packaged local Canvas with a fail-closed WebView boundary
   Morimil-owned reasoning kernel
@@ -27,9 +33,9 @@ Connected now:
   model discovery through compatible model catalogs
 
 Not completed:
-  common cross-database operation protocol
-  irreversible legacy-runtime removal
-  canonical rest-cycle and recall bootstrap
+  full F1/F3.2 closure evidence bound to an exact protected-main execution
+  irreversible legacy-runtime removal (F3.3)
+  REST repair approval/execution beyond the integrated proposal-only path
   durable pending/completed/failed transcript lifecycle
   Body export, restore, succession, and old-Body revocation
   PC executor automation
