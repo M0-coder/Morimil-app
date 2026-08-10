@@ -7,15 +7,18 @@ import org.junit.Test
 
 class LegacyBirthPathDisabledContractTest {
     @Test
-    fun chatCoordinatorCannotInstallOrCommitLegacyBirth() {
+    fun chatCoordinatorContainsNoLegacyBirthCompatibilitySurface() {
         val source = sourceFile(
             "src/main/java/com/morimil/app/ui/MorimilChatCoordinator.kt"
         ).readText()
 
-        assertTrue(source.contains("legacy_local_birth_path_disabled_use_genesis_ultra"))
-        assertFalse(source.contains("container.genesisReader.installGenesisBundle("))
-        assertFalse(source.contains("container.memoryRepository.birthLocalIdentity("))
-        assertFalse(source.contains("GenesisUltraIntegrationGate.requireBirthReady"))
+        assertTrue(source.contains("genesisUltraRuntimeIdentityRepository"))
+        assertTrue(source.contains("readCommittedIdentity("))
+        assertFalse(source.contains("bornInstance("))
+        assertFalse(source.contains("birthLocalIdentity("))
+        assertFalse(source.contains("genesisReader"))
+        assertFalse(source.contains("LocalInstanceIdentityEntity"))
+        assertFalse(source.contains("legacy_local_birth_path_disabled_use_genesis_ultra"))
     }
 
     @Test
