@@ -1,4 +1,4 @@
-# Document status: CANDIDATE
+# Document status: PROPOSAL
 
 # F3.3-A — canonical runtime surface cut
 
