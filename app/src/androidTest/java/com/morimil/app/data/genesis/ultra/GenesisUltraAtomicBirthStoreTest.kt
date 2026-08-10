@@ -226,7 +226,7 @@ class GenesisUltraAtomicBirthStoreTest {
         assertEquals(first.event.eventHash, second.event.previousEventHash)
         assertEquals(2, stream.postBirthEventCount)
         assertEquals(2, database.genesisUltraMemoryDao().countAll())
-        assertEquals(0, database.memoryDao().countMemoryEvents())
+        assertEquals(0, database.legacyArchiveReadDao().countMemoryEvents())
         assertEquals(
             bundle.birthState.firstMemoryEventHash,
             stream.livingRoot.event.eventHash
@@ -314,7 +314,7 @@ class GenesisUltraAtomicBirthStoreTest {
         assertEquals(bundle.birthState.firstMemoryEventHash, result.firstPostBirthMemory.event.previousEventHash)
         assertEquals(1, database.genesisUltraBirthDao().countBirthCommits())
         assertEquals(1, database.genesisUltraMemoryDao().countAll())
-        assertEquals(0, database.memoryDao().countMemoryEvents())
+        assertEquals(0, database.legacyArchiveReadDao().countMemoryEvents())
     }
 
     @Test

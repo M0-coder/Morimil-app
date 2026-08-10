@@ -1,6 +1,7 @@
 package com.morimil.app.runtime
 
 import com.morimil.app.data.genesis.ultra.GenesisUltraRuntimeIdentity
+import com.morimil.app.data.genesis.ultra.LegacyBirthConflictProbe
 import com.morimil.app.data.local.CrossDatabaseOperationStatus
 import com.morimil.app.data.local.LegacyMemoryConvergenceEntity
 import com.morimil.app.data.local.MemoryOrganDatabase
@@ -187,13 +188,14 @@ internal class GenesisUltraRuntimeBootstrapCoordinator private constructor(
             probeRestCycleReady: suspend (GenesisUltraRuntimeIdentity) -> Boolean = { false },
             probeRecallReady: suspend (GenesisUltraRuntimeIdentity) -> Boolean = { false }
         ): GenesisUltraRuntimeBootstrapCoordinator {
-            val memoryDao = memoryDatabase.memoryDao()
+            val legacyConflictProbe = LegacyBirthConflictProbe.production(memoryDatabase)
             val organDao = organDatabase.memoryOrganDao()
             return GenesisUltraRuntimeBootstrapCoordinator(
                 inspectLegacyCounts = {
+                    val counts = legacyConflictProbe.inspect()
                     GenesisUltraRuntimeLegacyCounts(
-                        localIdentityCount = memoryDao.countLocalIdentity(),
-                        genesisCoreCount = memoryDao.countGenesisCore()
+                        localIdentityCount = counts.localIdentityCount,
+                        genesisCoreCount = counts.genesisCoreCount
                     )
                 },
                 executeDurableBootstrap = { identity, _ ->

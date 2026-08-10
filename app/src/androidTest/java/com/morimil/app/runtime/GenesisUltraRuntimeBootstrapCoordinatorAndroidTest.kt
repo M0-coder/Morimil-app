@@ -77,6 +77,7 @@ class GenesisUltraRuntimeBootstrapCoordinatorAndroidTest {
         val second = coordinator.bootstrap(identity, nowMillis = 20_000L)
 
         val memoryDao = memoryDatabase.memoryDao()
+        val legacyArchiveDao = memoryDatabase.legacyArchiveReadDao()
         val organDao = organDatabase.memoryOrganDao()
         val workspace = memoryDao.observeActiveWorkspace().first()
         val projects = memoryDao.observeProjects().first()
@@ -87,8 +88,8 @@ class GenesisUltraRuntimeBootstrapCoordinatorAndroidTest {
             organDatabase.crossDatabaseOperationDao().loadOperation(command.operationId)
         )
 
-        assertEquals(0, memoryDao.countLocalIdentity())
-        assertEquals(0, memoryDao.countGenesisCore())
+        assertEquals(0, legacyArchiveDao.countLocalIdentity())
+        assertEquals(0, legacyArchiveDao.countGenesisCore())
         assertEquals(1, memoryDao.countWorkspaces())
         assertEquals(identity.instanceId, workspace?.workspaceId)
         assertEquals(identity.companionName, workspace?.displayName)
@@ -162,6 +163,7 @@ class GenesisUltraRuntimeBootstrapCoordinatorAndroidTest {
         val report = coordinator.bootstrap(identity, nowMillis = 30_000L)
         val agents = organDao.observeAgentProfiles().first()
         val devices = organDao.observeOrchestratorDevices().first()
+        val legacyArchiveDao = memoryDatabase.legacyArchiveReadDao()
 
         assertEquals(1, agents.size)
         assertEquals(legacyAgent, agents.single())
@@ -170,8 +172,8 @@ class GenesisUltraRuntimeBootstrapCoordinatorAndroidTest {
         assertEquals(1, report.agentProfileCount)
         assertEquals(1, report.orchestratorDeviceCount)
         assertEquals(1, canonicalEnsureCalls)
-        assertEquals(0, memoryDatabase.memoryDao().countLocalIdentity())
-        assertEquals(0, memoryDatabase.memoryDao().countGenesisCore())
+        assertEquals(0, legacyArchiveDao.countLocalIdentity())
+        assertEquals(0, legacyArchiveDao.countGenesisCore())
     }
 
     private fun bootstrapProtocol(

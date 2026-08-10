@@ -29,6 +29,7 @@ import androidx.room.RoomDatabase
 )
 abstract class MorimilDatabase : RoomDatabase() {
     abstract fun memoryDao(): MemoryDao
+    abstract fun legacyArchiveReadDao(): LegacyArchiveReadDao
     abstract fun reasoningTranscriptDao(): ReasoningTranscriptDao
     abstract fun genesisUltraBirthDao(): GenesisUltraBirthDao
     abstract fun genesisUltraMemoryDao(): GenesisUltraMemoryDao

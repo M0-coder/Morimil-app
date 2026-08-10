@@ -138,7 +138,7 @@ class GenesisUltraHostBirthConsentStoreTest {
         assertFalse(AndroidKeystore.hasKey(consentMasterKeyAlias))
         assertEquals(GenesisUltraPersistedBirthState.ABSENT, GenesisUltraAtomicBirthStore(database).readState())
         assertEquals(0, database.genesisUltraMemoryDao().countAll())
-        assertEquals(0, database.memoryDao().countLocalIdentity())
+        assertEquals(0, database.legacyArchiveReadDao().countLocalIdentity())
     }
 
     @Test

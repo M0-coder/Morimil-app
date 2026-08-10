@@ -76,6 +76,7 @@ class RuntimeBootstrapProtocolKillTest {
             val workspace = memoryDatabase.memoryDao().observeActiveWorkspace().first()
             val project = memoryDatabase.memoryDao().observeProjects().first().single()
             val devices = organDatabase.memoryOrganDao().observeOrchestratorDevices().first()
+            val legacyArchiveDao = memoryDatabase.legacyArchiveReadDao()
 
             assertEquals(1, report.recoveredCount)
             assertEquals(CrossDatabaseOperationStatus.COMMITTED, recovered.status)
@@ -90,8 +91,8 @@ class RuntimeBootstrapProtocolKillTest {
                     device.authorizationStatus == "authorized" &&
                     device.pairingState == "genesis_ultra_bound"
             })
-            assertEquals(0, memoryDatabase.memoryDao().countLocalIdentity())
-            assertEquals(0, memoryDatabase.memoryDao().countGenesisCore())
+            assertEquals(0, legacyArchiveDao.countLocalIdentity())
+            assertEquals(0, legacyArchiveDao.countGenesisCore())
         } finally {
             if (memoryDatabase.isOpen) memoryDatabase.close()
             if (organDatabase.isOpen) organDatabase.close()
