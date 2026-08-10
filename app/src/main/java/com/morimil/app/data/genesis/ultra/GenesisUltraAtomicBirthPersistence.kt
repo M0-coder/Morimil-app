@@ -253,10 +253,11 @@ internal class GenesisUltraAtomicBirthStore(
         require(dao.countBirthCommits() == 0) { "genesis_ultra_birth_already_committed" }
         require(dao.countBirthArtifacts() == 0) { "genesis_ultra_birth_artifacts_not_absent" }
         require(dao.countBirthJournalEntries() == 0) { "genesis_ultra_birth_journal_not_absent" }
-        require(database.memoryDao().countLocalIdentity() == 0) {
+        val legacyConflicts = LegacyBirthConflictProbe.production(database).inspect()
+        require(legacyConflicts.localIdentityCount == 0) {
             "legacy_local_identity_conflicts_with_genesis_ultra_birth"
         }
-        require(database.memoryDao().countGenesisCore() == 0) {
+        require(legacyConflicts.genesisCoreCount == 0) {
             "legacy_genesis_core_conflicts_with_genesis_ultra_birth"
         }
 
