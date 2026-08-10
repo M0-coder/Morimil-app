@@ -17,6 +17,12 @@ class F33ALegacyRuntimeSurfaceContractTest {
         val memoryScreen = productionSource(
             "com/morimil/app/ui/MemoryScreen.kt"
         ).readText()
+        val graphCanvas = productionSource(
+            "com/morimil/app/ui/MemoryGraphCanvasPanel.kt"
+        ).readText()
+        val graphExplorer = productionSource(
+            "com/morimil/app/core/memory/MemoryGraphExplorer.kt"
+        ).readText()
         val workspace = productionSource(
             "com/morimil/app/ui/UserWorkspaceScreen.kt"
         ).readText()
@@ -36,7 +42,10 @@ class F33ALegacyRuntimeSurfaceContractTest {
             "buildLivingMemoryContext",
             "auditLivingMemoryChain"
         ).forEach { token ->
-            assertFalse("Legacy runtime token remains in MemoryRepository: $token", repository.contains(token))
+            assertFalse(
+                "Legacy runtime token remains in MemoryRepository: $token",
+                repository.contains(token)
+            )
         }
 
         listOf(
@@ -48,14 +57,29 @@ class F33ALegacyRuntimeSurfaceContractTest {
             "countMemoryEvents()",
             "loadLatestRestCycleEvent()"
         ).forEach { token ->
-            assertFalse("Legacy runtime token remains in MorimilViewModel: $token", viewModel.contains(token))
+            assertFalse(
+                "Legacy runtime token remains in MorimilViewModel: $token",
+                viewModel.contains(token)
+            )
         }
 
         assertTrue(viewModel.contains("CanonicalMemoryPresentationRepository"))
         assertTrue(memoryScreen.contains("CanonicalMemoryPresentationEvent"))
-        assertTrue(memoryScreen.contains("hashes de eventos canónicos verificados"))
+        assertTrue(memoryScreen.contains("eventos canónicos"))
+        assertTrue(memoryScreen.contains("MemoryGraphCanvasPanel("))
+        assertTrue(memoryScreen.contains("RestCycleHistoryPanel("))
+        assertTrue(memoryScreen.contains("CognitiveMigrationPanel("))
+        assertTrue(memoryScreen.contains("MemoryOrgansPanel("))
         assertFalse(memoryScreen.contains("MemoryEventEntity"))
         assertFalse(memoryScreen.contains("Genesis Core inmutable"))
+
+        assertTrue(graphCanvas.contains("CanonicalMemoryPresentationEvent"))
+        assertTrue(graphCanvas.contains("MemoryGraphEventView"))
+        assertFalse(graphCanvas.contains("MemoryEventEntity"))
+        assertTrue(graphExplorer.contains("MemoryGraphEventView"))
+        assertTrue(graphExplorer.contains("canonical_memory_event"))
+        assertFalse(graphExplorer.contains("MemoryEventEntity"))
+
         assertFalse(workspace.contains("localIdentity"))
         assertTrue(workspace.contains("Android es el Body actual"))
         assertFalse(container.contains("GenesisReader"))
