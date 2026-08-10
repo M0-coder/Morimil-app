@@ -23,7 +23,7 @@ class CurrentDocumentSovereigntyContractTest {
     }
 
     @Test
-    fun governedCurrentDocumentsResolveMovingMainExternallyAtHealthLegacyConvergenceTruth() {
+    fun governedCurrentDocumentsResolveMovingMainExternallyAtPostRecallReadinessTruth() {
         val root = repositoryRoot()
         GOVERNED_CURRENT_DOCUMENTS.forEach { relativePath ->
             val document = File(root, relativePath)
@@ -52,8 +52,12 @@ class CurrentDocumentSovereigntyContractTest {
                 PR_187_HISTORY,
                 PR_188_HISTORY,
                 PR_189_HISTORY,
+                PR_190_HISTORY,
+                PR_191_HISTORY,
                 BOOTSTRAP_HEALTH_AUDITED_SOURCE_HEAD,
-                REST_BOOT_001_AUDITED_SOURCE_HEAD
+                REST_BOOT_001_AUDITED_SOURCE_HEAD,
+                HEALTH_AUDITED_SOURCE_HEAD,
+                RECALL_BOOT_001_AUDITED_SOURCE_HEAD
             ).forEach { token -> assertTrue("$relativePath missing $token", text.contains(token)) }
             SELF_REFERENTIAL_MAIN_PATTERNS.forEach { pattern ->
                 assertFalse("$relativePath contains self-referential main SHA field: ${pattern.pattern}", pattern.containsMatchIn(text))
@@ -62,7 +66,7 @@ class CurrentDocumentSovereigntyContractTest {
     }
 
     @Test
-    fun sovereigntyAuditRecordsHealthLegacyConvergenceWithoutClosingGlobalHealthOrRecall() {
+    fun sovereigntyAuditRecordsBothReadinessFrontsWithoutPrematureGlobalHealthClosure() {
         val audit = repositoryFile("docs/CURRENT_DOCUMENT_SOVEREIGNTY_AUDIT.md").readText()
         listOf(
             COG_AUDITED_SOURCE_HEAD,
@@ -75,6 +79,8 @@ class CurrentDocumentSovereigntyContractTest {
             REST_002_AUDITED_SOURCE_HEAD,
             BOOTSTRAP_HEALTH_AUDITED_SOURCE_HEAD,
             REST_BOOT_001_AUDITED_SOURCE_HEAD,
+            HEALTH_AUDITED_SOURCE_HEAD,
+            RECALL_BOOT_001_AUDITED_SOURCE_HEAD,
             "MemoryOrganDatabase version 9",
             "COG-001 through COG-004",
             "ORCH-001 canonical identity-gated seed convergence",
@@ -85,22 +91,27 @@ class CurrentDocumentSovereigntyContractTest {
             "REST-002 canonical repair-proposal convergence under the same closed `rest_cycle` owner registry",
             "dependency-derived bootstrap health from PR #187",
             "REST-BOOT-001 read-only startup readiness",
+            "RECALL-BOOT-001 read-only startup readiness",
             "HEALTH_LEGACY_CONSUMER_CONVERGENCE=INTEGRATED",
             "HEALTH_CAN_READ_CANONICAL_MEMORY=true",
             "HEALTH_CAN_WRITE_CANONICAL_MEMORY=false",
             "HEALTH_CAN_WRITE_LEGACY_MEMORY_EVENTS=false",
             "REST_BOOT_READINESS=INTEGRATED",
-            "RECALL_BOOT_READINESS=OPEN",
+            "RECALL_BOOT_READINESS=INTEGRATED",
             "BOOTSTRAP_HEALTH_DERIVATION=INTEGRATED",
             "HEALTH_CONVERGENCE=OPEN",
             "HEALTH_CONVERGED=false",
-            "HEALTH_STATE=WAITING_FOR_DEPENDENCIES",
+            "HEALTH_STATE=DEPENDENCY_DERIVED",
+            "F1_F3_2_FULL_REAUDIT=REQUIRED",
             "F3_3=OPEN",
             "MORIMIL_OPERATIONAL_BIRTH=NOT_OCCURRED"
         ).forEach { token -> assertTrue("Missing sovereignty token $token", audit.contains(token)) }
         assertTrue(audit.contains("LocalNervousSystemRepository` consumes `CanonicalConsumerReadPort.readHealthInput"))
+        assertTrue(audit.contains("RecallScheduleRepository.isBootstrapReady(identity)"))
         assertFalse(audit.contains("LocalNervousSystemRepository.recordHealthCheckIfDegraded"))
         assertFalse(audit.contains("REST_BOOT_READINESS=OPEN"))
+        assertFalse(audit.contains("RECALL_BOOT_READINESS=OPEN"))
+        assertFalse(audit.contains("HEALTH_STATE=WAITING_FOR_DEPENDENCIES"))
         assertFalse(audit.contains("HEALTH_CONVERGENCE=INTEGRATED"))
         assertFalse(audit.contains("REST_001_002=OPEN"))
         assertFalse(audit.contains("REST_001=OPEN"))
@@ -154,8 +165,8 @@ class CurrentDocumentSovereigntyContractTest {
 
     private companion object {
         const val CURRENT_STATUS = "# Document status: CURRENT"
-        const val CONTENT_BASELINE_SHA = "CONTENT_BASELINE_SHA=77af62a545f72161c0ff47d74c0de6e1d1f4f251"
-        const val CONTENT_BASELINE_PARENT_SHA = "CONTENT_BASELINE_PARENT_SHA=32a183e7821de49a4958c52d75693c43ee99b2e1"
+        const val CONTENT_BASELINE_SHA = "CONTENT_BASELINE_SHA=c4b192b8f54b2422ce816dc3542d55adfd44510c"
+        const val CONTENT_BASELINE_PARENT_SHA = "CONTENT_BASELINE_PARENT_SHA=9c7325e6f1a21d79b1c3fb58f0b5f81a828fc304"
         const val CURRENT_MAIN_RESOLUTION = "CURRENT_MAIN_RESOLUTION=EXTERNAL_GIT_REF"
         const val MERGE_SHA_EVIDENCE = "MERGE_SHA_EVIDENCE=EXTERNAL"
         const val PR_172_HISTORY = "PR_172=MERGED_BY_SQUASH_HISTORICAL"
@@ -175,6 +186,8 @@ class CurrentDocumentSovereigntyContractTest {
         const val PR_187_HISTORY = "PR_187=MERGED_BY_SQUASH_HISTORICAL"
         const val PR_188_HISTORY = "PR_188=MERGED_BY_SQUASH_HISTORICAL"
         const val PR_189_HISTORY = "PR_189=MERGED_BY_SQUASH_HISTORICAL"
+        const val PR_190_HISTORY = "PR_190=MERGED_BY_SQUASH_HISTORICAL"
+        const val PR_191_HISTORY = "PR_191=MERGED_BY_SQUASH_HISTORICAL"
         const val COG_AUDITED_SOURCE_HEAD = "7bdbda2aa4b7568695ba8e98be54d506d42c99d5"
         const val ORCH_AUDITED_SOURCE_HEAD = "0348dccb561e576d17c45e7f8b1e38717332772b"
         const val ORCH_001_AUDITED_SOURCE_HEAD = "fe188fdee8eae901434a255051b6fa4f852b929b"
@@ -185,6 +198,8 @@ class CurrentDocumentSovereigntyContractTest {
         const val REST_002_AUDITED_SOURCE_HEAD = "2ecca3f48d5e0ef27bd927da3986292daf7f7e2c"
         const val BOOTSTRAP_HEALTH_AUDITED_SOURCE_HEAD = "f1697227241459f316bd562756e15ae3ce02c90d"
         const val REST_BOOT_001_AUDITED_SOURCE_HEAD = "dd7a92a011fd4c453775df6ec307638b05313ec9"
+        const val HEALTH_AUDITED_SOURCE_HEAD = "6735e2d1febccf7da560d026d6ddd88f6ad82845"
+        const val RECALL_BOOT_001_AUDITED_SOURCE_HEAD = "20d834e1d438fd5883a76e9b45bcf21860e7db42"
 
         val GOVERNED_CURRENT_DOCUMENTS = setOf(
             "docs/CURRENT_DOCUMENT_SOVEREIGNTY_AUDIT.md",
