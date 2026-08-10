@@ -32,11 +32,3 @@ interface LivingMemoryPort {
     suspend fun append(request: LivingMemoryAppendRequest): LivingMemoryEventReceipt
     suspend fun loadLatestByType(eventType: String): LivingMemoryEventView?
 }
-
-object LegacyMemoryReadOnlyPort : LivingMemoryPort {
-    override suspend fun append(request: LivingMemoryAppendRequest): LivingMemoryEventReceipt {
-        error("legacy_memory_writer_not_configured")
-    }
-
-    override suspend fun loadLatestByType(eventType: String): LivingMemoryEventView? = null
-}
