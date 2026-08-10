@@ -55,7 +55,7 @@ class ReasoningTranscriptRepositoryTest {
             )
         )
         assertFalse(ReasoningTurnAuthor.isTrustedConversationAuthor(turns[2].author))
-        assertEquals(0, database.memoryDao().countMemoryEvents())
+        assertEquals(0, database.legacyArchiveReadDao().countMemoryEvents())
         assertEquals(0, database.genesisUltraMemoryDao().countAll())
         assertEquals(0, database.genesisUltraBirthDao().countBirthCommits())
     }
