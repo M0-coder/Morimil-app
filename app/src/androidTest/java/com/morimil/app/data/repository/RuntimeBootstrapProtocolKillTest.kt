@@ -51,7 +51,7 @@ class RuntimeBootstrapProtocolKillTest {
                 organDatabase = organDatabase
             )
 
-            // Simulate process interruption after the MorimilDatabase saga preparation
+            // Simulate process death after the MorimilDatabase saga preparation
             // but before MemoryOrganDatabase + XOP COMMITTED finalization.
             finalizer.prepareOutsideTransaction(operation, receipt)
 
@@ -195,16 +195,16 @@ class RuntimeBootstrapProtocolKillTest {
         val charter = document("policy/charter.json", "freedom_charter", "{}")
         val recovery = document("policy/recovery.json", "recovery_policy", "{}")
         return GenesisUltraRuntimeIdentity(
-            instanceId = "instance_boot_protocol_recovery_test",
+            instanceId = "instance_boot_kill_test",
             companionName = "Morimil",
             bornAt = "2026-08-08T00:00:00Z",
             identityDigest = digest("identity"),
             activeBody = GenesisUltraRuntimeActiveBody(
-                bodyId = "body_boot_protocol_recovery_test",
+                bodyId = "body_boot_kill_test",
                 status = "active_writer",
                 platformProfile = "android",
                 publicKeyFingerprint = digest("body_key"),
-                keyEpochId = "epoch_boot_protocol_recovery_test",
+                keyEpochId = "epoch_boot_kill_test",
                 keyEpochDigest = digest("epoch"),
                 registryEpoch = 1,
                 registryDigest = digest("registry")
@@ -268,6 +268,6 @@ class RuntimeBootstrapProtocolKillTest {
     }
 
     private companion object {
-        const val TEST_DATABASE_PREFIX = "runtime-bootstrap-protocol-recovery"
+        const val TEST_DATABASE_PREFIX = "runtime-bootstrap-protocol-kill"
     }
 }
