@@ -63,13 +63,7 @@ internal class CanonicalMemoryPresentationRepository(
                 )
             }
 
-            is CanonicalReadResult.Blocked -> {
-                if (result.failure.disposition == CanonicalReadDisposition.NOT_READY) {
-                    null
-                } else {
-                    throw CanonicalMemoryPresentationReadException(result.failure)
-                }
-            }
+            is CanonicalReadResult.Blocked -> handleBlocked(result.failure)
         }
     }
 
@@ -80,13 +74,24 @@ internal class CanonicalMemoryPresentationRepository(
             .map(String::trim)
             .filter(String::isNotEmpty)
             .distinct()
-            .take(MAX_PRESENTATION_LIMIT)
+            .take(MAX_HASH_LOOKUP)
             .toSet()
         if (requested.isEmpty()) return emptyList()
-        return readSnapshot(MAX_PRESENTATION_LIMIT)
-            ?.events
-            .orEmpty()
-            .filter { event -> event.eventHash in requested }
+
+        return when (val result = canonicalReadPort.readVerifiedSnapshot()) {
+            is CanonicalReadResult.Ready -> result.value.events
+                .asSequence()
+                .filter { event -> event.ref.eventHash in requested }
+                .map(::toPresentationEvent)
+                .toList()
+
+            is CanonicalReadResult.Blocked -> handleBlocked(result.failure)?.events.orEmpty()
+        }
+    }
+
+    private fun handleBlocked(failure: CanonicalReadFailure): CanonicalMemoryPresentationSnapshot? {
+        if (failure.disposition == CanonicalReadDisposition.NOT_READY) return null
+        throw CanonicalMemoryPresentationReadException(failure)
     }
 
     private fun toPresentationEvent(event: CanonicalConsumerEvent): CanonicalMemoryPresentationEvent {
@@ -110,6 +115,7 @@ internal class CanonicalMemoryPresentationRepository(
     private companion object {
         const val DEFAULT_PRESENTATION_LIMIT = 80
         const val MAX_PRESENTATION_LIMIT = 240
+        const val MAX_HASH_LOOKUP = 120
         const val ACTIVATION_SOURCE = "genesis_ultra_activation"
         const val ACTIVATION_MEMORY_KIND = "activation"
         const val ACTIVATION_IMPORTANCE = 100
