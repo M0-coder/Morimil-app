@@ -51,7 +51,7 @@ class RuntimeBootstrapProtocolKillTest {
                 organDatabase = organDatabase
             )
 
-            // Simulate process death after the MorimilDatabase saga preparation
+            // Simulate process interruption after the MorimilDatabase saga preparation
             // but before MemoryOrganDatabase + XOP COMMITTED finalization.
             finalizer.prepareOutsideTransaction(operation, receipt)
 
@@ -76,6 +76,7 @@ class RuntimeBootstrapProtocolKillTest {
             val workspace = memoryDatabase.memoryDao().observeActiveWorkspace().first()
             val project = memoryDatabase.memoryDao().observeProjects().first().single()
             val devices = organDatabase.memoryOrganDao().observeOrchestratorDevices().first()
+            val legacyArchiveDao = memoryDatabase.legacyArchiveReadDao()
 
             assertEquals(1, report.recoveredCount)
             assertEquals(CrossDatabaseOperationStatus.COMMITTED, recovered.status)
@@ -90,8 +91,8 @@ class RuntimeBootstrapProtocolKillTest {
                     device.authorizationStatus == "authorized" &&
                     device.pairingState == "genesis_ultra_bound"
             })
-            assertEquals(0, memoryDatabase.memoryDao().countLocalIdentity())
-            assertEquals(0, memoryDatabase.memoryDao().countGenesisCore())
+            assertEquals(0, legacyArchiveDao.countLocalIdentity())
+            assertEquals(0, legacyArchiveDao.countGenesisCore())
         } finally {
             if (memoryDatabase.isOpen) memoryDatabase.close()
             if (organDatabase.isOpen) organDatabase.close()
@@ -194,16 +195,16 @@ class RuntimeBootstrapProtocolKillTest {
         val charter = document("policy/charter.json", "freedom_charter", "{}")
         val recovery = document("policy/recovery.json", "recovery_policy", "{}")
         return GenesisUltraRuntimeIdentity(
-            instanceId = "instance_boot_kill_test",
+            instanceId = "instance_boot_protocol_recovery_test",
             companionName = "Morimil",
             bornAt = "2026-08-08T00:00:00Z",
             identityDigest = digest("identity"),
             activeBody = GenesisUltraRuntimeActiveBody(
-                bodyId = "body_boot_kill_test",
+                bodyId = "body_boot_protocol_recovery_test",
                 status = "active_writer",
                 platformProfile = "android",
                 publicKeyFingerprint = digest("body_key"),
-                keyEpochId = "epoch_boot_kill_test",
+                keyEpochId = "epoch_boot_protocol_recovery_test",
                 keyEpochDigest = digest("epoch"),
                 registryEpoch = 1,
                 registryDigest = digest("registry")
@@ -267,6 +268,6 @@ class RuntimeBootstrapProtocolKillTest {
     }
 
     private companion object {
-        const val TEST_DATABASE_PREFIX = "runtime-bootstrap-protocol-kill"
+        const val TEST_DATABASE_PREFIX = "runtime-bootstrap-protocol-recovery"
     }
 }
