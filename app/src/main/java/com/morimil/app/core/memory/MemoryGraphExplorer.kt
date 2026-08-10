@@ -2,7 +2,6 @@ package com.morimil.app.core.memory
 
 import com.morimil.app.data.local.DecisionLogEntity
 import com.morimil.app.data.local.KnowledgeCapsuleEntity
-import com.morimil.app.data.local.MemoryEventEntity
 import com.morimil.app.data.local.MemoryLinkEntity
 import com.morimil.app.data.local.MigrationRecordEntity
 import com.morimil.app.data.local.ProjectStateEntity
@@ -53,6 +52,18 @@ data class MemoryGraphGap(
     val detail: String
 )
 
+/** UI-neutral verified canonical event projection consumed by the graph explorer. */
+data class MemoryGraphEventView(
+    val eventHash: String,
+    val sequence: Long,
+    val eventType: String,
+    val memoryKind: String,
+    val importance: Int,
+    val confidence: Int,
+    val userConfirmed: Boolean,
+    val body: String
+)
+
 object MemoryGraphExplorer {
     const val MODE_GLOBAL = "global"
     const val MODE_FOCUS = "focus"
@@ -68,7 +79,7 @@ object MemoryGraphExplorer {
     const val LAYER_INTEGRITY = "integrity"
     const val LAYER_EXTERNAL = "external"
 
-    const val MEMORY_EVENT_NODE_TYPE = "memory_event"
+    const val MEMORY_EVENT_NODE_TYPE = "canonical_memory_event"
 
     val defaultLayers: Set<String> = setOf(
         LAYER_IDENTITY,
@@ -85,7 +96,7 @@ object MemoryGraphExplorer {
     fun build(
         mode: String,
         selectedEventHash: String?,
-        events: List<MemoryEventEntity>,
+        events: List<MemoryGraphEventView>,
         links: List<MemoryLinkEntity>,
         capsules: List<KnowledgeCapsuleEntity>,
         recalls: List<RecallScheduleEntity>,
@@ -97,7 +108,8 @@ object MemoryGraphExplorer {
         maxEventNodes: Int = 64,
         maxTotalNodes: Int = 96
     ): MemoryGraphExplorerSnapshot {
-        val normalizedMode = mode.takeIf { it in setOf(MODE_GLOBAL, MODE_FOCUS, MODE_GAPS) } ?: MODE_GLOBAL
+        val normalizedMode = mode.takeIf { it in setOf(MODE_GLOBAL, MODE_FOCUS, MODE_GAPS) }
+            ?: MODE_GLOBAL
         val selectedHash = selectedEventHash?.takeIf { hash -> hash.isNotBlank() }
         val eventsByHash = events.associateBy { event -> event.eventHash }
         val selectedNodeId = selectedHash
@@ -125,7 +137,7 @@ object MemoryGraphExplorer {
                 nodeType = "identity",
                 layer = LAYER_IDENTITY,
                 title = "Morimil",
-                subtitle = "Identidad local, Genesis y cuerpo de memoria",
+                subtitle = "Instance continua; Genesis Ultra; Body actual sin propiedad",
                 memoryKind = "identity",
                 weight = 1.0,
                 health = "ok",
@@ -151,7 +163,7 @@ object MemoryGraphExplorer {
                         sourceEventHash = null
                     )
                 )
-                addEdge(edge("morimil:identity", nodeId, "owns_project", 0.7, "ok", "Proyecto local registrado"))
+                addEdge(edge("morimil:identity", nodeId, "projects", 0.7, "ok", "Proyecto local reconstruible"))
             }
         }
 
@@ -204,26 +216,21 @@ object MemoryGraphExplorer {
                     event.eventHash in eventHashesFromLinks
             }
             else -> events.sortedWith(
-                compareByDescending<MemoryEventEntity> { event -> event.userConfirmed }
+                compareByDescending<MemoryGraphEventView> { event -> event.userConfirmed }
                     .thenByDescending { event -> event.importance }
                     .thenByDescending { event -> event.confidence }
-                    .thenByDescending { event -> event.createdAtMillis }
+                    .thenByDescending { event -> event.sequence }
             )
         }.take(maxEventNodes)
 
         if (layerEnabled(LAYER_EVENTS)) {
-            eventCandidates.forEach { event ->
-                addNode(memoryEventNode(event, selectedHash))
-            }
+            eventCandidates.forEach { event -> addNode(memoryEventNode(event, selectedHash)) }
         }
 
         if (selectedHash != null && selectedHash !in nodes && layerEnabled(LAYER_EVENTS)) {
             val event = eventsByHash[selectedHash]
-            if (event != null) {
-                addNode(memoryEventNode(event, selectedHash))
-            } else {
-                addNode(externalEventNode(selectedHash, selected = true))
-            }
+            if (event != null) addNode(memoryEventNode(event, selectedHash))
+            else addNode(externalEventNode(selectedHash, selected = true))
         }
 
         if (layerEnabled(LAYER_CAPSULES)) {
@@ -393,7 +400,7 @@ object MemoryGraphExplorer {
             )
     }
 
-    private fun memoryEventNode(event: MemoryEventEntity, selectedHash: String?): MemoryGraphExplorerNode {
+    private fun memoryEventNode(event: MemoryGraphEventView, selectedHash: String?): MemoryGraphExplorerNode {
         val isQuarantine = event.memoryKind.contains("quarantine", ignoreCase = true) ||
             event.memoryKind.contains("cuarentena", ignoreCase = true) ||
             event.eventType.contains("quarantine", ignoreCase = true)
@@ -416,9 +423,9 @@ object MemoryGraphExplorer {
             nodeId = hash,
             nodeType = MEMORY_EVENT_NODE_TYPE,
             layer = LAYER_EXTERNAL,
-            title = "Recuerdo no cargado",
+            title = "Evento canónico no cargado",
             subtitle = hash.take(32),
-            memoryKind = "external_memory_event",
+            memoryKind = "canonical_memory_event",
             weight = 0.28,
             health = "watch",
             selected = selected,
@@ -428,21 +435,22 @@ object MemoryGraphExplorer {
 
     private fun ensureEventEndpoint(
         hash: String,
-        eventsByHash: Map<String, MemoryEventEntity>,
+        eventsByHash: Map<String, MemoryGraphEventView>,
         nodes: MutableMap<String, MemoryGraphExplorerNode>,
         activeLayers: Set<String>,
         selectedHash: String?
     ) {
         if (hash in nodes) return
         val event = eventsByHash[hash]
-        val node = if (event != null) memoryEventNode(event, selectedHash) else externalEventNode(hash, selected = hash == selectedHash)
+        val node = if (event != null) memoryEventNode(event, selectedHash)
+        else externalEventNode(hash, selected = hash == selectedHash)
         if (node.layer in activeLayers || node.selected) nodes[hash] = node
     }
 
     private fun ensureEndpointForLink(
         id: String,
         type: String,
-        eventsByHash: Map<String, MemoryEventEntity>,
+        eventsByHash: Map<String, MemoryGraphEventView>,
         nodes: MutableMap<String, MemoryGraphExplorerNode>,
         activeLayers: Set<String>,
         selectedHash: String?
@@ -486,14 +494,16 @@ object MemoryGraphExplorer {
 
     private fun MigrationRecordEntity.memoryEventRefs(): List<String> {
         return parseJsonArray(affectedArtifactsJson) +
-            listOfNotNull(preSnapshotId, postSnapshotId).filter { value -> value.startsWith("sha256:") }
+            listOfNotNull(preSnapshotId, postSnapshotId).filter { value ->
+                value.startsWith("evsha256:")
+            }
     }
 
     private fun parseJsonArray(value: String): List<String> {
         return runCatching {
             val array = JSONArray(value)
             (0 until array.length()).mapNotNull { index ->
-                array.optString(index).takeIf { item -> item.startsWith("sha256:") }
+                array.optString(index).takeIf { item -> item.startsWith("evsha256:") }
             }
         }.getOrDefault(emptyList())
     }
@@ -512,11 +522,12 @@ object MemoryGraphExplorer {
         ).distinct()
     }
 
-    private fun MemoryEventEntity.importanceConfidenceWeight(): Double {
+    private fun MemoryGraphEventView.importanceConfidenceWeight(): Double {
         val importanceScore = importance.coerceIn(0, 100) / 100.0
         val confidenceScore = confidence.coerceIn(0, 100) / 100.0
         val confirmationBoost = if (userConfirmed) 0.15 else 0.0
-        return ((importanceScore * 0.58) + (confidenceScore * 0.27) + confirmationBoost).coerceIn(0.0, 1.0)
+        return ((importanceScore * 0.58) + (confidenceScore * 0.27) + confirmationBoost)
+            .coerceIn(0.0, 1.0)
     }
 
     private fun String.singleLinePreview(maxLength: Int): String {
