@@ -18,6 +18,7 @@ import com.morimil.app.data.genesis.ultra.CanonicalRecallCandidateBatch
 import com.morimil.app.data.genesis.ultra.CanonicalRestCyclePlanningInput
 import com.morimil.app.data.genesis.ultra.CanonicalSnapshotRef
 import com.morimil.app.data.local.MemoryOrganDatabase
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -76,6 +77,16 @@ class RecallScheduleRepositoryCanonicalAndroidTest {
         assertEquals(RecallScheduleRepository.RECALL_NODE_TYPE, link.sourceType)
         assertEquals("event-canonical-1", link.targetId)
         assertEquals(RecallScheduleRepository.CANONICAL_MEMORY_EVENT_NODE_TYPE, link.targetType)
+
+        val resolvedBacklinks = MemoryLinkRepository(db)
+            .observeMemoryLinksForEvent("event-canonical-1")
+            .first()
+        assertEquals(1, resolvedBacklinks.size)
+        assertEquals(link.linkId, resolvedBacklinks.single().linkId)
+        assertEquals(
+            MemoryLinkRepository.CANONICAL_MEMORY_EVENT_NODE_TYPE,
+            resolvedBacklinks.single().targetType
+        )
     }
 
     @Test
