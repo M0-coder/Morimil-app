@@ -7,16 +7,16 @@ import com.morimil.app.data.local.AutobiographicalSnapshotEntity
 import com.morimil.app.data.local.DecisionLogEntity
 import com.morimil.app.data.local.DelegatedTaskEntity
 import com.morimil.app.data.local.KnowledgeCapsuleEntity
-import com.morimil.app.data.local.MemoryEventEntity
 import com.morimil.app.data.local.MemoryLinkEntity
 import com.morimil.app.data.local.ReasoningTurnEntity
-import com.morimil.app.data.local.MemorySnapshotEntity
 import com.morimil.app.data.local.MigrationRecordEntity
 import com.morimil.app.data.local.OrchestratorDeviceEntity
 import com.morimil.app.data.local.ProjectStateEntity
 import com.morimil.app.data.local.ProjectVaultEntity
 import com.morimil.app.data.local.RecallScheduleEntity
 import com.morimil.app.data.repository.AgentInstanceLifecycleRepository
+import com.morimil.app.data.repository.CanonicalMemoryPresentationEvent
+import com.morimil.app.data.repository.CanonicalMemoryPresentationSnapshot
 import com.morimil.app.runtime.RestCycleScheduleStatus
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -41,8 +41,8 @@ data class MemoryUiState(
     val decisions: List<DecisionLogEntity> = emptyList(),
     val messages: List<ReasoningTurnEntity> = emptyList(),
     val projects: List<ProjectStateEntity> = emptyList(),
-    val snapshot: MemorySnapshotEntity? = null,
-    val events: List<MemoryEventEntity> = emptyList(),
+    val snapshot: CanonicalMemoryPresentationSnapshot? = null,
+    val events: List<CanonicalMemoryPresentationEvent> = emptyList(),
     val recalls: List<RecallScheduleEntity> = emptyList(),
     val migrations: List<MigrationRecordEntity> = emptyList(),
     val selfSnapshot: AutobiographicalSnapshotEntity? = null,
@@ -106,8 +106,10 @@ class MemoryViewModel internal constructor(private val owner: MorimilViewModel) 
     val decisions: StateFlow<List<DecisionLogEntity>> = owner.decisions
     val messages: StateFlow<List<ReasoningTurnEntity>> = owner.messages
     val projects: StateFlow<List<ProjectStateEntity>> = owner.projects
-    val livingMemorySnapshot: StateFlow<MemorySnapshotEntity?> = owner.livingMemorySnapshot
-    val recentMemoryEvents: StateFlow<List<MemoryEventEntity>> = owner.recentMemoryEvents
+    val livingMemorySnapshot: StateFlow<CanonicalMemoryPresentationSnapshot?> =
+        owner.canonicalMemorySnapshot
+    val recentMemoryEvents: StateFlow<List<CanonicalMemoryPresentationEvent>> =
+        owner.canonicalMemoryEvents
     val activeRecallSchedules: StateFlow<List<RecallScheduleEntity>> = owner.activeRecallSchedules
     val recentMigrationRecords: StateFlow<List<MigrationRecordEntity>> = owner.recentMigrationRecords
     val selfSnapshot: StateFlow<AutobiographicalSnapshotEntity?> = owner.selfSnapshot
@@ -118,7 +120,7 @@ class MemoryViewModel internal constructor(private val owner: MorimilViewModel) 
     val organismHealth: StateFlow<OrganismHealthUiState> = owner.organismHealth
     val selectedMemoryEventHash: StateFlow<String?> = owner.selectedMemoryEventHash
     val selectedMemoryLinks: StateFlow<List<MemoryLinkEntity>> = owner.selectedMemoryLinks
-    val selectedGraphEvents: StateFlow<List<MemoryEventEntity>> = owner.selectedGraphEvents
+    val selectedGraphEvents: StateFlow<List<CanonicalMemoryPresentationEvent>> = owner.selectedGraphEvents
 
     private val memoryStateInputs: List<Flow<Any?>> = listOf(
         decisions,
@@ -142,8 +144,8 @@ class MemoryViewModel internal constructor(private val owner: MorimilViewModel) 
             decisions = values[0] as List<DecisionLogEntity>,
             messages = values[1] as List<ReasoningTurnEntity>,
             projects = values[2] as List<ProjectStateEntity>,
-            snapshot = values[3] as MemorySnapshotEntity?,
-            events = values[4] as List<MemoryEventEntity>,
+            snapshot = values[3] as CanonicalMemoryPresentationSnapshot?,
+            events = values[4] as List<CanonicalMemoryPresentationEvent>,
             recalls = values[5] as List<RecallScheduleEntity>,
             migrations = values[6] as List<MigrationRecordEntity>,
             selfSnapshot = values[7] as AutobiographicalSnapshotEntity?,
@@ -155,9 +157,10 @@ class MemoryViewModel internal constructor(private val owner: MorimilViewModel) 
         )
     }.stateIn(owner.viewModelScope, SharingStarted.WhileSubscribed(5_000), MemoryUiState())
 
-    fun approveMemoryEvent(event: MemoryEventEntity) = owner.approveMemoryEvent(event)
-    fun degradeMemoryEvent(event: MemoryEventEntity) = owner.degradeMemoryEvent(event)
-    fun requestMemoryCorrection(event: MemoryEventEntity) = owner.requestMemoryCorrection(event)
+    fun refreshCanonicalMemory() = owner.refreshCanonicalMemory()
+    fun approveMemoryEvent(event: CanonicalMemoryPresentationEvent) = owner.approveMemoryEvent(event)
+    fun degradeMemoryEvent(event: CanonicalMemoryPresentationEvent) = owner.degradeMemoryEvent(event)
+    fun requestMemoryCorrection(event: CanonicalMemoryPresentationEvent) = owner.requestMemoryCorrection(event)
     fun selectMemoryEvent(eventHash: String) = owner.selectMemoryEvent(eventHash)
     fun clearSelectedMemoryEvent() = owner.clearSelectedMemoryEvent()
     fun runMemoryIntegrityAudit() = owner.runMemoryIntegrityAudit()
