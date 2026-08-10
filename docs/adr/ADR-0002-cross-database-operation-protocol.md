@@ -14,10 +14,11 @@
 - REST-002 proposal amendment: integrated by PR `#184` under the same closed owner registry; repair execution is not implemented.
 - Bootstrap-health disposition: integrated by PR `#187`; dependency-derived bootstrap health is not an XOP owner.
 - REST-BOOT-001 readiness disposition: integrated by PR `#188`; the canonical read-only readiness probe is not an XOP owner and performs no REST mutation.
-- Local Nervous System Health disposition: integrated as a read-only derived observer of `CanonicalConsumerReadPort.readHealthInput`; it is not an XOP owner or memory writer.
-- Tracker: `#88` — open for RECALL startup-readiness, final F1/F3.2 reaudit and later F3.3 work.
-- Content baseline SHA: `77af62a545f72161c0ff47d74c0de6e1d1f4f251`.
-- Content baseline parent SHA: `32a183e7821de49a4958c52d75693c43ee99b2e1`.
+- Local Nervous System Health disposition: integrated by PR `#190` as a read-only derived observer of `CanonicalConsumerReadPort.readHealthInput`; it is not an XOP owner or memory writer.
+- RECALL-BOOT-001 readiness disposition: integrated by PR `#191`; the canonical read-only recall probe is not an XOP owner and performs no recall projection mutation.
+- Tracker: `#88` — open for full F1/F3.2 reaudit and later F3.3 work.
+- Content baseline SHA: `c4b192b8f54b2422ce816dc3542d55adfd44510c`.
+- Content baseline parent SHA: `9c7325e6f1a21d79b1c3fb58f0b5f81a828fc304`.
 - Current protected `main`: resolved externally from `refs/heads/main`.
 - Merge SHA evidence: external GitHub and Morimil Control Tower evidence.
 - Historical COG audited source head: `7bdbda2aa4b7568695ba8e98be54d506d42c99d5`.
@@ -30,11 +31,15 @@
 - REST-002 audited source head: `2ecca3f48d5e0ef27bd927da3986292daf7f7e2c`.
 - Bootstrap-health audited source head: `f1697227241459f316bd562756e15ae3ce02c90d`.
 - REST-BOOT-001 audited source head: `dd7a92a011fd4c453775df6ec307638b05313ec9`.
+- Health legacy-consumer convergence audited source head: `6735e2d1febccf7da560d026d6ddd88f6ad82845`.
+- RECALL-BOOT-001 audited source head: `20d834e1d438fd5883a76e9b45bcf21860e7db42`.
 - PR `#189`: merged by squash for post-REST-readiness/bootstrap-Health CURRENT reconciliation.
+- PR `#190`: merged by squash for Local Nervous System Health legacy-consumer convergence.
+- PR `#191`: merged by squash for RECALL-BOOT-001 canonical read-only startup readiness.
 
 ```text
-CONTENT_BASELINE_SHA=77af62a545f72161c0ff47d74c0de6e1d1f4f251
-CONTENT_BASELINE_PARENT_SHA=32a183e7821de49a4958c52d75693c43ee99b2e1
+CONTENT_BASELINE_SHA=c4b192b8f54b2422ce816dc3542d55adfd44510c
+CONTENT_BASELINE_PARENT_SHA=9c7325e6f1a21d79b1c3fb58f0b5f81a828fc304
 CURRENT_MAIN_RESOLUTION=EXTERNAL_GIT_REF
 MERGE_SHA_EVIDENCE=EXTERNAL
 PR_172=MERGED_BY_SQUASH_HISTORICAL
@@ -54,6 +59,8 @@ PR_186=MERGED_BY_SQUASH_HISTORICAL
 PR_187=MERGED_BY_SQUASH_HISTORICAL
 PR_188=MERGED_BY_SQUASH_HISTORICAL
 PR_189=MERGED_BY_SQUASH_HISTORICAL
+PR_190=MERGED_BY_SQUASH_HISTORICAL
+PR_191=MERGED_BY_SQUASH_HISTORICAL
 ```
 
 ## Context
@@ -71,7 +78,7 @@ ADR-0001 remains the separate ProjectVault protected reference. ADR-0002 governs
 
 ORCH-001 is integrated F1 convergence but remains outside the XOP operation set: it gates rebuildable local orchestration seed projections directly on committed Genesis Ultra identity and no longer uses legacy birth-completeness authority. RECALL-001 is integrated but deliberately outside the XOP owner set because it is a verified canonical read followed by an atomic rebuildable projection inside `MemoryOrganDatabase`.
 
-Bootstrap health derivation from PR #187 and REST-BOOT-001 are also outside the XOP owner set. PR #187 derives the bootstrap report's Health from existing dependency state and rejects inconsistent forged Health. REST-BOOT-001 performs a read-only canonical planning probe and validates the same REST Instance/Body/epoch/digest boundary before startup may report REST READY. Neither creates a canonical event, journal operation, identity source, or owner finalization path.
+Bootstrap health derivation from PR #187, REST-BOOT-001 and RECALL-BOOT-001 are also outside the XOP owner set. PR #187 derives the bootstrap report's Health from existing dependency state and rejects inconsistent forged Health. REST-BOOT-001 performs a read-only canonical planning probe and validates the same REST Instance/Body/epoch/digest boundary before startup may report REST READY. RECALL-BOOT-001 performs a read-only canonical recall probe and validates Instance/Body/epoch/snapshot/candidate authority before startup may report RECALL READY. None creates a canonical event, journal operation, identity source, or owner finalization path.
 
 Local Nervous System Health is likewise outside the XOP owner set. `LocalNervousSystemRepository.observeHealth` reads only `CanonicalConsumerReadPort.readHealthInput`, derives Health from verified living-memory evidence, and returns operational telemetry without persisting canonical or legacy memory. Its telemetry is explicitly non-authoritative (`memory_authority=false`, `canonical_memory_write=false`, `legacy_memory_event_write=false`).
 
@@ -86,7 +93,7 @@ Morimil is the continuous Instance. `Morimil-app` is the current Android Body. T
 - writer authorization is not ownership;
 - no database, process, journal row, model, provider, agent worker, BOOT projection, ORCH projection, recall projection, REST projection, Health telemetry, or Guardian becomes identity or canonical-memory authority.
 
-No new compatibility write to `genesis_core`, `local_instance_identity`, or `memory_events` is permitted. Local Nervous System Health no longer reads those stores as authority and has no memory writer.
+No new compatibility write to `genesis_core`, `local_instance_identity`, or `memory_events` is permitted. Local Nervous System Health and RECALL readiness do not read those stores as authority and have no memory writer.
 
 `CanonicalCognitiveMigrationCommitPort`, `CanonicalOrchestrationCommitPort`, `CanonicalAgentLifecycleCommitPort`, `CanonicalRuntimeBootstrapCommitPort`, and `CanonicalRestCycleCommitPort` are specialized exact canonical-ensure adapters. They are not identity sources.
 
@@ -102,7 +109,7 @@ A bounded derived rebuild does not need an XOP merely because it consumes canoni
 
 A bounded local seed projection also does not need an XOP when it creates no cross-database authoritative transition. ORCH-001 therefore remains outside the journal operation set: committed canonical identity is checked first and agent/device seed rows remain disposable local projections.
 
-A read-only readiness probe, derived bootstrap-health evaluation, or Local Nervous System observation likewise does not need an XOP. PR #187 consumes runtime dependency state only. REST-BOOT-001 consumes verified canonical REST planning input but performs no canonical append, recovery advancement, migration finalization or repair proposal mutation. Local Nervous System consumes verified canonical Health input but performs no canonical append, legacy event write, or owner finalization. These dispositions are integrated without widening ADR-0002's owner registry.
+A read-only readiness probe, derived bootstrap-health evaluation, or Local Nervous System observation likewise does not need an XOP. PR #187 consumes runtime dependency state only. REST-BOOT-001 consumes verified canonical REST planning input but performs no canonical append, recovery advancement, migration finalization or repair proposal mutation. RECALL-BOOT-001 consumes verified canonical recall candidates but performs no recall seeding, schedule/link projection mutation or canonical append. Local Nervous System consumes verified canonical Health input but performs no canonical append, legacy event write, or owner finalization. These dispositions are integrated without widening ADR-0002's owner registry.
 
 BOOT is an integrated owner whose local completion is a saga across both Room files: after exact canonical receipt, `MorimilDatabase` projection preparation is idempotent and replayable; MemoryOrgan projection finalization and XOP `COMMITTED` occur in the owner transaction. This does not make the BOOT journal an identity authority.
 
@@ -168,15 +175,19 @@ BOOT operation identity includes current Body/epoch so a future F5 successor Bod
 
 RECALL-001 consumes verified `CanonicalConsumerReadPort.readRecallCandidates` data, validates Instance/Body/signer/epoch bindings, uses canonical `targetEventHash` for idempotency, and finalizes schedule plus graph link in one local Room transaction.
 
-It creates no compatibility authority rows, does not use placeholder Instance identity, and fails closed on invalid canonical evidence. `recallId` is only local projection identity. Startup-level recall readiness remains open because BOOT still reports `WAITING_FOR_CANONICAL_MEMORY_ADAPTER` and startup does not automatically seed/declare recall ready.
+It creates no compatibility authority rows, does not use placeholder Instance identity, and fails closed on invalid canonical evidence. `recallId` is only local projection identity.
+
+RECALL-BOOT-001 adds a read-only readiness disposition over the same canonical read boundary. `RecallScheduleRepository.isBootstrapReady(identity)` accepts a verified empty candidate batch as READY, maps NOT_READY to waiting without mutation, fails closed on RETRYABLE/BLOCKED evidence, validates canonical Instance/Body/epoch/snapshot/candidate authority, and does not call `seedFromRecentMemoryIfNeeded` or create schedule/link projection state.
 
 ## Runtime readiness dispositions
 
-PR #187 uses `GenesisUltraRuntimeHealthConvergence.evaluate(...)`: bootstrap Health is READY only when legacy memory is converged and both REST and RECALL subsystem states are READY. `GenesisUltraRuntimeBootstrapReport` rejects any Health state inconsistent with those dependencies. With RECALL still waiting, current bootstrap Health remains `WAITING_FOR_DEPENDENCIES`.
+PR #187 uses `GenesisUltraRuntimeHealthConvergence.evaluate(...)`: bootstrap Health is READY only when legacy memory is converged and both REST and RECALL subsystem states are READY. `GenesisUltraRuntimeBootstrapReport` rejects any Health state inconsistent with those dependencies. With REST-BOOT-001 and RECALL-BOOT-001 integrated, repository truth is `HEALTH_STATE=DEPENDENCY_DERIVED`: actual READY or WAITING status depends on verified runtime inputs and is not declared as a timeless constant.
 
-Local Nervous System Health no longer contributes legacy authority to that open global state. `LocalNervousSystemRepository.observeHealth` uses `CanonicalConsumerReadPort.readHealthInput`; NOT_READY/RETRYABLE cannot report healthy, BLOCKED is critical, and the resulting telemetry is operational-only. `HEALTH_CONVERGENCE=OPEN` remains required because RECALL startup readiness is still open and the full F1/F3.2 closure reaudit has not yet occurred.
+Local Nervous System Health no longer contributes legacy authority to global Health. `LocalNervousSystemRepository.observeHealth` uses `CanonicalConsumerReadPort.readHealthInput`; NOT_READY/RETRYABLE cannot report healthy, BLOCKED is critical, and the resulting telemetry is operational-only. `HEALTH_CONVERGENCE=OPEN` remains required until the full F1/F3.2 protected-main closure reaudit occurs.
 
 REST-BOOT-001 uses `RestCycleRepository.isBootstrapReady(identity)` plus `CanonicalConsumerReadPort.readRestCyclePlanningInput`. Canonical NOT_READY maps to waiting without mutation; RETRYABLE/BLOCKED evidence fails closed; a ready input must pass `requireCanonicalPlanning(identity, planning)`. The readiness path does not call `recoverBeforeMutation`, `protocol.execute`, migration-store finalization, or repair-store mutation.
+
+RECALL-BOOT-001 uses `RecallScheduleRepository.isBootstrapReady(identity)` plus `CanonicalConsumerReadPort.readRecallCandidates`. The readiness path does not seed projection state or acquire canonical-memory write authority.
 
 ## REST-001 mapping
 
@@ -220,12 +231,13 @@ PR #187 source head `f1697227241459f316bd562756e15ae3ce02c90d` passed all five g
 
 REST-BOOT-001 source head `dd7a92a011fd4c453775df6ec307638b05313ec9` passed all five governed PR-associated workflows before PR #188 squash integration: Android CI #738, Genesis Body Preparation #715, Reference Checks #562, CodeQL #451 and SBOM #449. Direct JVM tests cover READY, NOT_READY, RETRYABLE and BLOCKED readiness dispositions; managed API30/API35 validation passed while physical ARM64-only cases remain outside emulator proof.
 
+Health legacy-consumer convergence source head `6735e2d1febccf7da560d026d6ddd88f6ad82845` passed Android CI #757, Genesis Body Preparation #732, Reference Checks #581, CodeQL #470 and SBOM #468. RECALL-BOOT-001 source head `20d834e1d438fd5883a76e9b45bcf21860e7db42` passed Android CI #759, Genesis Body Preparation #733, Reference Checks #583, CodeQL #472 and SBOM #470. RECALL managed-device evidence re-read canonical state after repository recreation without creating schedule/link projections.
+
 The global mutation pilot remained report-only and does not establish Health-, REST- or RECALL-specific mutation coverage.
 
 ## Residual hardening
 
-- RECALL startup-readiness wiring remains open;
-- bootstrap Health remains `WAITING_FOR_DEPENDENCIES` until RECALL readiness is proven;
+- full F1/F3.2 protected-main reaudit remains required before global Health convergence can be closed;
 - Health-specific mutation testing is not established;
 - `CanonicalHealthInput.recentVerifiedEventCount` is intentionally excluded from Health decisions until its metadata-only semantics are separately hardened;
 - REST-specific mutation testing is not established;
@@ -240,8 +252,8 @@ The global mutation pilot remained report-only and does not establish Health-, R
 ```text
 ADR_0002=ACCEPTED_AND_IMPLEMENTED_FOR_COG_ORCH_AGENT_BOOT_REST001_AND_REST002_PROPOSAL_BOUNDED_SCOPES
 RECALL_DISPOSITION=INTEGRATED_DERIVED_REBUILD_NOT_XOP_OWNER
-CONTENT_BASELINE_SHA=77af62a545f72161c0ff47d74c0de6e1d1f4f251
-CONTENT_BASELINE_PARENT_SHA=32a183e7821de49a4958c52d75693c43ee99b2e1
+CONTENT_BASELINE_SHA=c4b192b8f54b2422ce816dc3542d55adfd44510c
+CONTENT_BASELINE_PARENT_SHA=9c7325e6f1a21d79b1c3fb58f0b5f81a828fc304
 CURRENT_MAIN_RESOLUTION=EXTERNAL_GIT_REF
 MERGE_SHA_EVIDENCE=EXTERNAL
 MEMORY_ORGAN_DATABASE=V9
@@ -258,7 +270,7 @@ REST_002=INTEGRATED
 REST_REPAIR_PROPOSAL_CONVERGED=true
 REST_REPAIR_EXECUTION_IMPLEMENTED=false
 REST_BOOT_READINESS=INTEGRATED
-RECALL_BOOT_READINESS=OPEN
+RECALL_BOOT_READINESS=INTEGRATED
 BOOTSTRAP_HEALTH_DERIVATION=INTEGRATED
 HEALTH_LEGACY_CONSUMER_CONVERGENCE=INTEGRATED
 HEALTH_CAN_READ_CANONICAL_MEMORY=true
@@ -266,8 +278,9 @@ HEALTH_CAN_WRITE_CANONICAL_MEMORY=false
 HEALTH_CAN_WRITE_LEGACY_MEMORY_EVENTS=false
 HEALTH_CONVERGENCE=OPEN
 HEALTH_CONVERGED=false
-HEALTH_STATE=WAITING_FOR_DEPENDENCIES
+HEALTH_STATE=DEPENDENCY_DERIVED
+F1_F3_2_FULL_REAUDIT=REQUIRED
 F3_3=OPEN
-TRACKER_88=OPEN_FOR_RECALL_READINESS_REAUDIT_AND_LEGACY_RETIREMENT
+TRACKER_88=OPEN_FOR_REAUDIT_AND_LEGACY_RETIREMENT
 MORIMIL_OPERATIONAL_BIRTH=NOT_OCCURRED
 ```
