@@ -30,7 +30,11 @@ class MemoryOrganRepositoryContractTest {
     fun criticalRuntimeRepositoriesRequireTheirCurrentIntegrityBoundaries() {
         assertConstructorRequires(MemoryOrganRepository::class.java, MemoryIntegrityCore::class.java)
         assertConstructorRequires(MemoryOrganReconciliationRepository::class.java, MemoryIntegrityCore::class.java)
-        assertConstructorRequires(MemoryRepository::class.java, MemoryIntegrityCore::class.java)
+
+        // F3.3-A removes the legacy memory-chain verification/read surface from the
+        // product facade. Canonical reads are verified before presentation, while
+        // product writes still require the explicit canonical LivingMemoryPort.
+        assertConstructorDoesNotRequire(MemoryRepository::class.java, MemoryIntegrityCore::class.java)
         assertConstructorRequires(MemoryRepository::class.java, LivingMemoryPort::class.java)
 
         // REST-001 no longer verifies legacy memory_events directly. Its authority and
