@@ -7,23 +7,31 @@ import org.junit.Test
 
 class MemoryLinkRepositoryTest {
     @Test
+    fun canonicalMemoryEventNodeTypeIsStable() {
+        assertEquals(
+            "canonical_memory_event",
+            MemoryLinkRepository.CANONICAL_MEMORY_EVENT_NODE_TYPE
+        )
+    }
+
+    @Test
     fun memoryLinkIdUsesDeterministicSha256Suffix() {
         val linkId = MemoryLinkRepository.buildMemoryLinkId(
             createdAtMillis = 1234567890L,
-            sourceId = "sha256:source",
-            targetId = "sha256:target",
+            sourceId = "evsha256:source",
+            targetId = "evsha256:target",
             relation = MemoryLinkRepository.RELATION_DERIVED_FROM
         )
         val repeated = MemoryLinkRepository.buildMemoryLinkId(
             createdAtMillis = 1234567890L,
-            sourceId = "sha256:source",
-            targetId = "sha256:target",
+            sourceId = "evsha256:source",
+            targetId = "evsha256:target",
             relation = MemoryLinkRepository.RELATION_DERIVED_FROM
         )
         val changedTarget = MemoryLinkRepository.buildMemoryLinkId(
             createdAtMillis = 1234567890L,
-            sourceId = "sha256:source",
-            targetId = "sha256:other-target",
+            sourceId = "evsha256:source",
+            targetId = "evsha256:other-target",
             relation = MemoryLinkRepository.RELATION_DERIVED_FROM
         )
 
