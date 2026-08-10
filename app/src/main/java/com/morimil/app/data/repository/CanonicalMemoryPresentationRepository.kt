@@ -2,12 +2,11 @@ package com.morimil.app.data.repository
 
 import com.morimil.app.data.genesis.ultra.CanonicalConsumerEvent
 import com.morimil.app.data.genesis.ultra.CanonicalConsumerReadPort
-import com.morimil.app.data.genesis.ultra.CanonicalPayloadState
 import com.morimil.app.data.genesis.ultra.CanonicalReadDisposition
 import com.morimil.app.data.genesis.ultra.CanonicalReadFailure
 import com.morimil.app.data.genesis.ultra.CanonicalReadResult
 
-internal data class CanonicalMemoryPresentationEvent(
+data class CanonicalMemoryPresentationEvent(
     val eventHash: String,
     val sequence: Long,
     val eventType: String,
@@ -18,11 +17,10 @@ internal data class CanonicalMemoryPresentationEvent(
     val importance: Int,
     val confidence: Int,
     val userConfirmed: Boolean,
-    val body: String,
-    val payloadState: CanonicalPayloadState
+    val body: String
 )
 
-internal data class CanonicalMemoryPresentationSnapshot(
+data class CanonicalMemoryPresentationSnapshot(
     val instanceId: String,
     val companionName: String,
     val birthRootEventHash: String,
@@ -105,8 +103,7 @@ internal class CanonicalMemoryPresentationRepository(
             importance = semantics?.importance ?: ACTIVATION_IMPORTANCE,
             confidence = semantics?.confidence ?: ACTIVATION_CONFIDENCE,
             userConfirmed = semantics?.userConfirmed ?: provenance?.userConfirmed ?: false,
-            body = event.content ?: ACTIVATION_PRESENTATION,
-            payloadState = event.payloadState
+            body = event.content ?: ACTIVATION_PRESENTATION
         )
     }
 
