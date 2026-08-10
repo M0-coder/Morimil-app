@@ -49,7 +49,7 @@ class LegacyArchiveReadBoundariesAndroidTest {
                 createdAtMillis
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """.trimIndent(),
-            arrayOf(
+            arrayOf<Any?>(
                 "legacy_core_fixture",
                 null,
                 null,
