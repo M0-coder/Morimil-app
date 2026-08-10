@@ -1,8 +1,9 @@
 package com.morimil.app.ui
 
 import com.morimil.app.MorimilAppContainer
-import com.morimil.app.data.local.MemoryEventEntity
 import com.morimil.app.data.local.MemoryLinkEntity
+import com.morimil.app.data.repository.CanonicalMemoryPresentationEvent
+import com.morimil.app.data.repository.CanonicalMemoryPresentationRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -15,6 +16,7 @@ import kotlinx.coroutines.withContext
 
 internal class MorimilMemoryGraphCoordinator(
     private val container: MorimilAppContainer,
+    private val canonicalMemoryPresentationRepository: CanonicalMemoryPresentationRepository,
     private val scope: CoroutineScope,
     private val observeTask: suspend (String, suspend () -> Unit) -> Result<Unit>
 ) {
@@ -24,12 +26,13 @@ internal class MorimilMemoryGraphCoordinator(
     private val _selectedMemoryLinks = MutableStateFlow<List<MemoryLinkEntity>>(emptyList())
     val selectedMemoryLinks: StateFlow<List<MemoryLinkEntity>> = _selectedMemoryLinks.asStateFlow()
 
-    private val _selectedGraphEvents = MutableStateFlow<List<MemoryEventEntity>>(emptyList())
-    val selectedGraphEvents: StateFlow<List<MemoryEventEntity>> = _selectedGraphEvents.asStateFlow()
+    private val _selectedGraphEvents = MutableStateFlow<List<CanonicalMemoryPresentationEvent>>(emptyList())
+    val selectedGraphEvents: StateFlow<List<CanonicalMemoryPresentationEvent>> =
+        _selectedGraphEvents.asStateFlow()
 
     private var selectedMemoryLinksJob: Job? = null
 
-    fun approveMemoryEvent(event: MemoryEventEntity) {
+    fun approveMemoryEvent(event: CanonicalMemoryPresentationEvent) {
         recordMemoryReview(
             event = event,
             action = "aprobado",
@@ -37,7 +40,7 @@ internal class MorimilMemoryGraphCoordinator(
         )
     }
 
-    fun degradeMemoryEvent(event: MemoryEventEntity) {
+    fun degradeMemoryEvent(event: CanonicalMemoryPresentationEvent) {
         recordMemoryReview(
             event = event,
             action = "ruido_degradado",
@@ -45,7 +48,7 @@ internal class MorimilMemoryGraphCoordinator(
         )
     }
 
-    fun requestMemoryCorrection(event: MemoryEventEntity) {
+    fun requestMemoryCorrection(event: CanonicalMemoryPresentationEvent) {
         recordMemoryReview(
             event = event,
             action = "correccion_requerida",
@@ -79,12 +82,12 @@ internal class MorimilMemoryGraphCoordinator(
     private suspend fun loadConnectedGraphEvents(
         selectedEventHash: String,
         links: List<MemoryLinkEntity>
-    ): List<MemoryEventEntity> {
+    ): List<CanonicalMemoryPresentationEvent> {
         val hashes = buildList {
             add(selectedEventHash)
             links.forEach { link ->
-                if (link.sourceType == MEMORY_EVENT_NODE_TYPE) add(link.sourceId)
-                if (link.targetType == MEMORY_EVENT_NODE_TYPE) add(link.targetId)
+                if (link.sourceType == CANONICAL_MEMORY_EVENT_NODE_TYPE) add(link.sourceId)
+                if (link.targetType == CANONICAL_MEMORY_EVENT_NODE_TYPE) add(link.targetId)
             }
         }
             .filter { hash -> hash.isNotBlank() }
@@ -93,12 +96,12 @@ internal class MorimilMemoryGraphCoordinator(
 
         if (hashes.isEmpty()) return emptyList()
         return withContext(Dispatchers.IO) {
-            container.memoryDatabase.memoryDao().loadMemoryEventsByHashes(hashes)
+            canonicalMemoryPresentationRepository.loadEventsByHashes(hashes)
         }
     }
 
     private fun recordMemoryReview(
-        event: MemoryEventEntity,
+        event: CanonicalMemoryPresentationEvent,
         action: String,
         note: String
     ) {
@@ -114,7 +117,7 @@ internal class MorimilMemoryGraphCoordinator(
     }
 
     private companion object {
-        const val MEMORY_EVENT_NODE_TYPE = "memory_event"
+        const val CANONICAL_MEMORY_EVENT_NODE_TYPE = "canonical_memory_event"
         const val MAX_GRAPH_EVENT_LOOKUP = 60
     }
 }
