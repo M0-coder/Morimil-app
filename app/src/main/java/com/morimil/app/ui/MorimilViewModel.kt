@@ -4,17 +4,14 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.morimil.app.MorimilAppContainer
+import com.morimil.app.canonicalConsumerReadPort
 import com.morimil.app.genesisUltraRuntimeStartupGate
 import com.morimil.app.data.local.AgentProfileEntity
 import com.morimil.app.data.local.AutobiographicalSnapshotEntity
 import com.morimil.app.data.local.DecisionLogEntity
 import com.morimil.app.data.local.DelegatedTaskEntity
-import com.morimil.app.data.local.GenesisCoreEntity
 import com.morimil.app.data.local.KnowledgeCapsuleEntity
-import com.morimil.app.data.local.LocalInstanceIdentityEntity
-import com.morimil.app.data.local.MemoryEventEntity
 import com.morimil.app.data.local.MemoryLinkEntity
-import com.morimil.app.data.local.MemorySnapshotEntity
 import com.morimil.app.data.local.MigrationRecordEntity
 import com.morimil.app.data.local.OrchestratorDeviceEntity
 import com.morimil.app.data.local.ProjectStateEntity
@@ -22,6 +19,9 @@ import com.morimil.app.data.local.ProjectVaultEntity
 import com.morimil.app.data.local.ReasoningTurnEntity
 import com.morimil.app.data.local.RecallScheduleEntity
 import com.morimil.app.data.local.UserWorkspaceEntity
+import com.morimil.app.data.repository.CanonicalMemoryPresentationEvent
+import com.morimil.app.data.repository.CanonicalMemoryPresentationRepository
+import com.morimil.app.data.repository.CanonicalMemoryPresentationSnapshot
 import com.morimil.app.data.repository.RestCycleRepository
 import com.morimil.app.runtime.RestCycleScheduleStatus
 import com.morimil.app.runtime.RestCycleScheduler
@@ -37,8 +37,10 @@ import kotlinx.coroutines.launch
 
 class MorimilViewModel(application: Application) : AndroidViewModel(application) {
     private val container = MorimilAppContainer.from(application)
-    private val memoryDatabase = container.memoryDatabase
     private val repository = container.memoryRepository
+    private val canonicalMemoryPresentationRepository = CanonicalMemoryPresentationRepository(
+        container.canonicalConsumerReadPort
+    )
     private val reasoningTranscriptRepository = container.reasoningTranscriptRepository
     private val memoryOrganRepository = container.memoryOrganRepository
     private val migrationRecordRepository = container.migrationRecordRepository
@@ -51,6 +53,7 @@ class MorimilViewModel(application: Application) : AndroidViewModel(application)
     private val memoryGraphCoordinator by lazy {
         MorimilMemoryGraphCoordinator(
             container = container,
+            canonicalMemoryPresentationRepository = canonicalMemoryPresentationRepository,
             scope = viewModelScope,
             observeTask = { component, block ->
                 runObservedInternalTask(component) { block() }
@@ -63,7 +66,6 @@ class MorimilViewModel(application: Application) : AndroidViewModel(application)
             application = application,
             container = container,
             scope = viewModelScope,
-            localIdentity = localIdentity,
             messages = messages,
             observeTask = { component, block ->
                 runObservedInternalTask(component) { block() }
@@ -101,29 +103,13 @@ class MorimilViewModel(application: Application) : AndroidViewModel(application)
         initialValue = null
     )
 
-    val localIdentity: StateFlow<LocalInstanceIdentityEntity?> = repository.localIdentity.stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5_000),
-        initialValue = null
-    )
+    private val _canonicalMemorySnapshot = MutableStateFlow<CanonicalMemoryPresentationSnapshot?>(null)
+    val canonicalMemorySnapshot: StateFlow<CanonicalMemoryPresentationSnapshot?> =
+        _canonicalMemorySnapshot.asStateFlow()
 
-    val genesisCore: StateFlow<GenesisCoreEntity?> = repository.genesisCore.stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5_000),
-        initialValue = null
-    )
-
-    val recentMemoryEvents: StateFlow<List<MemoryEventEntity>> = repository.recentMemoryEvents.stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5_000),
-        initialValue = emptyList()
-    )
-
-    val livingMemorySnapshot: StateFlow<MemorySnapshotEntity?> = repository.livingMemorySnapshot.stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5_000),
-        initialValue = null
-    )
+    private val _canonicalMemoryEvents = MutableStateFlow<List<CanonicalMemoryPresentationEvent>>(emptyList())
+    val canonicalMemoryEvents: StateFlow<List<CanonicalMemoryPresentationEvent>> =
+        _canonicalMemoryEvents.asStateFlow()
 
     val selfSnapshot: StateFlow<AutobiographicalSnapshotEntity?> = memoryOrganRepository.selfSnapshot.stateIn(
         scope = viewModelScope,
@@ -155,7 +141,7 @@ class MorimilViewModel(application: Application) : AndroidViewModel(application)
     val selectedMemoryLinks: StateFlow<List<MemoryLinkEntity>>
         get() = memoryGraphCoordinator.selectedMemoryLinks
 
-    val selectedGraphEvents: StateFlow<List<MemoryEventEntity>>
+    val selectedGraphEvents: StateFlow<List<CanonicalMemoryPresentationEvent>>
         get() = memoryGraphCoordinator.selectedGraphEvents
 
     private val _memoryIntegrityAudit = MutableStateFlow(MemoryIntegrityAuditUiState())
@@ -229,6 +215,7 @@ class MorimilViewModel(application: Application) : AndroidViewModel(application)
                 container.genesisUltraRuntimeStartupGate.requireReady()
             }.onSuccess {
                 reasoningTranscriptRepository.seedIntroTurnsIfNeeded()
+                refreshCanonicalMemory()
                 refreshGenesis()
             }.onFailure { error ->
                 recordInternalRuntimeIssue(
@@ -241,7 +228,7 @@ class MorimilViewModel(application: Application) : AndroidViewModel(application)
             }
         }
         viewModelScope.launch {
-            recentMemoryEvents.collect {
+            canonicalMemoryEvents.collect {
                 refreshChatOrganismStatus()
                 refreshOrganismHealth()
             }
@@ -252,11 +239,21 @@ class MorimilViewModel(application: Application) : AndroidViewModel(application)
 
     fun refreshGenesis() = chatCoordinator.refreshGenesis()
 
-    fun approveMemoryEvent(event: MemoryEventEntity) = memoryGraphCoordinator.approveMemoryEvent(event)
+    fun refreshCanonicalMemory() {
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { refreshCanonicalMemoryOnWorker() }
+                .onFailure { error -> recordInternalRuntimeIssue("canonical_memory.presentation", error) }
+        }
+    }
 
-    fun degradeMemoryEvent(event: MemoryEventEntity) = memoryGraphCoordinator.degradeMemoryEvent(event)
+    fun approveMemoryEvent(event: CanonicalMemoryPresentationEvent) =
+        memoryGraphCoordinator.approveMemoryEvent(event)
 
-    fun requestMemoryCorrection(event: MemoryEventEntity) = memoryGraphCoordinator.requestMemoryCorrection(event)
+    fun degradeMemoryEvent(event: CanonicalMemoryPresentationEvent) =
+        memoryGraphCoordinator.degradeMemoryEvent(event)
+
+    fun requestMemoryCorrection(event: CanonicalMemoryPresentationEvent) =
+        memoryGraphCoordinator.requestMemoryCorrection(event)
 
     fun selectMemoryEvent(eventHash: String) = memoryGraphCoordinator.selectMemoryEvent(eventHash)
 
@@ -265,8 +262,13 @@ class MorimilViewModel(application: Application) : AndroidViewModel(application)
     fun runMemoryIntegrityAudit() {
         viewModelScope.launch(Dispatchers.IO) {
             val result = runCatching {
-                val memoryVerified = repository.auditLivingMemoryChain()
+                val snapshot = canonicalMemoryPresentationRepository.readSnapshot()
+                val memoryVerified = snapshot != null
                 val capsulesVerified = memoryOrganRepository.auditKnowledgeCapsuleChain()
+                if (snapshot != null) {
+                    _canonicalMemorySnapshot.value = snapshot
+                    _canonicalMemoryEvents.value = snapshot.events
+                }
                 MemoryIntegrityAuditUiState(
                     memoryChainVerified = memoryVerified,
                     capsuleChainVerified = capsulesVerified,
@@ -290,7 +292,7 @@ class MorimilViewModel(application: Application) : AndroidViewModel(application)
     fun refreshChatOrganismStatus() {
         val activeSlot = container.reasoningConfigStore.loadActiveSlot()
         val modelLabel = activeSlot.config.model.ifBlank { "modelo pendiente" }
-        val hasQuarantine = recentMemoryEvents.value.any { event ->
+        val hasQuarantine = canonicalMemoryEvents.value.any { event ->
             event.eventType == MEMORY_INTEGRITY_QUARANTINE_EVENT_TYPE ||
                 event.memoryKind == "integrity_quarantine"
         }
@@ -320,14 +322,19 @@ class MorimilViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    private suspend fun refreshCanonicalMemoryOnWorker() {
+        val snapshot = canonicalMemoryPresentationRepository.readSnapshot()
+        _canonicalMemorySnapshot.value = snapshot
+        _canonicalMemoryEvents.value = snapshot?.events.orEmpty()
+    }
+
     private suspend fun refreshOrganismHealthOnWorker() {
         val activeSlot = container.reasoningConfigStore.loadActiveSlot()
         val audit = _memoryIntegrityAudit.value
-        val hasQuarantine = recentMemoryEvents.value.any { event ->
+        val hasQuarantine = canonicalMemoryEvents.value.any { event ->
             event.eventType == MEMORY_INTEGRITY_QUARANTINE_EVENT_TYPE ||
                 event.memoryKind == "integrity_quarantine"
         }
-        val memoryDao = memoryDatabase.memoryDao()
         val now = System.currentTimeMillis()
         val recalls = activeRecallSchedules.value
         val latestCompletedRestCycle = migrationRecordRepository.loadLatestCompletedMigration(
@@ -339,12 +346,11 @@ class MorimilViewModel(application: Application) : AndroidViewModel(application)
             restCycleAudit = latestCompletedRestCycle?.toRestCycleAuditSignal(),
             hasQuarantine = hasQuarantine,
             internalIssue = _internalRuntimeIssue.value,
-            eventCount = memoryDao.countMemoryEvents(),
+            eventCount = canonicalMemorySnapshot.value?.totalEventCount ?: 0,
             recallPendingCount = recalls.size,
             recallOverdueCount = recalls.count { recall -> recall.dueAtMillis <= now },
             restCycleScheduleStatus = _restCycleScheduleStatus.value,
-            latestRestCycleAtMillis = latestCompletedRestCycle?.updatedAtMillis
-                ?: memoryDao.loadLatestRestCycleEvent()?.createdAtMillis,
+            latestRestCycleAtMillis = latestCompletedRestCycle?.updatedAtMillis,
             nowMillis = now
         )
     }
@@ -460,6 +466,8 @@ class MorimilViewModel(application: Application) : AndroidViewModel(application)
         result
             .onSuccess { clearInternalRuntimeIssue(component) }
             .onFailure { error -> recordInternalRuntimeIssue(component, error) }
+        runCatching { refreshCanonicalMemoryOnWorker() }
+            .onFailure { error -> recordInternalRuntimeIssue("canonical_memory.presentation", error) }
         runCatching { refreshOrganismHealthOnWorker() }
             .onFailure { error -> recordInternalRuntimeIssue("organism_health.refresh", error) }
         return result
@@ -586,8 +594,6 @@ class MorimilViewModel(application: Application) : AndroidViewModel(application)
             }
         }
     }
-
-    suspend fun bornInstance(alias: String): Result<Unit> = chatCoordinator.bornInstance(alias)
 
     fun sendMessage(body: String) {
         refreshChatOrganismStatus()
