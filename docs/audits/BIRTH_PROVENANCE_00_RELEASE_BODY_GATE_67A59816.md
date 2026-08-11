@@ -78,7 +78,7 @@ BIRTH-PROVENANCE-00 remains OPEN until a successful manual `Signed Release APK` 
 Archive without secrets:
 
 ```text
-SOURCE_COMMIT=<64/40 hex commit SHA as emitted by workflow>
+SOURCE_COMMIT=<exact 40-character Git commit SHA emitted by workflow>
 APPLICATION_ID=com.morimil.app
 VERSION_CODE=8
 VERSION_NAME=0.3.1-prealpha.plan-v3
