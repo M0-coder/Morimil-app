@@ -47,7 +47,11 @@ class BirthBodyProvenanceContractTest {
         assertTrue(gate.contains("APPLICATION_ID=com.morimil.app"))
         assertTrue(gate.contains("VERSION_CODE=8"))
         assertTrue(gate.contains("VERSION_NAME=0.3.1-prealpha.plan-v3"))
-        assertTrue(gate.contains("The first physical Body used for canonical Genesis must not be a disposable debug installation."))
+        assertTrue(
+            gate.contains(
+                "The first physical Body used for canonical Genesis must not be a disposable debug installation."
+            )
+        )
     }
 
     @Test
@@ -55,8 +59,7 @@ class BirthBodyProvenanceContractTest {
         assertTrue(workflow.contains("workflow_dispatch:"))
         assertTrue(workflow.contains("refs/heads/main"))
         assertTrue(workflow.contains("MORIMIL_RELEASE_CERT_SHA256"))
-        assertTrue(workflow.contains("apksigner\" verify --verbose --print-certs").not())
-        assertTrue(workflow.contains("\"$apksigner\" verify --verbose --print-certs"))
+        assertTrue(workflow.contains("\"${'$'}apksigner\" verify --verbose --print-certs"))
         assertTrue(workflow.contains("certificate_sha256=%s"))
         assertTrue(workflow.contains("apk_sha256=%s"))
         assertTrue(workflow.contains("unsigned_apk_sha256=%s"))
@@ -68,7 +71,11 @@ class BirthBodyProvenanceContractTest {
     fun distributionCertificateNeverBecomesMorimilAuthority() {
         assertTrue(gate.contains("Instance != Body != Guardian != Android distribution certificate"))
         assertTrue(gate.contains("does not define Morimil's identity"))
-        assertTrue(gate.contains("does not make the Android signing certificate Morimil's identity or owner"))
+        assertTrue(
+            gate.contains(
+                "does not make the Android signing certificate Morimil's identity or owner"
+            )
+        )
         assertFalse(gate.contains("distribution certificate = Morimil identity"))
     }
 
