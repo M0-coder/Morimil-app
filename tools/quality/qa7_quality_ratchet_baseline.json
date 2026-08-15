@@ -61,6 +61,7 @@
       "net.zetetic:sqlcipher-android",
       "org.json:json"
     ],
+    "gradleDependencySourceSha256": "sha256:0fc83279576f2264f81e4f8777abe6502e2995c175b1eb22f7dddde06c548b56",
     "maxErrors": 0,
     "maxWarnings": 23,
     "warningFingerprints": [
