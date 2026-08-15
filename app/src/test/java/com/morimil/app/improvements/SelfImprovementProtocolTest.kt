@@ -1,7 +1,7 @@
 package com.morimil.app.improvements
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFailsWith
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -20,7 +20,7 @@ class SelfImprovementProtocolTest {
         candidate = SelfImprovementProtocol.propose(candidate, SelfChangeActor.MORIMIL)
         candidate = SelfImprovementProtocol.registerPatchCandidate(candidate, SelfChangeActor.MORIMIL)
 
-        assertFailsWith<IllegalArgumentException> {
+        assertThrows(IllegalArgumentException::class.java) {
             SelfImprovementProtocol.verify(
                 candidate,
                 fullCriticalEvidence(candidate.candidateDigest),
@@ -34,10 +34,10 @@ class SelfImprovementProtocolTest {
             SelfChangeActor.INDEPENDENT_VERIFIER
         )
 
-        assertFailsWith<IllegalArgumentException> {
+        assertThrows(IllegalArgumentException::class.java) {
             SelfImprovementProtocol.authorize(candidate, SelfChangeActor.INDEPENDENT_VERIFIER)
         }
-        assertFailsWith<IllegalArgumentException> {
+        assertThrows(IllegalArgumentException::class.java) {
             SelfImprovementProtocol.authorize(candidate, SelfChangeActor.MORIMIL)
         }
 
@@ -58,7 +58,7 @@ class SelfImprovementProtocolTest {
         candidate = SelfImprovementProtocol.propose(candidate, SelfChangeActor.MORIMIL)
         candidate = SelfImprovementProtocol.registerPatchCandidate(candidate, SelfChangeActor.EXTERNAL_EXECUTOR)
 
-        val failure = assertFailsWith<IllegalArgumentException> {
+        val failure = assertThrows(IllegalArgumentException::class.java) {
             SelfImprovementProtocol.verify(
                 candidate,
                 fullCriticalEvidence(candidate.candidateDigest).copy(
@@ -90,7 +90,7 @@ class SelfImprovementProtocolTest {
             SelfChangeActor.INDEPENDENT_VERIFIER
         )
 
-        assertFailsWith<IllegalArgumentException> {
+        assertThrows(IllegalArgumentException::class.java) {
             SelfImprovementProtocol.authorize(candidate, SelfChangeActor.MORIMIL)
         }
     }
