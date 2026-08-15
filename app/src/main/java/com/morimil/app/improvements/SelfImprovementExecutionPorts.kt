@@ -1,5 +1,7 @@
 package com.morimil.app.improvements
 
+import java.util.Locale
+
 /** Request sent to an external sandboxed code executor. */
 internal data class SelfPatchGenerationRequest(
     val changeId: String,
@@ -47,7 +49,7 @@ internal object SelfPatchSafetyPolicy {
     const val MAX_CHANGED_PATHS = 128
     const val MAX_PATCH_BYTES = 2L * 1024L * 1024L
 
-    private val forbiddenExactPaths = setOf(
+    private val forbiddenBasenames = setOf(
         ".env",
         "local.properties"
     )
@@ -64,10 +66,12 @@ internal object SelfPatchSafetyPolicy {
     fun requireSafePaths(paths: List<String>) {
         require(paths.size <= MAX_CHANGED_PATHS) { "self_patch_changed_path_count_exceeded" }
         require(paths.none { path ->
-            path in forbiddenExactPaths ||
-                path.startsWith(".git/") ||
-                path.substringAfterLast('/').startsWith(".env.") ||
-                forbiddenSuffixes.any { suffix -> path.endsWith(suffix) }
+            val normalized = path.lowercase(Locale.ROOT)
+            val basename = normalized.substringAfterLast('/')
+            normalized.startsWith(".git/") ||
+                basename in forbiddenBasenames ||
+                basename.startsWith(".env.") ||
+                forbiddenSuffixes.any { suffix -> basename.endsWith(suffix) }
         }) { "self_patch_credential_or_git_path_forbidden" }
     }
 }
