@@ -7,6 +7,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SelfImprovementExecutionPortsTest {
@@ -60,6 +61,20 @@ class SelfImprovementExecutionPortsTest {
             first.changedPaths
         )
         assertEquals(first.copyPatchBytes().size.toLong(), first.patchByteCount)
+    }
+
+    @Test
+    fun mixedKnownAndUnknownProductionPathsRetainCoreImplementationRisk() {
+        val surfaces = SelfPatchSafetyPolicy.inferSurfaces(
+            listOf(
+                "app/src/main/java/com/morimil/app/ui/A.kt",
+                "app/src/main/java/com/morimil/app/core/Unknown.kt"
+            )
+        )
+
+        assertTrue(SelfChangeSurface.PRESENTATION in surfaces)
+        assertTrue(SelfChangeSurface.CORE_IMPLEMENTATION in surfaces)
+        assertEquals(SelfChangeRisk.HIGH, SelfImprovementPolicy.classify(surfaces))
     }
 
     @Test
@@ -164,7 +179,7 @@ class SelfImprovementExecutionPortsTest {
                     .prepareVerifiedCandidate(lowObservation, BASE_SHA)
             }
         }
-        assert(failure.message.orEmpty().contains("surface_expansion"))
+        assertTrue(failure.message.orEmpty().contains("surface_expansion"))
     }
 
     private fun observation(): SelfChangeObservation {
