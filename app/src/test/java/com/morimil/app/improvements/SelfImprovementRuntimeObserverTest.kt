@@ -4,6 +4,7 @@ import java.io.File
 import java.nio.file.Files
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -14,11 +15,15 @@ class SelfImprovementRuntimeObserverTest {
     }
 
     @Test
-    fun observerCapturesConnectedSignalsWithoutAndroidOrRoom() {
+    fun observerCapturesConnectedSignalsWithoutAndroidOrRoomAndReportsReady() {
         val root = Files.createTempDirectory("self-runtime-observer").toFile()
         try {
             val auditFile = File(root, "audit.log")
             SelfImprovementRuntimeObserver.initializeForTest(auditFile)
+            assertEquals(
+                SelfImprovementRuntimeStatus.READY,
+                SelfImprovementRuntimeObserver.runtimeStatus()
+            )
 
             SelfImprovementRuntimeObserver.reportChatError(
                 error = "backend unavailable",
@@ -41,9 +46,37 @@ class SelfImprovementRuntimeObserverTest {
     }
 
     @Test
-    fun observerDoesNothingBeforeInitialization() {
+    fun observerDoesNothingBeforeInitializationAndReportsNotInitialized() {
         SelfImprovementRuntimeObserver.resetForTest()
         SelfImprovementRuntimeObserver.reportChatError("ignored", 100L)
         assertTrue(SelfImprovementRuntimeObserver.readVerifiedAuditForDiagnostics().isEmpty())
+        assertEquals(
+            SelfImprovementRuntimeStatus.NOT_INITIALIZED,
+            SelfImprovementRuntimeObserver.runtimeStatus()
+        )
+    }
+
+    @Test
+    fun auditRollbackDisablesCaptureAndReportsDegradedInsteadOfReady() {
+        val root = Files.createTempDirectory("self-runtime-degraded").toFile()
+        try {
+            val auditFile = File(root, "audit.log")
+            SelfImprovementRuntimeObserver.initializeForTest(auditFile)
+            SelfImprovementRuntimeObserver.reportChatError("backend unavailable", 100L)
+            SelfImprovementRuntimeObserver.resetForTest()
+            assertTrue(auditFile.delete())
+
+            assertThrows(IllegalArgumentException::class.java) {
+                SelfImprovementRuntimeObserver.initializeForTest(auditFile)
+            }
+            assertEquals(
+                SelfImprovementRuntimeStatus.DEGRADED_AUDIT_UNAVAILABLE,
+                SelfImprovementRuntimeObserver.runtimeStatus()
+            )
+            SelfImprovementRuntimeObserver.reportChatError("must not append", 200L)
+            assertTrue(SelfImprovementRuntimeObserver.readVerifiedAuditForDiagnostics().isEmpty())
+        } finally {
+            root.deleteRecursively()
+        }
     }
 }
