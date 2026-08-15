@@ -41,6 +41,10 @@ internal class GenesisUltraConstructedBirthCandidate(
  * It does not write Room, install a Seed, invoke atomic activation, record host
  * consent or modify onboarding. Entropy is local and never derived from legacy
  * identity, alias, Android identifiers or the APK signing certificate.
+ *
+ * The permanent Instance identifier is deliberately derived before and
+ * independently from Body binding. The Body then proves possession and becomes
+ * the initial active writer without becoming part of the permanent Instance id.
  */
 internal class GenesisUltraBirthCandidateConstructionCoordinator(
     private val preparationCoordinator: GenesisUltraBirthPreparationCoordinator,
@@ -68,9 +72,8 @@ internal class GenesisUltraBirthCandidateConstructionCoordinator(
         }
 
         val instanceEntropy = requireEntropy(entropySource(ENTROPY_BYTES), "instance")
-        val instanceId = instanceId(
+        val instanceId = GenesisUltraInstanceIdProfile.derive(
             releaseRoot = request.release.verifiedRootHash,
-            bodyId = bodyRoot.bodyId,
             companionName = companionName,
             bornAt = request.bornAt,
             entropyRef = GenesisUltraHashProfile.sha256(instanceEntropy)
@@ -295,20 +298,6 @@ internal class GenesisUltraBirthCandidateConstructionCoordinator(
         return value.copyOf()
     }
 
-    private fun instanceId(
-        releaseRoot: String,
-        bodyId: String,
-        companionName: String,
-        bornAt: String,
-        entropyRef: String
-    ): String {
-        return identifier(
-            prefix = "inst_",
-            domain = INSTANCE_ID_DOMAIN,
-            fields = listOf(releaseRoot, bodyId, companionName, bornAt, entropyRef)
-        )
-    }
-
     private fun identifier(prefix: String, domain: String, fields: List<String>): String {
         return prefix + GenesisUltraHashProfile.hashFields(domain, fields).removePrefix("sha256:")
     }
@@ -344,7 +333,6 @@ internal class GenesisUltraBirthCandidateConstructionCoordinator(
         const val BODY_POSSESSION_SCHEMA = "genesis.body.possession.v0.1"
         const val SIGNATURE_ENVELOPE_SCHEMA = "genesis.signature.envelope.v0.1"
         const val SIGNATURE_PROFILE = "genesis.signature.ed25519.v0.1"
-        const val INSTANCE_ID_DOMAIN = "genesis.instance.id.v0.1"
         const val POSSESSION_NONCE_DOMAIN = "genesis.body.possession.nonce.v0.1"
         const val POSSESSION_PROOF_ID_DOMAIN = "genesis.body.possession.proof.id.v0.1"
         const val CANDIDATE_DIGEST_DOMAIN = "genesis.birth.candidate.digest.v0.1"

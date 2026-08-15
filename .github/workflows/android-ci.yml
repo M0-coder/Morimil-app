@@ -183,6 +183,7 @@ jobs:
             --python-coverage build/quality/python-coverage.json \
             --kotlin-log build/quality/android-unit-coverage.log \
             --lint-xml app/build/reports/lint-results-debug.xml \
+            --gradle-file app/build.gradle.kts \
             --output build/quality/qa7-jvm-quality-ratchet.json
           python -m json.tool build/quality/qa7-jvm-quality-ratchet.json > /dev/null
 

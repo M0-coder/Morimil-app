@@ -54,16 +54,29 @@ The constructor does not silently trim, rewrite or normalize user input. A non-c
 The candidate Instance identifier is derived under:
 
 ```text
-genesis.instance.id.v0.1
+genesis.instance.id.v0.2
 ```
 
 Bound fields:
 
 - verified Seed root hash;
-- Body identifier derived from the Body public key;
 - canonical companion name;
 - canonical birth timestamp;
 - SHA-256 reference of 256 bits of fresh local entropy.
+
+The permanent Instance identifier deliberately excludes Body-specific material. In particular it is not derived from:
+
+- `bodyId`;
+- `keyEpochId`;
+- `platformProfile`;
+- `LocalInstanceIdentity`;
+- a legacy alias;
+- Android ID or another device identifier;
+- APK signing certificate;
+- Android Keystore aliases;
+- database encryption keys;
+- legacy memory-signing keys;
+- model or provider identifiers.
 
 The output format is:
 
@@ -71,14 +84,7 @@ The output format is:
 inst_<64 lowercase hexadecimal characters>
 ```
 
-The identifier is not derived from:
-
-- `LocalInstanceIdentity`;
-- a legacy alias;
-- Android ID or another device identifier;
-- APK signing certificate;
-- database encryption keys;
-- legacy memory-signing keys.
+This keeps the permanent Instance identity independent from the first Body. The first Body is bound immediately afterwards through signed Body records, writer epoch, possession proof and the birth evidence graph.
 
 ## Body documents
 
@@ -98,6 +104,8 @@ The constructor builds:
 - signed `GenesisUltraBodyPossessionProof`.
 
 Every digest uses the existing Genesis Ultra hash profile. No alternate serialization or hash format is introduced.
+
+`platformProfile = android-kotlin` describes this Body implementation only; it is not permanent Instance identity material.
 
 ## Possession proof
 
@@ -156,7 +164,15 @@ It binds:
 - possession-proof digest;
 - evaluation timestamp.
 
-The next phase can therefore bind explicit host consent to one exact candidate instead of to a mutable name or generic action.
+The Body therefore remains strongly bound to the exact Birth candidate even though it no longer contributes to the permanent `instanceId` derivation.
+
+The next phase can bind explicit host consent to one exact candidate instead of to a mutable name or generic action.
+
+## Cross-language portability vector
+
+`GenesisUltraInstanceIdProfileTest` contains the Kotlin golden vector for `genesis.instance.id.v0.2`.
+
+`tools/genesis/verify_instance_id_v02.py` independently reproduces the same framing and SHA-256 derivation in Python. Both implementations must produce the same `instanceId` before this profile can be treated as verified for Birth.
 
 ## Concurrency and persistence
 
@@ -178,4 +194,5 @@ A signed candidate is not a birth. The following remain required:
 - construction and verification of the complete atomic evidence graph;
 - explicit host consent bound to `candidateDigest`;
 - one transactional activation containing the birth commit, recovery verification and first post-birth canonical memory append;
-- post-commit recovery verification before normal runtime becomes available.
+- post-commit recovery verification before normal runtime becomes available;
+- independent verification of the revised Body-independent Instance-id profile before Canonical Initial Birth.

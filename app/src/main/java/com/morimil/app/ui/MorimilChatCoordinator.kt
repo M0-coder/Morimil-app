@@ -10,6 +10,7 @@ import com.morimil.app.data.genesis.ultra.GenesisUltraRuntimeIdentity
 import com.morimil.app.data.local.ReasoningTurnAuthor
 import com.morimil.app.data.local.ReasoningTurnEntity
 import com.morimil.app.genesisUltraRuntimeIdentityRepository
+import com.morimil.app.improvements.SelfImprovementRuntimeObserver
 import com.morimil.app.reasoning.ReasoningKernelRequest
 import com.morimil.app.reasoning.model.ReasoningEscalationDecision
 import com.morimil.app.reasoning.model.ReasoningEscalationStore
@@ -98,8 +99,9 @@ internal class MorimilChatCoordinator(
 
             val genesis = _genesisResult.value?.getOrNull()
             if (genesis == null) {
-                _chatError.value =
+                recordChatError(
                     "La identidad Genesis Ultra comprometida no esta disponible para el runtime."
+                )
                 return@launch
             }
 
@@ -170,12 +172,22 @@ internal class MorimilChatCoordinator(
                 }
 
                 if (result.errorMessage != null) {
-                    _chatError.value = result.errorMessage ?: "Error con el razonamiento."
+                    _chatError.value = result.errorMessage
+                    runCatching {
+                        SelfImprovementRuntimeObserver.reportChatError(result.errorMessage)
+                    }
                 }
             } finally {
                 ReasoningEscalationStore.clearResolvedFor(cleanBody)
                 _isSending.value = false
             }
+        }
+    }
+
+    private fun recordChatError(message: String) {
+        _chatError.value = message
+        runCatching {
+            SelfImprovementRuntimeObserver.reportChatError(message)
         }
     }
 

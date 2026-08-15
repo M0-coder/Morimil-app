@@ -1,5 +1,6 @@
 package com.morimil.app.security
 
+import com.morimil.app.improvements.SelfImprovementRuntimeObserver
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -31,7 +32,7 @@ object MemorySigningRuntimeIssues : MemorySigningIssueReporter {
     override fun reportKeystoreSigningFailure(keyAlias: String, error: Throwable) {
         val previous = _latestIssue.value
         val failureMessage = buildFailureMessage(keyAlias, error)
-        _latestIssue.value = MemorySigningRuntimeIssue(
+        val issue = MemorySigningRuntimeIssue(
             component = KEYSTORE_FAILURE_COMPONENT,
             message = failureMessage,
             failureCount = if (previous?.component == KEYSTORE_FAILURE_COMPONENT) {
@@ -41,6 +42,15 @@ object MemorySigningRuntimeIssues : MemorySigningIssueReporter {
             },
             occurredAtMillis = System.currentTimeMillis()
         )
+        _latestIssue.value = issue
+        runCatching {
+            SelfImprovementRuntimeObserver.reportInternalRuntimeIssue(
+                component = issue.component,
+                message = issue.message,
+                failureCount = issue.failureCount,
+                occurredAtMillis = issue.occurredAtMillis
+            )
+        }
     }
 
     override fun clearKeystoreSigningFailure(keyAlias: String) {
