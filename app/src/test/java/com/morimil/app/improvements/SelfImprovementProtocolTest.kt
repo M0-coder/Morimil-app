@@ -79,6 +79,37 @@ class SelfImprovementProtocolTest {
     }
 
     @Test
+    fun highRiskChangeRejectsMissingSandboxAndRollbackEvidence() {
+        var candidate = detected(setOf(SelfChangeSurface.SECURITY_BOUNDARY))
+        candidate = SelfImprovementProtocol.diagnose(candidate, SelfChangeActor.MORIMIL)
+        candidate = SelfImprovementProtocol.propose(candidate, SelfChangeActor.MORIMIL)
+        candidate = SelfImprovementProtocol.registerPatchCandidate(
+            candidate,
+            PATCH_DIGEST,
+            BASE_SHA,
+            SelfChangeActor.EXTERNAL_EXECUTOR
+        )
+
+        val missingSandbox = assertThrows(IllegalArgumentException::class.java) {
+            SelfImprovementProtocol.verify(
+                candidate,
+                fullCriticalEvidence().copy(sandboxIsolationPassed = false),
+                SelfChangeActor.INDEPENDENT_VERIFIER
+            )
+        }
+        assertTrue(missingSandbox.message.orEmpty().contains("sandbox"))
+
+        val missingRollback = assertThrows(IllegalArgumentException::class.java) {
+            SelfImprovementProtocol.verify(
+                candidate,
+                fullCriticalEvidence().copy(rollbackPlanReviewed = false),
+                SelfChangeActor.INDEPENDENT_VERIFIER
+            )
+        }
+        assertTrue(missingRollback.message.orEmpty().contains("rollback"))
+    }
+
+    @Test
     fun presentationChangeStillCannotSelfAuthorize() {
         var candidate = detected(setOf(SelfChangeSurface.PRESENTATION))
         assertEquals(SelfChangeRisk.LOW, candidate.risk)
@@ -159,6 +190,11 @@ class SelfImprovementProtocolTest {
             coverageReviewed = true,
             mutationReviewed = true,
             crossLanguageVectorsPassed = true,
+            sandboxIsolationPassed = true,
+            secretIsolationPassed = true,
+            blastRadiusReviewed = true,
+            rollbackPlanReviewed = true,
+            auditTrailRecorded = true,
             exactBaseVerified = true
         )
     }
