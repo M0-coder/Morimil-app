@@ -8,7 +8,7 @@ import org.junit.Test
 class SelfImprovementProtocolTest {
     @Test
     fun criticalIdentityChangeRequiresIndependentEvidenceAndHumanAuthorization() {
-        var candidate = candidate(
+        var candidate = detected(
             surfaces = setOf(
                 SelfChangeSurface.INSTANCE_IDENTITY,
                 SelfChangeSurface.GENESIS
@@ -18,19 +18,24 @@ class SelfImprovementProtocolTest {
 
         candidate = SelfImprovementProtocol.diagnose(candidate, SelfChangeActor.MORIMIL)
         candidate = SelfImprovementProtocol.propose(candidate, SelfChangeActor.MORIMIL)
-        candidate = SelfImprovementProtocol.registerPatchCandidate(candidate, SelfChangeActor.MORIMIL)
+        candidate = SelfImprovementProtocol.registerPatchCandidate(
+            candidate = candidate,
+            candidateDigest = PATCH_DIGEST,
+            baseCommitSha = BASE_SHA,
+            actor = SelfChangeActor.MORIMIL
+        )
 
         assertThrows(IllegalArgumentException::class.java) {
             SelfImprovementProtocol.verify(
                 candidate,
-                fullCriticalEvidence(candidate.candidateDigest),
+                fullCriticalEvidence(),
                 SelfChangeActor.MORIMIL
             )
         }
 
         candidate = SelfImprovementProtocol.verify(
             candidate,
-            fullCriticalEvidence(candidate.candidateDigest),
+            fullCriticalEvidence(),
             SelfChangeActor.INDEPENDENT_VERIFIER
         )
 
@@ -53,17 +58,20 @@ class SelfImprovementProtocolTest {
 
     @Test
     fun criticalChangeRejectsEvidenceWithoutCrossLanguageVectors() {
-        var candidate = candidate(setOf(SelfChangeSurface.CANONICAL_MEMORY))
+        var candidate = detected(setOf(SelfChangeSurface.CANONICAL_MEMORY))
         candidate = SelfImprovementProtocol.diagnose(candidate, SelfChangeActor.MORIMIL)
         candidate = SelfImprovementProtocol.propose(candidate, SelfChangeActor.MORIMIL)
-        candidate = SelfImprovementProtocol.registerPatchCandidate(candidate, SelfChangeActor.EXTERNAL_EXECUTOR)
+        candidate = SelfImprovementProtocol.registerPatchCandidate(
+            candidate = candidate,
+            candidateDigest = PATCH_DIGEST,
+            baseCommitSha = BASE_SHA,
+            actor = SelfChangeActor.EXTERNAL_EXECUTOR
+        )
 
         val failure = assertThrows(IllegalArgumentException::class.java) {
             SelfImprovementProtocol.verify(
                 candidate,
-                fullCriticalEvidence(candidate.candidateDigest).copy(
-                    crossLanguageVectorsPassed = false
-                ),
+                fullCriticalEvidence().copy(crossLanguageVectorsPassed = false),
                 SelfChangeActor.INDEPENDENT_VERIFIER
             )
         }
@@ -72,20 +80,26 @@ class SelfImprovementProtocolTest {
 
     @Test
     fun presentationChangeStillCannotSelfAuthorize() {
-        var candidate = candidate(setOf(SelfChangeSurface.PRESENTATION))
+        var candidate = detected(setOf(SelfChangeSurface.PRESENTATION))
         assertEquals(SelfChangeRisk.LOW, candidate.risk)
         candidate = SelfImprovementProtocol.diagnose(candidate, SelfChangeActor.MORIMIL)
         candidate = SelfImprovementProtocol.propose(candidate, SelfChangeActor.MORIMIL)
-        candidate = SelfImprovementProtocol.registerPatchCandidate(candidate, SelfChangeActor.MORIMIL)
+        candidate = SelfImprovementProtocol.registerPatchCandidate(
+            candidate = candidate,
+            candidateDigest = PATCH_DIGEST,
+            baseCommitSha = BASE_SHA,
+            actor = SelfChangeActor.MORIMIL
+        )
         candidate = SelfImprovementProtocol.verify(
             candidate,
             SelfChangeEvidence(
-                candidateDigest = candidate.candidateDigest,
+                candidateDigest = PATCH_DIGEST,
+                baseCommitSha = BASE_SHA,
                 architectureReviewed = true,
                 compilationPassed = true,
                 unitTestsPassed = true,
                 staticAnalysisPassed = true,
-                exactMainBaseVerified = true
+                exactBaseVerified = true
             ),
             SelfChangeActor.INDEPENDENT_VERIFIER
         )
@@ -95,20 +109,46 @@ class SelfImprovementProtocolTest {
         }
     }
 
-    private fun candidate(surfaces: Set<SelfChangeSurface>): SelfChangeCandidate {
-        return SelfChangeCandidate(
-            changeId = "change_portability_001",
-            problem = "Instance and Body boundaries must remain separable.",
-            proposal = "Generate a verified candidate change without self-authorization.",
-            surfaces = surfaces,
-            candidateDigest = "sha256:" + "a".repeat(64),
-            stage = SelfChangeStage.DETECTED
+    @Test
+    fun patchEvidenceCannotBeAttachedBeforePatchExistsOrToAnotherBase() {
+        val detected = detected(setOf(SelfChangeSurface.INSTANCE_IDENTITY))
+        assertEquals(null, detected.candidateDigest)
+        assertEquals(null, detected.baseCommitSha)
+
+        var candidate = SelfImprovementProtocol.diagnose(detected, SelfChangeActor.MORIMIL)
+        candidate = SelfImprovementProtocol.propose(candidate, SelfChangeActor.MORIMIL)
+        candidate = SelfImprovementProtocol.registerPatchCandidate(
+            candidate,
+            PATCH_DIGEST,
+            BASE_SHA,
+            SelfChangeActor.EXTERNAL_EXECUTOR
+        )
+
+        assertThrows(IllegalArgumentException::class.java) {
+            SelfImprovementProtocol.verify(
+                candidate,
+                fullCriticalEvidence().copy(baseCommitSha = "b".repeat(40)),
+                SelfChangeActor.INDEPENDENT_VERIFIER
+            )
+        }
+    }
+
+    private fun detected(surfaces: Set<SelfChangeSurface>): SelfChangeCandidate {
+        return SelfImprovementProtocol.detect(
+            SelfChangeObservation(
+                changeId = "change_portability_001",
+                problem = "Instance and Body boundaries must remain separable.",
+                proposal = "Generate a verified candidate change without self-authorization.",
+                surfaces = surfaces,
+                observationDigest = OBSERVATION_DIGEST
+            )
         )
     }
 
-    private fun fullCriticalEvidence(candidateDigest: String): SelfChangeEvidence {
+    private fun fullCriticalEvidence(): SelfChangeEvidence {
         return SelfChangeEvidence(
-            candidateDigest = candidateDigest,
+            candidateDigest = PATCH_DIGEST,
+            baseCommitSha = BASE_SHA,
             architectureReviewed = true,
             compilationPassed = true,
             unitTestsPassed = true,
@@ -119,7 +159,13 @@ class SelfImprovementProtocolTest {
             coverageReviewed = true,
             mutationReviewed = true,
             crossLanguageVectorsPassed = true,
-            exactMainBaseVerified = true
+            exactBaseVerified = true
         )
+    }
+
+    private companion object {
+        val OBSERVATION_DIGEST = "sha256:" + "9".repeat(64)
+        val PATCH_DIGEST = "sha256:" + "a".repeat(64)
+        const val BASE_SHA = "2a9171874e4539de5ee8b8808f45fcc5a0e651b8"
     }
 }
