@@ -80,19 +80,32 @@ internal class SelfImprovementSignalCollector(
 
     private fun classifySurfaces(component: String): Set<SelfChangeSurface> {
         val value = component.lowercase(Locale.ROOT)
-        return when {
-            value.contains("genesis") || value.contains("birth") ->
-                setOf(SelfChangeSurface.GENESIS, SelfChangeSurface.INSTANCE_IDENTITY)
-            value.contains("memory") || value.contains("recall") || value.contains("rest") ||
-                value.contains("migration") -> setOf(SelfChangeSurface.CANONICAL_MEMORY)
-            value.contains("sign") || value.contains("keystore") || value.contains("security") ||
-                value.contains("secret") -> setOf(SelfChangeSurface.SECURITY_BOUNDARY)
-            value.contains("build") || value.contains("release") || value.contains("supply") ->
-                setOf(SelfChangeSurface.BUILD_AND_SUPPLY_CHAIN)
-            value.contains("body") || value.contains("writer") || value.contains("epoch") ->
-                setOf(SelfChangeSurface.WRITER_AUTHORITY, SelfChangeSurface.BODY_SUCCESSION)
-            else -> setOf(SelfChangeSurface.REASONING_RUNTIME)
+        val surfaces = linkedSetOf<SelfChangeSurface>()
+        if (value.contains("genesis") || value.contains("birth")) {
+            surfaces += SelfChangeSurface.GENESIS
+            surfaces += SelfChangeSurface.INSTANCE_IDENTITY
         }
+        if (
+            value.contains("memory") || value.contains("recall") || value.contains("rest") ||
+            value.contains("migration")
+        ) {
+            surfaces += SelfChangeSurface.CANONICAL_MEMORY
+        }
+        if (
+            value.contains("sign") || value.contains("keystore") || value.contains("security") ||
+            value.contains("secret")
+        ) {
+            surfaces += SelfChangeSurface.SECURITY_BOUNDARY
+        }
+        if (value.contains("build") || value.contains("release") || value.contains("supply")) {
+            surfaces += SelfChangeSurface.BUILD_AND_SUPPLY_CHAIN
+        }
+        if (value.contains("body") || value.contains("writer") || value.contains("epoch")) {
+            surfaces += SelfChangeSurface.WRITER_AUTHORITY
+            surfaces += SelfChangeSurface.BODY_SUCCESSION
+        }
+        if (surfaces.isEmpty()) surfaces += SelfChangeSurface.REASONING_RUNTIME
+        return surfaces
     }
 
     private fun stableId(value: String): String {
