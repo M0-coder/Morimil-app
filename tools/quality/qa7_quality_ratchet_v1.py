@@ -88,6 +88,23 @@ def baseline_counter(items: object, field: str) -> collections.Counter[str]:
     return result
 
 
+def baseline_string_set(items: object, field: str) -> set[str]:
+    if not isinstance(items, list):
+        raise QualityRatchetError(f"Baseline {field} must be an array.")
+    values: list[str] = []
+    for item in items:
+        if not isinstance(item, str) or not item.strip():
+            raise QualityRatchetError(f"Baseline {field} entries must be non-empty strings.")
+        if item != item.strip():
+            raise QualityRatchetError(f"Baseline {field} entries must be canonical strings.")
+        values.append(item)
+    if len(values) != len(set(values)):
+        raise QualityRatchetError(f"Baseline {field} contains duplicates.")
+    if values != sorted(values):
+        raise QualityRatchetError(f"Baseline {field} must be sorted.")
+    return set(values)
+
+
 def new_or_increased(current: collections.Counter[str], allowed: collections.Counter[str]) -> list[dict[str, object]]:
     changes = []
     for fingerprint, count in sorted(current.items()):
@@ -224,6 +241,13 @@ def evaluate_jvm(baseline: Mapping[str, object], authored: Mapping[str, object],
         raise QualityRatchetError("Baseline lint missing.")
     severities, lint_current = parse_lint(lint_xml)
     lint_allowed = baseline_counter(lint_base.get("warningFingerprints"), "lint.warningFingerprints")
+    baseline_gradle_coordinates = baseline_string_set(
+        lint_base.get("gradleDependencyCoordinates"),
+        "lint.gradleDependencyCoordinates",
+    )
+    for coordinate in baseline_gradle_coordinates:
+        fingerprint = f"GradleDependency|app/build.gradle.kts|{coordinate}"
+        lint_allowed[fingerprint] = max(lint_allowed.get(fingerprint, 0), 1)
     lint_delta = new_or_increased(lint_current, lint_allowed)
     max_warnings, max_errors = lint_base.get("maxWarnings"), lint_base.get("maxErrors")
     if not isinstance(max_warnings, int) or not isinstance(max_errors, int):
@@ -240,7 +264,13 @@ def evaluate_jvm(baseline: Mapping[str, object], authored: Mapping[str, object],
         "androidAuthored": {"counters": android_observed, "zeroLineCoverageSources": zero, "maxZeroLineCoverageSources": max_zero},
         "python": python_observed,
         "kotlinWarnings": {"total": sum(kotlin_current.values()), "maxTotal": max_kotlin, "newOrIncreased": kotlin_delta},
-        "lint": {"severities": dict(sorted(severities.items())), "maxWarnings": max_warnings, "maxErrors": max_errors, "newOrIncreasedWarnings": lint_delta},
+        "lint": {
+            "severities": dict(sorted(severities.items())),
+            "maxWarnings": max_warnings,
+            "maxErrors": max_errors,
+            "baselineGradleDependencyCoordinateCount": len(baseline_gradle_coordinates),
+            "newOrIncreasedWarnings": lint_delta,
+        },
     }
 
 
