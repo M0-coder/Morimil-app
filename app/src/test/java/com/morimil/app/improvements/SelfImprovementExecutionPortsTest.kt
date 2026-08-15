@@ -64,6 +64,26 @@ class SelfImprovementExecutionPortsTest {
     }
 
     @Test
+    fun patchDerivedMetadataCannotBeMutatedAfterValidation() {
+        val patch = patchArtifact("app/src/main/java/com/morimil/app/ui/A.kt")
+        val originalPaths = patch.changedPaths.toList()
+        val originalSurfaces = patch.derivedSurfaces.toSet()
+
+        assertThrows(UnsupportedOperationException::class.java) {
+            @Suppress("UNCHECKED_CAST")
+            (patch.changedPaths as MutableList<String>).clear()
+        }
+        assertThrows(UnsupportedOperationException::class.java) {
+            @Suppress("UNCHECKED_CAST")
+            (patch.derivedSurfaces as MutableSet<SelfChangeSurface>).clear()
+        }
+
+        assertEquals(originalPaths, patch.changedPaths)
+        assertEquals(originalSurfaces, patch.derivedSurfaces)
+        assertEquals(patch.candidateDigest, patch.recomputeCandidateDigest())
+    }
+
+    @Test
     fun mixedKnownAndUnknownProductionPathsRetainCoreImplementationRisk() {
         val surfaces = SelfPatchSafetyPolicy.inferSurfaces(
             listOf(
