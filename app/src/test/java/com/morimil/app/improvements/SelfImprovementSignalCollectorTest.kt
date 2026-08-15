@@ -59,6 +59,35 @@ class SelfImprovementSignalCollectorTest {
     }
 
     @Test
+    fun changingFailureCountDoesNotChangeObservationIdentityOrBypassCooldown() {
+        val root = Files.createTempDirectory("self-signal-count-dedupe").toFile()
+        try {
+            val store = SelfImprovementAuditStore(File(root, "audit.log"))
+            val collector = SelfImprovementSignalCollector(store, duplicateCooldownMillis = 1_000L)
+            val first = collector.captureInternalRuntimeIssue(
+                component = "memory_signature.keystore_failure",
+                message = "signing blocked",
+                failureCount = 1,
+                occurredAtMillis = 100L
+            )
+            val duplicateWithHigherCount = collector.captureInternalRuntimeIssue(
+                component = "memory_signature.keystore_failure",
+                message = "signing blocked",
+                failureCount = 2,
+                occurredAtMillis = 500L
+            )
+
+            requireNotNull(first)
+            assertNull(duplicateWithHigherCount)
+            val audit = store.readVerifiedRecords().single()
+            assertEquals(1, audit.occurrenceCount)
+            assertTrue("failure_count" !in first.problem)
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
     fun repeatedIdenticalSignalWithinCooldownDoesNotSpamAuditEvenWhenInterleaved() {
         val root = Files.createTempDirectory("self-signal-dedupe").toFile()
         try {
