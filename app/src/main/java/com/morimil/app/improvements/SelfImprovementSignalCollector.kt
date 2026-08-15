@@ -5,8 +5,8 @@ import java.util.Locale
 /**
  * Converts runtime health signals into content-bound self-improvement observations.
  *
- * Signals are recorded as DETECTED only. This boundary cannot generate a patch,
- * verify, authorize, merge, release or install anything.
+ * Signals are recorded as DETECTED only. Occurrence counters are audit metadata,
+ * never part of the stable observation identity used for cooldown deduplication.
  */
 internal class SelfImprovementSignalCollector(
     private val auditStore: SelfImprovementAuditStore,
@@ -30,11 +30,15 @@ internal class SelfImprovementSignalCollector(
         val surfaces = classifySurfaces(cleanComponent)
         val observation = SelfChangeObservation.create(
             changeId = "runtime_issue_${stableId(cleanComponent)}",
-            problem = "Runtime issue in $cleanComponent: $cleanMessage (failure_count=$failureCount).",
+            problem = "Runtime issue in $cleanComponent: $cleanMessage.",
             proposal = "Diagnose the exact runtime cause and prepare the smallest evidence-bound correction without widening authority.",
             surfaces = surfaces
         )
-        return appendDetectedIfFresh(observation, occurredAtMillis)
+        return appendDetectedIfFresh(
+            observation = observation,
+            occurredAtMillis = occurredAtMillis,
+            occurrenceCount = failureCount
+        )
     }
 
     fun captureChatError(error: String, occurredAtMillis: Long): SelfChangeObservation? {
@@ -46,7 +50,7 @@ internal class SelfImprovementSignalCollector(
             proposal = "Diagnose endpoint, provider, model, local runtime and fallback evidence before preparing a bounded correction.",
             surfaces = setOf(SelfChangeSurface.REASONING_RUNTIME)
         )
-        return appendDetectedIfFresh(observation, occurredAtMillis)
+        return appendDetectedIfFresh(observation, occurredAtMillis, occurrenceCount = 1)
     }
 
     fun captureMemoryAttention(occurredAtMillis: Long): SelfChangeObservation? {
@@ -56,12 +60,13 @@ internal class SelfImprovementSignalCollector(
             proposal = "Audit canonical memory integrity and quarantine evidence before proposing any memory-affecting correction.",
             surfaces = setOf(SelfChangeSurface.CANONICAL_MEMORY)
         )
-        return appendDetectedIfFresh(observation, occurredAtMillis)
+        return appendDetectedIfFresh(observation, occurredAtMillis, occurrenceCount = 1)
     }
 
     private fun appendDetectedIfFresh(
         observation: SelfChangeObservation,
-        occurredAtMillis: Long
+        occurredAtMillis: Long,
+        occurrenceCount: Int
     ): SelfChangeObservation? {
         require(occurredAtMillis >= 0L) { "self_signal_time_invalid" }
         val latestMatching = auditStore.readVerifiedRecords()
@@ -77,7 +82,12 @@ internal class SelfImprovementSignalCollector(
             return null
         }
         val candidate = SelfImprovementProtocol.detect(observation)
-        auditStore.append(candidate, SelfChangeActor.MORIMIL, occurredAtMillis)
+        auditStore.append(
+            candidate = candidate,
+            actor = SelfChangeActor.MORIMIL,
+            recordedAtMillis = occurredAtMillis,
+            occurrenceCount = occurrenceCount
+        )
         return observation
     }
 
