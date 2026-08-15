@@ -20,6 +20,7 @@ The baseline protects:
 - Kotlin compiler warning fingerprints and multiplicity;
 - Android Lint error ceiling, warning ceiling, and warning fingerprints;
 - the complete frozen set of dependency coordinates already present in `app/build.gradle.kts`;
+- the SHA-256 digest of the exact canonical `dependencies {}` block in `app/build.gradle.kts`;
 - managed-device Android line, branch, and instruction coverage;
 - managed-device source files with zero line coverage.
 
@@ -29,22 +30,18 @@ Coverage comparisons use integer fractions rather than rounded percentages.
 
 Existing warnings are debt, not an approval of the warning condition. QA-7 allows a warning to disappear but rejects a new fingerprint or a higher multiplicity of an existing fingerprint.
 
-Kotlin warning fingerprints remove absolute checkout paths and source line/column numbers. This keeps the gate stable when unrelated edits move a warning without changing its semantic message.
-
-Android Lint fingerprints use issue ID, repository-relative path, and message.
+Kotlin warning fingerprints remove absolute checkout paths and source line/column numbers. Android Lint fingerprints use issue ID, repository-relative path, and message.
 
 ### GradleDependency remote-ageing rule
 
-`GradleDependency` is intentionally normalized to issue ID + path + dependency coordinate because the text embeds the newest version currently visible to Lint.
+`GradleDependency` is normalized to issue ID + path + dependency coordinate because its text embeds the newest version currently visible to Lint.
 
-The baseline also records every dependency coordinate already present in the frozen `app/build.gradle.kts`, regardless of whether that coordinate emitted `GradleDependency` at baseline capture time.
-
-This distinction is required because repository state and remote release state are different evidence domains:
+The baseline records every dependency coordinate already present and the digest of the exact dependency-source block. The remote-ageing exemption is enabled only while that source digest remains unchanged.
 
 ```text
-frozen coordinate exists in baseline
+frozen dependency source unchanged
++ frozen coordinate
 + remote ecosystem later publishes a newer version
-+ unchanged coordinate begins emitting GradleDependency
 = REMOTE AGEING, not repository regression
 ```
 
@@ -53,17 +50,25 @@ That warning is allowed only while the total warning ceiling remains satisfied. 
 By contrast:
 
 ```text
+same coordinate
++ candidate changes or downgrades its dependency declaration
+= dependency-source digest differs
+= remote-ageing exemption disabled
+= warning evaluated as repository regression
+```
+
+and:
+
+```text
 coordinate not present in frozen baseline
 + current candidate introduces it
 + Lint reports GradleDependency
 = NEW REPOSITORY WARNING
 ```
 
-That remains a ratchet failure.
+Both remain ratchet failures.
 
-A newly published remote version must therefore not make an unchanged repository fail CI, while a newly warned dependency coordinate introduced after the frozen baseline still fails.
-
-The frozen coordinate list is validated as sorted, unique, non-empty canonical strings. QA-7 fails closed if that baseline structure is malformed.
+The frozen coordinate list is validated as sorted, unique, non-empty canonical strings. The dependency-source digest must be a valid `sha256:<64 lowercase hex>` value. CI passes the current `app/build.gradle.kts` explicitly to the evaluator; malformed or missing source evidence fails closed.
 
 ## Coverage policy
 
@@ -73,7 +78,7 @@ This is a ratchet, not a target. Future work should reduce zero-coverage files a
 
 ## CI placement
 
-Android CI produces the JVM/Python evidence, captures one deterministic Kotlin compile-warning log, generates `lintDebug` XML, and runs the JVM ratchet.
+Android CI produces JVM/Python evidence, captures one deterministic Kotlin compile-warning log, generates `lintDebug` XML, supplies the current `app/build.gradle.kts`, and runs the JVM ratchet.
 
 Genesis Body Preparation continues to produce canonical API-30 managed-device coverage and runs only the instrumented ratchet against the resulting JSON. The workflow does not execute Genesis, import Seed material, activate Morimil, or declare operational birth.
 
@@ -85,7 +90,8 @@ Genesis Body Preparation continues to produce canonical API-30 managed-device co
 4. Kotlin warnings do not exceed 12 and no warning fingerprint/multiplicity is new.
 5. Android Lint errors remain 0 and warnings do not exceed 23.
 6. Non-`GradleDependency` lint fingerprints cannot be new or increased.
-7. `GradleDependency` may newly appear only for a coordinate already frozen in the baseline; a newly warned non-baseline coordinate fails.
-8. Canonical API-30 instrumented coverage does not regress and zero-line source count does not exceed 211.
-9. Required machine-readable ratchet result JSON files are uploaded as CI evidence.
-10. No dependency versions, production source, Body, Guardian, Seed, Genesis asset/state, activation, release, or birth operation is changed by QA-7.
+7. `GradleDependency` remote ageing is exempt only for a frozen coordinate while the exact dependency-source digest remains unchanged.
+8. A changed/downgraded dependency declaration disables that exemption; a new warned coordinate also fails.
+9. Canonical API-30 instrumented coverage does not regress and zero-line source count does not exceed 211.
+10. Required machine-readable ratchet result JSON files are uploaded as CI evidence.
+11. No dependency versions, production Body/Guardian/Seed/Genesis state, activation, release, or birth operation is changed by QA-7 itself.
