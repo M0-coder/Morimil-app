@@ -10,7 +10,7 @@ import org.junit.Test
 
 class SelfImprovementAuditStoreTest {
     @Test
-    fun appendBuildsDurableVerifiedHashChain() {
+    fun appendBuildsDurableVerifiedHashChainAndSeparateAnchor() {
         val root = Files.createTempDirectory("self-audit-test").toFile()
         try {
             val file = File(root, SelfImprovementAuditStore.DEFAULT_RELATIVE_PATH)
@@ -18,15 +18,18 @@ class SelfImprovementAuditStoreTest {
             val detected = SelfImprovementProtocol.detect(observation())
             val diagnosed = SelfImprovementProtocol.diagnose(detected, SelfChangeActor.MORIMIL)
 
-            val first = store.append(detected, SelfChangeActor.MORIMIL, 100L)
+            val first = store.append(detected, SelfChangeActor.MORIMIL, 100L, occurrenceCount = 2)
             val second = store.append(diagnosed, SelfChangeActor.MORIMIL, 101L)
             val recovered = SelfImprovementAuditStore(file).readVerifiedRecords()
 
             assertEquals(listOf(first, second), recovered)
             assertEquals(1L, recovered[0].sequence)
+            assertEquals(2, recovered[0].occurrenceCount)
             assertEquals(2L, recovered[1].sequence)
             assertEquals(recovered[0].recordDigest, recovered[1].previousRecordDigest)
             assertTrue(file.length() > 0L)
+            assertTrue(store.anchorPathForDiagnostics().isFile)
+            assertTrue(store.anchorPathForDiagnostics().length() > 0L)
         } finally {
             root.deleteRecursively()
         }
@@ -75,6 +78,51 @@ class SelfImprovementAuditStoreTest {
             assertThrows(IllegalArgumentException::class.java) {
                 SelfImprovementAuditStore(file).readVerifiedRecords()
             }
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun deletingAuditWhileAnchorSurvivesIsDetectedAsRollback() {
+        val root = Files.createTempDirectory("self-audit-delete").toFile()
+        try {
+            val file = File(root, SelfImprovementAuditStore.DEFAULT_RELATIVE_PATH)
+            val store = SelfImprovementAuditStore(file)
+            store.append(
+                SelfImprovementProtocol.detect(observation()),
+                SelfChangeActor.MORIMIL,
+                100L
+            )
+            assertTrue(store.anchorPathForDiagnostics().isFile)
+            assertTrue(file.delete())
+
+            val failure = assertThrows(IllegalArgumentException::class.java) {
+                SelfImprovementAuditStore(file).readVerifiedRecords()
+            }
+            assertTrue(failure.message.orEmpty().contains("rollback_or_deletion"))
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun rollingLogBackToEarlierValidPrefixIsRejectedByLaterAnchor() {
+        val root = Files.createTempDirectory("self-audit-rollback").toFile()
+        try {
+            val file = File(root, SelfImprovementAuditStore.DEFAULT_RELATIVE_PATH)
+            val store = SelfImprovementAuditStore(file)
+            val detected = SelfImprovementProtocol.detect(observation())
+            val diagnosed = SelfImprovementProtocol.diagnose(detected, SelfChangeActor.MORIMIL)
+            store.append(detected, SelfChangeActor.MORIMIL, 100L)
+            val firstRecordBytes = file.readBytes()
+            store.append(diagnosed, SelfChangeActor.MORIMIL, 101L)
+            file.writeBytes(firstRecordBytes)
+
+            val failure = assertThrows(IllegalArgumentException::class.java) {
+                SelfImprovementAuditStore(file).readVerifiedRecords()
+            }
+            assertTrue(failure.message.orEmpty().contains("anchor_sequence_ahead"))
         } finally {
             root.deleteRecursively()
         }
