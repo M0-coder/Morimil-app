@@ -1,4 +1,4 @@
-# Document status: CANDIDATE
+# Document status: PROPOSAL
 
 # PORTABILITY-PREBIRTH-01 — Instance portability and verifiable self-improvement
 
