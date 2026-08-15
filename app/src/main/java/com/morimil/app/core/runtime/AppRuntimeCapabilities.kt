@@ -1,5 +1,8 @@
 package com.morimil.app.core.runtime
 
+import com.morimil.app.improvements.SelfImprovementRuntimeObserver
+import com.morimil.app.improvements.SelfImprovementRuntimeStatus
+
 data class AppRuntimeCapabilities(
     val genesisBundleVerification: Boolean = true,
     val genesisPrivateInstallation: Boolean = true,
@@ -23,10 +26,16 @@ data class AppRuntimeCapabilities(
     val selfImprovementGovernance: Boolean = true,
     val selfImprovementContentBoundObservations: Boolean = true,
     val selfImprovementPatchSafetyPolicy: Boolean = true,
+    val selfImprovementSignedAuthorityAttestations: Boolean = true,
+    val selfImprovementAuditAntiTruncationAnchor: Boolean = true,
     val selfPatchExecutorConnected: Boolean = false,
     val selfIndependentVerifierConnected: Boolean = false,
-    val selfImprovementRuntimeSignalAutonomy: Boolean = true,
-    val selfImprovementDurableAuditStore: Boolean = true,
+    val selfHumanAuthorizerTrustConnected: Boolean = false,
+    val selfImprovementExternalAuditWitnessConnected: Boolean = false,
+    val selfImprovementRuntimeStatus: SelfImprovementRuntimeStatus =
+        SelfImprovementRuntimeStatus.NOT_INITIALIZED,
+    val selfImprovementRuntimeSignalAutonomy: Boolean = false,
+    val selfImprovementDurableAuditStore: Boolean = false,
     val selfMergeAuthority: Boolean = false,
     val pcHandoffProtocol: Boolean = false,
     val pcCommandExecution: Boolean = false,
@@ -34,5 +43,14 @@ data class AppRuntimeCapabilities(
 )
 
 object CurrentRuntimeCapabilities {
-    val value = AppRuntimeCapabilities()
+    val value: AppRuntimeCapabilities
+        get() {
+            val runtimeStatus = SelfImprovementRuntimeObserver.runtimeStatus()
+            val ready = runtimeStatus == SelfImprovementRuntimeStatus.READY
+            return AppRuntimeCapabilities(
+                selfImprovementRuntimeStatus = runtimeStatus,
+                selfImprovementRuntimeSignalAutonomy = ready,
+                selfImprovementDurableAuditStore = ready
+            )
+        }
 }
