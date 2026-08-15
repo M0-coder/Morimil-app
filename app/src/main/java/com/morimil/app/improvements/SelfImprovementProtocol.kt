@@ -359,7 +359,9 @@ internal object SelfImprovementProtocol {
             expectedObservationDigest = candidate.observationDigest,
             expectedCandidateDigest = requireNotNull(candidate.candidateDigest),
             expectedBaseCommitSha = requireNotNull(candidate.baseCommitSha),
-            expectedVerificationAttestationDigest = evidence.attestationDigest
+            expectedVerificationAttestationDigest = evidence.attestationDigest,
+            expectedVerifierId = evidence.verifierId,
+            expectedVerifierPublicKeyRef = evidence.verifierPublicKeyRef
         )
         return candidate.copy(
             stage = SelfChangeStage.AUTHORIZED,
