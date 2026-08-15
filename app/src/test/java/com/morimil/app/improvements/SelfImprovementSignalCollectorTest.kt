@@ -33,6 +33,32 @@ class SelfImprovementSignalCollectorTest {
     }
 
     @Test
+    fun signingMemoryFailureRetainsBothCriticalAndSecuritySurfaces() {
+        val root = Files.createTempDirectory("self-signal-signing").toFile()
+        try {
+            val store = SelfImprovementAuditStore(File(root, "audit.log"))
+            val collector = SelfImprovementSignalCollector(store)
+            val observation = requireNotNull(
+                collector.captureInternalRuntimeIssue(
+                    component = "memory_signature.keystore_failure",
+                    message = "signing blocked",
+                    failureCount = 1,
+                    occurredAtMillis = 100L
+                )
+            )
+
+            assertTrue(SelfChangeSurface.CANONICAL_MEMORY in observation.surfaces)
+            assertTrue(SelfChangeSurface.SECURITY_BOUNDARY in observation.surfaces)
+            assertEquals(
+                SelfChangeRisk.CRITICAL,
+                SelfImprovementProtocol.detect(observation).risk
+            )
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
     fun repeatedIdenticalSignalWithinCooldownDoesNotSpamAudit() {
         val root = Files.createTempDirectory("self-signal-dedupe").toFile()
         try {
