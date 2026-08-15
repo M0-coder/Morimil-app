@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import collections
+import hashlib
 import json
 import re
 import sys
@@ -23,6 +24,7 @@ KOTLIN_FILE_WARNING = re.compile(
     r"^w: (?:file://)?(?P<path>.*?):(?P<line>\d+):(?P<column>\d+) (?P<message>.+)$"
 )
 GRADLE_DEPENDENCY = re.compile(r"^A newer version of (?P<coordinate>.+?) than .+ is available: .+$")
+SHA256_REF = re.compile(r"^sha256:[a-f0-9]{64}$")
 
 
 class QualityRatchetError(RuntimeError):
@@ -103,6 +105,24 @@ def baseline_string_set(items: object, field: str) -> set[str]:
     if values != sorted(values):
         raise QualityRatchetError(f"Baseline {field} must be sorted.")
     return set(values)
+
+
+def gradle_dependency_block_digest(path: Path) -> str:
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise QualityRatchetError(f"Cannot read Gradle file: {path}") from exc
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    lines = text.split("\n")
+    starts = [index for index, line in enumerate(lines) if line.strip() == "dependencies {"]
+    if len(starts) != 1:
+        raise QualityRatchetError("Expected exactly one dependencies block in app/build.gradle.kts.")
+    start = starts[0]
+    end = next((index for index in range(start + 1, len(lines)) if lines[index] == "}"), None)
+    if end is None:
+        raise QualityRatchetError("Cannot locate canonical dependencies block end.")
+    block = "\n".join(lines[start : end + 1]) + "\n"
+    return "sha256:" + hashlib.sha256(block.encode("utf-8")).hexdigest()
 
 
 def new_or_increased(current: collections.Counter[str], allowed: collections.Counter[str]) -> list[dict[str, object]]:
@@ -194,7 +214,14 @@ def evaluate_ratio_group(label: str, current: Mapping[str, object], baseline: Ma
     return observed
 
 
-def evaluate_jvm(baseline: Mapping[str, object], authored: Mapping[str, object], python_cov: Mapping[str, object], kotlin_log: Path, lint_xml: Path) -> dict[str, object]:
+def evaluate_jvm(
+    baseline: Mapping[str, object],
+    authored: Mapping[str, object],
+    python_cov: Mapping[str, object],
+    kotlin_log: Path,
+    lint_xml: Path,
+    gradle_file: Path,
+) -> dict[str, object]:
     require_baseline(baseline)
     failures: list[str] = []
     android_base = baseline.get("androidAuthored")
@@ -245,9 +272,15 @@ def evaluate_jvm(baseline: Mapping[str, object], authored: Mapping[str, object],
         lint_base.get("gradleDependencyCoordinates"),
         "lint.gradleDependencyCoordinates",
     )
-    for coordinate in baseline_gradle_coordinates:
-        fingerprint = f"GradleDependency|app/build.gradle.kts|{coordinate}"
-        lint_allowed[fingerprint] = max(lint_allowed.get(fingerprint, 0), 1)
+    baseline_dependency_digest = lint_base.get("gradleDependencySourceSha256")
+    if not isinstance(baseline_dependency_digest, str) or not SHA256_REF.fullmatch(baseline_dependency_digest):
+        raise QualityRatchetError("Baseline lint.gradleDependencySourceSha256 is invalid.")
+    current_dependency_digest = gradle_dependency_block_digest(gradle_file)
+    dependency_source_unchanged = current_dependency_digest == baseline_dependency_digest
+    if dependency_source_unchanged:
+        for coordinate in baseline_gradle_coordinates:
+            fingerprint = f"GradleDependency|app/build.gradle.kts|{coordinate}"
+            lint_allowed[fingerprint] = max(lint_allowed.get(fingerprint, 0), 1)
     lint_delta = new_or_increased(lint_current, lint_allowed)
     max_warnings, max_errors = lint_base.get("maxWarnings"), lint_base.get("maxErrors")
     if not isinstance(max_warnings, int) or not isinstance(max_errors, int):
@@ -260,7 +293,10 @@ def evaluate_jvm(baseline: Mapping[str, object], authored: Mapping[str, object],
         failures.append(f"New/increased lint warning fingerprints: {len(lint_delta)}")
 
     return {
-        "schema": RESULT_SCHEMA, "mode": "jvm", "pass": not failures, "failures": failures,
+        "schema": RESULT_SCHEMA,
+        "mode": "jvm",
+        "pass": not failures,
+        "failures": failures,
         "androidAuthored": {"counters": android_observed, "zeroLineCoverageSources": zero, "maxZeroLineCoverageSources": max_zero},
         "python": python_observed,
         "kotlinWarnings": {"total": sum(kotlin_current.values()), "maxTotal": max_kotlin, "newOrIncreased": kotlin_delta},
@@ -269,6 +305,9 @@ def evaluate_jvm(baseline: Mapping[str, object], authored: Mapping[str, object],
             "maxWarnings": max_warnings,
             "maxErrors": max_errors,
             "baselineGradleDependencyCoordinateCount": len(baseline_gradle_coordinates),
+            "baselineGradleDependencySourceSha256": baseline_dependency_digest,
+            "currentGradleDependencySourceSha256": current_dependency_digest,
+            "gradleDependencySourceUnchanged": dependency_source_unchanged,
             "newOrIncreasedWarnings": lint_delta,
         },
     }
@@ -306,6 +345,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     jvm.add_argument("--python-coverage", type=Path, required=True)
     jvm.add_argument("--kotlin-log", type=Path, required=True)
     jvm.add_argument("--lint-xml", type=Path, required=True)
+    jvm.add_argument("--gradle-file", type=Path, required=True)
     jvm.add_argument("--output", type=Path, required=True)
     inst = sub.add_parser("instrumented")
     inst.add_argument("--baseline", type=Path, required=True)
@@ -319,7 +359,14 @@ def main(argv: list[str] | None = None) -> int:
     try:
         baseline = load_json(args.baseline)
         if args.mode == "jvm":
-            result = evaluate_jvm(baseline, load_json(args.android_authored), load_json(args.python_coverage), args.kotlin_log, args.lint_xml)
+            result = evaluate_jvm(
+                baseline,
+                load_json(args.android_authored),
+                load_json(args.python_coverage),
+                args.kotlin_log,
+                args.lint_xml,
+                args.gradle_file,
+            )
         else:
             result = evaluate_instrumented(baseline, load_json(args.instrumented))
         write_result(result, args.output)
