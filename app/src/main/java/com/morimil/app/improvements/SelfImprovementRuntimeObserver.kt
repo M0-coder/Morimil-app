@@ -6,8 +6,9 @@ import java.io.File
 /**
  * Process-local bridge from runtime health signals to the durable DETECTED audit.
  *
- * Initialization gives this observer only app-private file storage and the
- * existing proposal store. It receives no Git, merge, release or signing authority.
+ * Initialization gives this observer only app-private file storage. Proposal UI
+ * persistence remains lazy and auxiliary. This observer receives no Git, merge,
+ * release, install or signing authority.
  */
 internal object SelfImprovementRuntimeObserver {
     private val lock = Any()
@@ -27,7 +28,9 @@ internal object SelfImprovementRuntimeObserver {
             state = State(
                 auditStore = auditStore,
                 collector = SelfImprovementSignalCollector(auditStore),
-                proposalStore = ImprovementProposalStore(appContext)
+                proposalStore = lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
+                    ImprovementProposalStore(appContext)
+                }
             )
         }
     }
@@ -45,34 +48,40 @@ internal object SelfImprovementRuntimeObserver {
             failureCount = failureCount,
             occurredAtMillis = occurredAtMillis
         )
-        active.proposalStore.refreshObservedSignals(
-            chatError = null,
-            internalComponent = component,
-            internalMessage = message,
-            memoryNeedsAttention = false
-        )
+        runCatching {
+            active.proposalStore.value.refreshObservedSignals(
+                chatError = null,
+                internalComponent = component,
+                internalMessage = message,
+                memoryNeedsAttention = false
+            )
+        }
     }
 
     fun reportChatError(error: String, occurredAtMillis: Long = System.currentTimeMillis()) {
         val active = state ?: return
         active.collector.captureChatError(error, occurredAtMillis)
-        active.proposalStore.refreshObservedSignals(
-            chatError = error,
-            internalComponent = null,
-            internalMessage = null,
-            memoryNeedsAttention = false
-        )
+        runCatching {
+            active.proposalStore.value.refreshObservedSignals(
+                chatError = error,
+                internalComponent = null,
+                internalMessage = null,
+                memoryNeedsAttention = false
+            )
+        }
     }
 
     fun reportMemoryAttention(occurredAtMillis: Long = System.currentTimeMillis()) {
         val active = state ?: return
         active.collector.captureMemoryAttention(occurredAtMillis)
-        active.proposalStore.refreshObservedSignals(
-            chatError = null,
-            internalComponent = null,
-            internalMessage = null,
-            memoryNeedsAttention = true
-        )
+        runCatching {
+            active.proposalStore.value.refreshObservedSignals(
+                chatError = null,
+                internalComponent = null,
+                internalMessage = null,
+                memoryNeedsAttention = true
+            )
+        }
     }
 
     fun readVerifiedAuditForDiagnostics(): List<SelfChangeAuditRecord> {
@@ -82,6 +91,6 @@ internal object SelfImprovementRuntimeObserver {
     private data class State(
         val auditStore: SelfImprovementAuditStore,
         val collector: SelfImprovementSignalCollector,
-        val proposalStore: ImprovementProposalStore
+        val proposalStore: Lazy<ImprovementProposalStore>
     )
 }
