@@ -78,6 +78,38 @@ class SelfImprovementExecutionPortsTest {
     }
 
     @Test
+    fun rootBuildTestToolAndUnknownRepositoryPathsNeverRemainLowRisk() {
+        val paths = listOf(
+            "build.gradle.kts",
+            "settings.gradle.kts",
+            "gradlew",
+            "tools/governance/verify_policy.py",
+            "app/src/test/java/com/morimil/app/ui/FakePassingTest.kt",
+            "app/src/debug/AndroidManifest.xml",
+            "docs/security-policy.md",
+            "custom/unknown-script.sh"
+        )
+
+        paths.forEach { path ->
+            val surfaces = SelfPatchSafetyPolicy.inferSurfaces(listOf(path))
+            assertTrue("path must have derived surface: $path", surfaces.isNotEmpty())
+            assertTrue(
+                "path must be HIGH or CRITICAL: $path -> $surfaces",
+                SelfImprovementPolicy.classify(surfaces) in
+                    setOf(SelfChangeRisk.HIGH, SelfChangeRisk.CRITICAL)
+            )
+        }
+        assertTrue(
+            SelfChangeSurface.BUILD_AND_SUPPLY_CHAIN in
+                SelfPatchSafetyPolicy.inferSurfaces(listOf("settings.gradle.kts"))
+        )
+        assertTrue(
+            SelfChangeSurface.CORE_IMPLEMENTATION in
+                SelfPatchSafetyPolicy.inferSurfaces(listOf("custom/unknown-script.sh"))
+        )
+    }
+
+    @Test
     fun sameExecutorAndVerifierIdentityIsRejected() {
         val executor = object : SelfPatchExecutorPort {
             override val executorId: String = "same-actor"
