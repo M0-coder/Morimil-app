@@ -123,14 +123,16 @@ High surfaces include security, build/supply-chain and reasoning-runtime changes
 
 ## Autonomous runtime observation
 
-`SelfImprovementRuntimeObserver` is initialized from `MorimilApplication` with app-private storage only. It is not given Git, release-signing, install, merge or protected-main authority.
+`SelfImprovementRuntimeObserver` is initialized from `MorimilApplication` with app-private file storage only. It does not open Room and is not given Git, release-signing, install, merge or protected-main authority.
 
 Current source-level autonomous producers include:
 
 - chat/reasoning errors at `MorimilChatCoordinator`;
 - memory-signing / Android Keystore failures at `MemorySigningRuntimeIssues`.
 
-Each signal is converted to a content-bound `SelfChangeObservation`, classified conservatively across all matching risk surfaces, recorded only at `DETECTED`, and also fed into the existing local Improvements proposal store. Repeated identical observations are deduplicated within a bounded cooldown.
+Each signal is converted to a content-bound `SelfChangeObservation`, classified conservatively across all matching risk surfaces and recorded only at `DETECTED` in the durable self-change audit. Repeated identical observations are deduplicated against the latest matching observation within a bounded cooldown, even if other observations interleave.
+
+The existing Improvements proposal UI remains a separate/manual projection. The autonomous observer deliberately does not open `MorimilDatabase` to create that projection, preventing a primary database/signing failure from recursively re-entering the same store through the self-improvement path.
 
 A failure or corruption in this auxiliary self-improvement control plane disables its capture path rather than taking the primary Morimil runtime down. It does not become availability authority.
 
