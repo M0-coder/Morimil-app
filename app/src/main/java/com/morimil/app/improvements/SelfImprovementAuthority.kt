@@ -140,12 +140,19 @@ internal class SelfImprovementAuthorityVerifier(
     private val trustedByIdentity: Map<AuthorityIdentity, ByteArray>
 
     init {
-        val prepared = trustedKeys.map { trusted ->
+        val trusted = trustedKeys.toList()
+        require(trusted.map { it.signerId }.distinct().size == trusted.size) {
+            "self_authority_signer_identity_reuse_forbidden"
+        }
+        require(trusted.map { it.publicKeyRef }.distinct().size == trusted.size) {
+            "self_authority_public_key_reuse_forbidden"
+        }
+        val prepared = trusted.map { item ->
             AuthorityIdentity(
-                role = trusted.role,
-                signerId = trusted.signerId,
-                publicKeyRef = trusted.publicKeyRef
-            ) to trusted.rawPublicKey.copyOf()
+                role = item.role,
+                signerId = item.signerId,
+                publicKeyRef = item.publicKeyRef
+            ) to item.rawPublicKey.copyOf()
         }
         require(prepared.map { it.first }.distinct().size == prepared.size) {
             "self_authority_duplicate_trusted_identity"
@@ -193,13 +200,21 @@ internal class SelfImprovementAuthorityVerifier(
         expectedObservationDigest: String,
         expectedCandidateDigest: String,
         expectedBaseCommitSha: String,
-        expectedVerificationAttestationDigest: String
+        expectedVerificationAttestationDigest: String,
+        expectedVerifierId: String,
+        expectedVerifierPublicKeyRef: String
     ): SelfAuthorizationEvidence {
         require(attestation.role == SelfAuthorityRole.HUMAN_AUTHORIZER) {
             "self_authority_human_authorizer_required"
         }
         require(attestation.claims == setOf(SelfVerificationClaim.HUMAN_AUTHORIZATION)) {
             "self_authority_human_claim_set_invalid"
+        }
+        require(attestation.signerId != expectedVerifierId) {
+            "self_authority_human_verifier_identity_separation_required"
+        }
+        require(attestation.publicKeyRef != expectedVerifierPublicKeyRef) {
+            "self_authority_human_verifier_key_separation_required"
         }
         require(attestation.observationDigest == expectedObservationDigest) {
             "self_authority_observation_mismatch"
