@@ -172,7 +172,10 @@ internal class MorimilChatCoordinator(
                 }
 
                 if (result.errorMessage != null) {
-                    recordChatError(result.errorMessage ?: "Error con el razonamiento.")
+                    _chatError.value = result.errorMessage
+                    runCatching {
+                        SelfImprovementRuntimeObserver.reportChatError(result.errorMessage)
+                    }
                 }
             } finally {
                 ReasoningEscalationStore.clearResolvedFor(cleanBody)
