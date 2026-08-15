@@ -57,7 +57,7 @@ class SelfImprovementRuntimeObserverTest {
     }
 
     @Test
-    fun auditRollbackDisablesCaptureAndReportsDegradedInsteadOfReady() {
+    fun auditRollbackBeforeReinitializationReportsDegradedInsteadOfReady() {
         val root = Files.createTempDirectory("self-runtime-degraded").toFile()
         try {
             val auditFile = File(root, "audit.log")
@@ -74,6 +74,35 @@ class SelfImprovementRuntimeObserverTest {
                 SelfImprovementRuntimeObserver.runtimeStatus()
             )
             SelfImprovementRuntimeObserver.reportChatError("must not append", 200L)
+            assertTrue(SelfImprovementRuntimeObserver.readVerifiedAuditForDiagnostics().isEmpty())
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun postStartAuditFailureImmediatelyRevokesReadyStatusAndFurtherCapture() {
+        val root = Files.createTempDirectory("self-runtime-post-start-failure").toFile()
+        try {
+            val auditFile = File(root, "audit.log")
+            SelfImprovementRuntimeObserver.initializeForTest(auditFile)
+            SelfImprovementRuntimeObserver.reportChatError("first", 100L)
+            assertEquals(
+                SelfImprovementRuntimeStatus.READY,
+                SelfImprovementRuntimeObserver.runtimeStatus()
+            )
+
+            val anchor = File(root, SelfImprovementAuditStore.DEFAULT_ANCHOR_FILENAME)
+            assertTrue(anchor.delete())
+
+            assertThrows(IllegalArgumentException::class.java) {
+                SelfImprovementRuntimeObserver.reportChatError("second", 200L)
+            }
+            assertEquals(
+                SelfImprovementRuntimeStatus.DEGRADED_AUDIT_UNAVAILABLE,
+                SelfImprovementRuntimeObserver.runtimeStatus()
+            )
+            SelfImprovementRuntimeObserver.reportChatError("ignored-after-degrade", 300L)
             assertTrue(SelfImprovementRuntimeObserver.readVerifiedAuditForDiagnostics().isEmpty())
         } finally {
             root.deleteRecursively()
