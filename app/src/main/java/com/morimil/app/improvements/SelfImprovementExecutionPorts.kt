@@ -171,12 +171,8 @@ internal object SelfPatchSafetyPolicy {
         paths.forEach { rawPath ->
             val path = rawPath.lowercase(Locale.ROOT)
             val pathSurfaces = linkedSetOf<SelfChangeSurface>()
-            if (
-                path.startsWith(".github/") ||
-                path == "app/build.gradle.kts" ||
-                path.startsWith("gradle/") ||
-                path.startsWith("tools/quality/")
-            ) {
+
+            if (isBuildOrEvidencePath(path)) {
                 pathSurfaces += SelfChangeSurface.BUILD_AND_SUPPLY_CHAIN
             }
             if (
@@ -203,15 +199,36 @@ internal object SelfPatchSafetyPolicy {
             if ("/reasoning/" in path || "/ai/" in path) {
                 pathSurfaces += SelfChangeSurface.REASONING_RUNTIME
             }
-            if ("/ui/" in path) {
+            if (path.startsWith("app/src/main/") && "/ui/" in path) {
                 pathSurfaces += SelfChangeSurface.PRESENTATION
             }
-            if (path.startsWith("app/src/main/") && pathSurfaces.isEmpty()) {
+
+            // Fail closed: every repository path must have a risk surface. Unknown
+            // paths are code/governance/tooling scope until independently reviewed.
+            if (pathSurfaces.isEmpty()) {
                 pathSurfaces += SelfChangeSurface.CORE_IMPLEMENTATION
             }
             surfaces.addAll(pathSurfaces)
         }
         return surfaces
+    }
+
+    private fun isBuildOrEvidencePath(path: String): Boolean {
+        return path.startsWith(".github/") ||
+            path == "build.gradle.kts" ||
+            path == "settings.gradle.kts" ||
+            path == "gradle.properties" ||
+            path == "gradlew" ||
+            path == "gradlew.bat" ||
+            path == "app/build.gradle.kts" ||
+            path == "app/proguard-rules.pro" ||
+            path.startsWith("gradle/") ||
+            path.startsWith("tools/") ||
+            path.startsWith("app/src/test/") ||
+            path.startsWith("app/src/androidtest/") ||
+            path.startsWith("app/src/testfixtures/") ||
+            path.startsWith("app/src/debug/") ||
+            path.startsWith("app/src/release/")
     }
 
     fun requireSafePaths(paths: List<String>) {
