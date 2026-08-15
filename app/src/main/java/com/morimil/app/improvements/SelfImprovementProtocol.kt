@@ -1,5 +1,8 @@
 package com.morimil.app.improvements
 
+import java.util.Collections
+import java.util.LinkedHashSet
+
 /** Areas that a self-generated change may affect. */
 internal enum class SelfChangeSurface {
     PRESENTATION,
@@ -43,8 +46,8 @@ internal enum class SelfChangeActor {
     HUMAN_AUTHORIZER
 }
 
-/** Stable description of the observed problem before any patch exists. */
-internal data class SelfChangeObservation(
+/** Stable immutable description of the observed problem before any patch exists. */
+internal data class SelfChangeObservation private constructor(
     val changeId: String,
     val problem: String,
     val proposal: String,
@@ -74,16 +77,19 @@ internal data class SelfChangeObservation(
             proposal: String,
             surfaces: Set<SelfChangeSurface>
         ): SelfChangeObservation {
+            val surfaceSnapshot: Set<SelfChangeSurface> = Collections.unmodifiableSet(
+                LinkedHashSet(surfaces)
+            )
             return SelfChangeObservation(
                 changeId = changeId,
                 problem = problem,
                 proposal = proposal,
-                surfaces = surfaces,
+                surfaces = surfaceSnapshot,
                 observationDigest = SelfImprovementHashProfile.observationDigest(
                     changeId = changeId,
                     problem = problem,
                     proposal = proposal,
-                    surfaces = surfaces
+                    surfaces = surfaceSnapshot
                 )
             )
         }
@@ -105,7 +111,10 @@ internal data class SelfChangeCandidate(
     val authorization: SelfAuthorizationEvidence? = null
 ) {
     val risk: SelfChangeRisk
-        get() = SelfImprovementPolicy.classify(surfaces)
+        get() {
+            requireObservationBinding()
+            return SelfImprovementPolicy.classify(surfaces)
+        }
 
     init {
         require(changeId.isNotBlank()) { "self_change_id_blank" }
@@ -113,14 +122,7 @@ internal data class SelfChangeCandidate(
         require(proposal.isNotBlank()) { "self_change_proposal_blank" }
         require(surfaces.isNotEmpty()) { "self_change_surface_empty" }
         require(SHA256_REF.matches(observationDigest)) { "self_change_observation_digest_invalid" }
-        require(
-            observationDigest == SelfImprovementHashProfile.observationDigest(
-                changeId = changeId,
-                problem = problem,
-                proposal = proposal,
-                surfaces = surfaces
-            )
-        ) { "self_change_observation_digest_mismatch" }
+        requireObservationBinding()
 
         when (stage) {
             SelfChangeStage.DETECTED,
@@ -152,6 +154,17 @@ internal data class SelfChangeCandidate(
             }
             SelfChangeStage.REJECTED -> Unit
         }
+    }
+
+    private fun requireObservationBinding() {
+        require(
+            observationDigest == SelfImprovementHashProfile.observationDigest(
+                changeId = changeId,
+                problem = problem,
+                proposal = proposal,
+                surfaces = surfaces
+            )
+        ) { "self_change_observation_digest_mismatch" }
     }
 
     private fun requirePatchBinding(candidateDigest: String?, baseCommitSha: String?) {
