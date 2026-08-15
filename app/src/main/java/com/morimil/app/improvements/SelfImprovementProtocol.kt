@@ -76,6 +76,11 @@ internal data class SelfChangeEvidence(
     val coverageReviewed: Boolean = false,
     val mutationReviewed: Boolean = false,
     val crossLanguageVectorsPassed: Boolean = false,
+    val sandboxIsolationPassed: Boolean = false,
+    val secretIsolationPassed: Boolean = false,
+    val blastRadiusReviewed: Boolean = false,
+    val rollbackPlanReviewed: Boolean = false,
+    val auditTrailRecorded: Boolean = false,
     val exactBaseVerified: Boolean = false
 ) {
     init {
@@ -212,6 +217,11 @@ internal object SelfImprovementPolicy {
             require(evidence.reproducibilityPassed) { "self_change_reproducibility_not_passed" }
             require(evidence.coverageReviewed) { "self_change_coverage_not_reviewed" }
             require(evidence.mutationReviewed) { "self_change_mutation_not_reviewed" }
+            require(evidence.sandboxIsolationPassed) { "self_change_sandbox_isolation_not_passed" }
+            require(evidence.secretIsolationPassed) { "self_change_secret_isolation_not_passed" }
+            require(evidence.blastRadiusReviewed) { "self_change_blast_radius_not_reviewed" }
+            require(evidence.rollbackPlanReviewed) { "self_change_rollback_plan_not_reviewed" }
+            require(evidence.auditTrailRecorded) { "self_change_audit_trail_not_recorded" }
         }
         if (candidate.risk == SelfChangeRisk.CRITICAL) {
             require(evidence.instrumentedTestsPassed) {
