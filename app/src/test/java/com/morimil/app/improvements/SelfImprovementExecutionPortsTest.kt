@@ -2,6 +2,7 @@ package com.morimil.app.improvements
 
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Test
 
@@ -38,7 +39,7 @@ class SelfImprovementExecutionPortsTest {
         assertEquals(SelfChangeRisk.CRITICAL, candidate.risk)
         assertEquals(PATCH_DIGEST, candidate.candidateDigest)
         assertEquals(BASE_SHA, candidate.baseCommitSha)
-        assertEquals(null, candidate.authorizedBy)
+        assertNull(candidate.authorizedBy)
     }
 
     @Test
@@ -89,6 +90,7 @@ class SelfImprovementExecutionPortsTest {
                     .prepareVerifiedCandidate(observation(), BASE_SHA)
             }
         }
+        Unit
     }
 
     private fun observation(): SelfChangeObservation {
