@@ -1,7 +1,9 @@
 package com.morimil.app.improvements
 
 import com.google.crypto.tink.subtle.Ed25519Sign
+import java.lang.reflect.Modifier
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
@@ -43,6 +45,18 @@ class SelfImprovementProtocolTest {
         assertEquals(SelfChangeStage.MERGE_READY, candidate.stage)
         assertEquals(SelfAuthorityRole.HUMAN_AUTHORIZER, candidate.authorization?.role)
         assertEquals(HUMAN_ID, candidate.authorization?.signerId)
+    }
+
+    @Test
+    fun candidateHasNoPublicConstructorOrGeneratedCopyEscape() {
+        assertTrue(
+            SelfChangeCandidate::class.java.declaredConstructors.all { constructor ->
+                Modifier.isPrivate(constructor.modifiers)
+            }
+        )
+        assertFalse(
+            SelfChangeCandidate::class.java.declaredMethods.any { method -> method.name == "copy" }
+        )
     }
 
     @Test
@@ -145,11 +159,11 @@ class SelfImprovementProtocolTest {
         val authority = authorityVerifier()
         val observation = observation(setOf(SelfChangeSurface.INSTANCE_IDENTITY))
         val candidate = patchCandidate(observation)
-        val wrongBaseCandidate = candidate.copy(baseCommitSha = "b".repeat(40))
         val attestation = signedVerifierAttestation(
-            observation,
-            wrongBaseCandidate,
-            fullCriticalClaims()
+            observation = observation,
+            candidate = candidate,
+            claims = fullCriticalClaims(),
+            baseCommitShaOverride = "b".repeat(40)
         )
 
         val failure = assertThrows(IllegalArgumentException::class.java) {
@@ -203,7 +217,8 @@ class SelfImprovementProtocolTest {
     private fun signedVerifierAttestation(
         observation: SelfChangeObservation,
         candidate: SelfChangeCandidate,
-        claims: Set<SelfVerificationClaim>
+        claims: Set<SelfVerificationClaim>,
+        baseCommitShaOverride: String? = null
     ): SelfSignedAuthorityAttestation {
         val pair = verifierKeyPair()
         val draft = SelfSignedAuthorityAttestation(
@@ -212,7 +227,7 @@ class SelfImprovementProtocolTest {
             publicKeyRef = SelfImprovementAuthorityProfile.sha256(pair.publicKey),
             observationDigest = observation.observationDigest,
             candidateDigest = requireNotNull(candidate.candidateDigest),
-            baseCommitSha = requireNotNull(candidate.baseCommitSha),
+            baseCommitSha = baseCommitShaOverride ?: requireNotNull(candidate.baseCommitSha),
             evidenceBundleDigest = "sha256:" + "e".repeat(64),
             claims = claims,
             issuedAtMillis = 1000L,
