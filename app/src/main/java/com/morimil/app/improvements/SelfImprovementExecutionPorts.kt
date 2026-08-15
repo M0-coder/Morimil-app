@@ -67,7 +67,7 @@ internal object SelfPatchSafetyPolicy {
             path in forbiddenExactPaths ||
                 path.startsWith(".git/") ||
                 path.substringAfterLast('/').startsWith(".env.") ||
-                forbiddenSuffixes.any(path::endsWith)
+                forbiddenSuffixes.any { suffix -> path.endsWith(suffix) }
         }) { "self_patch_credential_or_git_path_forbidden" }
     }
 }
