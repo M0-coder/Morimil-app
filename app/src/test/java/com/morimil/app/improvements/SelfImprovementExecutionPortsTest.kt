@@ -117,6 +117,11 @@ class SelfImprovementExecutionPortsTest {
             coverageReviewed = true,
             mutationReviewed = true,
             crossLanguageVectorsPassed = true,
+            sandboxIsolationPassed = true,
+            secretIsolationPassed = true,
+            blastRadiusReviewed = true,
+            rollbackPlanReviewed = true,
+            auditTrailRecorded = true,
             exactBaseVerified = true
         )
     }
