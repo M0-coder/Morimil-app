@@ -19,11 +19,26 @@ internal object SelfImprovementRuntimeObserver {
 
     fun initialize(context: Context) {
         val appContext = context.applicationContext
-        synchronized(lock) {
-            if (state != null) return
-            val auditStore = SelfImprovementAuditStore(
+        install(
+            SelfImprovementAuditStore(
                 File(appContext.filesDir, SelfImprovementAuditStore.DEFAULT_RELATIVE_PATH)
             )
+        )
+    }
+
+    internal fun initializeForTest(auditFile: File) {
+        install(SelfImprovementAuditStore(auditFile))
+    }
+
+    internal fun resetForTest() {
+        synchronized(lock) {
+            state = null
+        }
+    }
+
+    private fun install(auditStore: SelfImprovementAuditStore) {
+        synchronized(lock) {
+            if (state != null) return
             // Fail closed on existing audit corruption before enabling new capture.
             auditStore.readVerifiedRecords()
             state = State(
