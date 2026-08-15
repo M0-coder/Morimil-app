@@ -13,6 +13,7 @@ class SelfImprovementExecutionPortsTest {
             candidateDigest = PATCH_DIGEST,
             baseCommitSha = BASE_SHA,
             changedPaths = listOf("app/src/main/example.kt"),
+            patchByteCount = 512,
             patchRef = "branch:self-change-test"
         )
         val executor = object : SelfPatchExecutorPort {
@@ -72,6 +73,7 @@ class SelfImprovementExecutionPortsTest {
                     candidateDigest = PATCH_DIGEST,
                     baseCommitSha = "b".repeat(40),
                     changedPaths = listOf("app/src/main/example.kt"),
+                    patchByteCount = 512,
                     patchRef = "branch:wrong-base"
                 )
             }
@@ -91,6 +93,28 @@ class SelfImprovementExecutionPortsTest {
             }
         }
         Unit
+    }
+
+    @Test
+    fun patchCannotContainCredentialMaterialOrUnboundedDiff() {
+        assertThrows(IllegalArgumentException::class.java) {
+            SelfPatchArtifact(
+                candidateDigest = PATCH_DIGEST,
+                baseCommitSha = BASE_SHA,
+                changedPaths = listOf("release/morimil-production.jks"),
+                patchByteCount = 128,
+                patchRef = "branch:credential-write"
+            )
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            SelfPatchArtifact(
+                candidateDigest = PATCH_DIGEST,
+                baseCommitSha = BASE_SHA,
+                changedPaths = listOf("app/src/main/example.kt"),
+                patchByteCount = SelfPatchSafetyPolicy.MAX_PATCH_BYTES + 1,
+                patchRef = "branch:oversized"
+            )
+        }
     }
 
     private fun observation(): SelfChangeObservation {
