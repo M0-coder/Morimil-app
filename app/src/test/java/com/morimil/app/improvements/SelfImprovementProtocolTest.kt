@@ -2,6 +2,7 @@ package com.morimil.app.improvements
 
 import com.google.crypto.tink.subtle.Ed25519Sign
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -113,23 +114,30 @@ class SelfImprovementProtocolTest {
     }
 
     @Test
-    fun observationDigestCannotBeDetachedFromProblemStatement() {
+    fun observationUsesImmutableSurfaceSnapshotAndProblemChangesDigest() {
+        val mutableSurfaces = linkedSetOf(SelfChangeSurface.INSTANCE_IDENTITY)
         val observation = SelfChangeObservation.create(
             changeId = "change_portability_001",
             problem = "Instance and Body boundaries must remain separable.",
             proposal = "Generate a verified candidate change without self-authorization.",
-            surfaces = setOf(SelfChangeSurface.INSTANCE_IDENTITY)
+            surfaces = mutableSurfaces
         )
+        val originalDigest = observation.observationDigest
 
-        assertThrows(IllegalArgumentException::class.java) {
-            SelfChangeObservation(
-                changeId = observation.changeId,
-                problem = "A different problem statement.",
-                proposal = observation.proposal,
-                surfaces = observation.surfaces,
-                observationDigest = observation.observationDigest
-            )
+        mutableSurfaces += SelfChangeSurface.GENESIS
+        assertEquals(setOf(SelfChangeSurface.INSTANCE_IDENTITY), observation.surfaces)
+        assertThrows(UnsupportedOperationException::class.java) {
+            @Suppress("UNCHECKED_CAST")
+            (observation.surfaces as MutableSet<SelfChangeSurface>) += SelfChangeSurface.GENESIS
         }
+
+        val differentProblem = SelfChangeObservation.create(
+            changeId = observation.changeId,
+            problem = "A different problem statement.",
+            proposal = observation.proposal,
+            surfaces = observation.surfaces
+        )
+        assertNotEquals(originalDigest, differentProblem.observationDigest)
     }
 
     @Test
