@@ -3,7 +3,7 @@ package com.morimil.app.improvements
 import android.content.Context
 import java.io.File
 
-internal enum class SelfImprovementRuntimeStatus {
+enum class SelfImprovementRuntimeStatus {
     NOT_INITIALIZED,
     READY,
     DEGRADED_AUDIT_UNAVAILABLE,
