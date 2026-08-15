@@ -1,6 +1,8 @@
-import json
+import collections
+import hashlib
 import tempfile
 import unittest
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from qa7_quality_ratchet_v1 import (
@@ -11,13 +13,18 @@ from qa7_quality_ratchet_v1 import (
     evaluate_instrumented,
     evaluate_jvm,
     fraction_at_least,
+    gradle_dependency_block_digest,
     lint_fingerprint,
     new_or_increased,
     normalize_repo_path,
     parse_kotlin_warnings,
 )
-import collections
-import xml.etree.ElementTree as ET
+
+FIXTURE_GRADLE = 'dependencies {\n    implementation("g:a:1")\n}\n'
+
+
+def sha256_ref(value: str) -> str:
+    return "sha256:" + hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
 def baseline():
@@ -41,6 +48,7 @@ def baseline():
             "maxErrors": 0,
             "maxWarnings": 1,
             "gradleDependencyCoordinates": ["g:a"],
+            "gradleDependencySourceSha256": sha256_ref(FIXTURE_GRADLE),
             "warningFingerprints": [
                 {"fingerprint": "GradleDependency|app/build.gradle.kts|g:a", "count": 1}
             ],
@@ -143,6 +151,14 @@ class QualityRatchetTests(unittest.TestCase):
         with self.assertRaises(QualityRatchetError):
             lint_fingerprint(issue)
 
+    def test_gradle_dependency_block_digest_is_exact_and_canonical(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "build.gradle.kts"
+            path.write_text(FIXTURE_GRADLE, encoding="utf-8")
+            self.assertEqual(gradle_dependency_block_digest(path), sha256_ref(FIXTURE_GRADLE))
+            path.write_text(FIXTURE_GRADLE.replace("g:a:1", "g:a:0"), encoding="utf-8")
+            self.assertNotEqual(gradle_dependency_block_digest(path), sha256_ref(FIXTURE_GRADLE))
+
     def test_baseline_string_set_is_sorted_unique_and_canonical(self):
         self.assertEqual(
             baseline_string_set(["a:a", "b:b"], "fixture"),
@@ -161,30 +177,42 @@ class QualityRatchetTests(unittest.TestCase):
         changed = new_or_increased(current, allowed)
         self.assertEqual({item["fingerprint"] for item in changed}, {"a", "c"})
 
-    def evaluate_jvm_fixture(self, *, current_authored=None, current_python=None, kotlin=None, lint=None, base=None):
+    def evaluate_jvm_fixture(
+        self,
+        *,
+        current_authored=None,
+        current_python=None,
+        kotlin=None,
+        lint=None,
+        gradle=None,
+        base=None,
+    ):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             kotlin_log = root / "compile.log"
             lint_path = root / "lint.xml"
+            gradle_path = root / "build.gradle.kts"
             kotlin_log.write_text(
                 kotlin
                 or "w: file:///x/Morimil-app/app/src/main/A.kt:10:20 old warning\n",
                 encoding="utf-8",
             )
             lint_path.write_text(lint or lint_xml(), encoding="utf-8")
+            gradle_path.write_text(gradle or FIXTURE_GRADLE, encoding="utf-8")
             return evaluate_jvm(
                 base or baseline(),
                 current_authored or authored(),
                 current_python or python_coverage(),
                 kotlin_log,
                 lint_path,
+                gradle_path,
             )
 
     def test_jvm_equal_passes(self):
         result = self.evaluate_jvm_fixture()
         self.assertTrue(result["pass"], result["failures"])
 
-    def test_existing_frozen_dependency_can_age_without_repository_regression(self):
+    def test_existing_frozen_dependency_can_age_when_dependency_block_is_unchanged(self):
         configured = baseline()
         configured["lint"]["warningFingerprints"] = []
         configured["lint"]["maxWarnings"] = 1
@@ -195,7 +223,27 @@ class QualityRatchetTests(unittest.TestCase):
             ),
         )
         self.assertTrue(result["pass"], result["failures"])
+        self.assertTrue(result["lint"]["gradleDependencySourceUnchanged"])
         self.assertEqual(result["lint"]["newOrIncreasedWarnings"], [])
+
+    def test_same_coordinate_downgrade_disables_remote_ageing_exemption_and_fails(self):
+        configured = baseline()
+        configured["lint"]["warningFingerprints"] = []
+        configured["lint"]["maxWarnings"] = 1
+        downgraded = FIXTURE_GRADLE.replace("g:a:1", "g:a:0")
+        result = self.evaluate_jvm_fixture(
+            base=configured,
+            gradle=downgraded,
+            lint=lint_xml(
+                message="A newer version of g:a than 0 is available: 2"
+            ),
+        )
+        self.assertFalse(result["pass"])
+        self.assertFalse(result["lint"]["gradleDependencySourceUnchanged"])
+        self.assertEqual(
+            result["lint"]["newOrIncreasedWarnings"][0]["fingerprint"],
+            "GradleDependency|app/build.gradle.kts|g:a",
+        )
 
     def test_new_dependency_coordinate_still_fails_when_it_is_already_outdated(self):
         configured = baseline()
