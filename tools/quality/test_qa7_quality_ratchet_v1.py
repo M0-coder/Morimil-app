@@ -7,6 +7,7 @@ from qa7_quality_ratchet_v1 import (
     COUNTERS,
     SCHEMA,
     QualityRatchetError,
+    baseline_string_set,
     evaluate_instrumented,
     evaluate_jvm,
     fraction_at_least,
@@ -39,6 +40,7 @@ def baseline():
         "lint": {
             "maxErrors": 0,
             "maxWarnings": 1,
+            "gradleDependencyCoordinates": ["g:a"],
             "warningFingerprints": [
                 {"fingerprint": "GradleDependency|app/build.gradle.kts|g:a", "count": 1}
             ],
@@ -141,6 +143,18 @@ class QualityRatchetTests(unittest.TestCase):
         with self.assertRaises(QualityRatchetError):
             lint_fingerprint(issue)
 
+    def test_baseline_string_set_is_sorted_unique_and_canonical(self):
+        self.assertEqual(
+            baseline_string_set(["a:a", "b:b"], "fixture"),
+            {"a:a", "b:b"},
+        )
+        with self.assertRaises(QualityRatchetError):
+            baseline_string_set(["b:b", "a:a"], "fixture")
+        with self.assertRaises(QualityRatchetError):
+            baseline_string_set(["a:a", "a:a"], "fixture")
+        with self.assertRaises(QualityRatchetError):
+            baseline_string_set([" a:a"], "fixture")
+
     def test_new_or_increased_detects_new_and_multiplicity(self):
         current = collections.Counter({"a": 3, "c": 1})
         allowed = collections.Counter({"a": 2, "b": 1})
@@ -169,6 +183,35 @@ class QualityRatchetTests(unittest.TestCase):
     def test_jvm_equal_passes(self):
         result = self.evaluate_jvm_fixture()
         self.assertTrue(result["pass"], result["failures"])
+
+    def test_existing_frozen_dependency_can_age_without_repository_regression(self):
+        configured = baseline()
+        configured["lint"]["warningFingerprints"] = []
+        configured["lint"]["maxWarnings"] = 1
+        result = self.evaluate_jvm_fixture(
+            base=configured,
+            lint=lint_xml(
+                message="A newer version of g:a than 1 is available: 99"
+            ),
+        )
+        self.assertTrue(result["pass"], result["failures"])
+        self.assertEqual(result["lint"]["newOrIncreasedWarnings"], [])
+
+    def test_new_dependency_coordinate_still_fails_when_it_is_already_outdated(self):
+        configured = baseline()
+        configured["lint"]["warningFingerprints"] = []
+        configured["lint"]["maxWarnings"] = 1
+        result = self.evaluate_jvm_fixture(
+            base=configured,
+            lint=lint_xml(
+                message="A newer version of g:b than 1 is available: 2"
+            ),
+        )
+        self.assertFalse(result["pass"])
+        self.assertEqual(
+            result["lint"]["newOrIncreasedWarnings"][0]["fingerprint"],
+            "GradleDependency|app/build.gradle.kts|g:b",
+        )
 
     def test_android_coverage_regression_fails(self):
         result = self.evaluate_jvm_fixture(current_authored=authored(1, 3))
