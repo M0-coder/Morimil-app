@@ -118,12 +118,11 @@ class SelfImprovementExecutionPortsTest {
     }
 
     private fun observation(): SelfChangeObservation {
-        return SelfChangeObservation(
+        return SelfChangeObservation.create(
             changeId = "change-portability-001",
             problem = "Permanent Instance identity must not depend on its current Body.",
             proposal = "Generate and verify a Body-independent identity patch.",
-            surfaces = setOf(SelfChangeSurface.INSTANCE_IDENTITY, SelfChangeSurface.GENESIS),
-            observationDigest = OBSERVATION_DIGEST
+            surfaces = setOf(SelfChangeSurface.INSTANCE_IDENTITY, SelfChangeSurface.GENESIS)
         )
     }
 
@@ -151,7 +150,6 @@ class SelfImprovementExecutionPortsTest {
     }
 
     private companion object {
-        val OBSERVATION_DIGEST = "sha256:" + "9".repeat(64)
         val PATCH_DIGEST = "sha256:" + "a".repeat(64)
         const val BASE_SHA = "2a9171874e4539de5ee8b8808f45fcc5a0e651b8"
     }
