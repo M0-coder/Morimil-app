@@ -55,7 +55,15 @@ internal data class SelfChangeEvidence(
     val mutationReviewed: Boolean = false,
     val crossLanguageVectorsPassed: Boolean = false,
     val exactMainBaseVerified: Boolean = false
-)
+) {
+    init {
+        require(SHA256_REF.matches(candidateDigest)) { "self_change_evidence_digest_invalid" }
+    }
+
+    private companion object {
+        val SHA256_REF = Regex("^sha256:[a-f0-9]{64}$")
+    }
+}
 
 internal data class SelfChangeCandidate(
     val changeId: String,
@@ -64,19 +72,43 @@ internal data class SelfChangeCandidate(
     val surfaces: Set<SelfChangeSurface>,
     val candidateDigest: String,
     val stage: SelfChangeStage,
-    val risk: SelfChangeRisk = SelfImprovementPolicy.classify(surfaces),
     val evidence: SelfChangeEvidence? = null,
     val authorizedBy: SelfChangeActor? = null
 ) {
+    val risk: SelfChangeRisk
+        get() = SelfImprovementPolicy.classify(surfaces)
+
     init {
         require(changeId.isNotBlank()) { "self_change_id_blank" }
         require(problem.isNotBlank()) { "self_change_problem_blank" }
         require(proposal.isNotBlank()) { "self_change_proposal_blank" }
         require(surfaces.isNotEmpty()) { "self_change_surface_empty" }
-        require(candidateDigest.startsWith("sha256:") && candidateDigest.length == 71) {
-            "self_change_candidate_digest_invalid"
-        }
+        require(SHA256_REF.matches(candidateDigest)) { "self_change_candidate_digest_invalid" }
         require(authorizedBy != SelfChangeActor.MORIMIL) { "self_authorization_forbidden" }
+
+        when (stage) {
+            SelfChangeStage.DETECTED,
+            SelfChangeStage.DIAGNOSED,
+            SelfChangeStage.PROPOSED,
+            SelfChangeStage.PATCH_CANDIDATE -> {
+                require(evidence == null) { "self_change_evidence_before_verification" }
+                require(authorizedBy == null) { "self_change_authorization_before_verification" }
+            }
+            SelfChangeStage.VERIFIED -> {
+                require(evidence != null) { "self_change_verified_evidence_missing" }
+                require(authorizedBy == null) { "self_change_authorization_before_authorized_stage" }
+            }
+            SelfChangeStage.AUTHORIZED,
+            SelfChangeStage.MERGE_READY -> {
+                require(evidence != null) { "self_change_verified_evidence_missing" }
+                require(authorizedBy != null) { "self_change_authorization_missing" }
+            }
+            SelfChangeStage.REJECTED -> Unit
+        }
+    }
+
+    private companion object {
+        val SHA256_REF = Regex("^sha256:[a-f0-9]{64}$")
     }
 }
 
