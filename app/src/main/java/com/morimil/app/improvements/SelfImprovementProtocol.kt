@@ -55,10 +55,38 @@ internal data class SelfChangeObservation(
         require(proposal.isNotBlank()) { "self_change_proposal_blank" }
         require(surfaces.isNotEmpty()) { "self_change_surface_empty" }
         require(SHA256_REF.matches(observationDigest)) { "self_change_observation_digest_invalid" }
+        require(
+            observationDigest == SelfImprovementHashProfile.observationDigest(
+                changeId = changeId,
+                problem = problem,
+                proposal = proposal,
+                surfaces = surfaces
+            )
+        ) { "self_change_observation_digest_mismatch" }
     }
 
-    private companion object {
-        val SHA256_REF = Regex("^sha256:[a-f0-9]{64}$")
+    internal companion object {
+        fun create(
+            changeId: String,
+            problem: String,
+            proposal: String,
+            surfaces: Set<SelfChangeSurface>
+        ): SelfChangeObservation {
+            return SelfChangeObservation(
+                changeId = changeId,
+                problem = problem,
+                proposal = proposal,
+                surfaces = surfaces,
+                observationDigest = SelfImprovementHashProfile.observationDigest(
+                    changeId = changeId,
+                    problem = problem,
+                    proposal = proposal,
+                    surfaces = surfaces
+                )
+            )
+        }
+
+        private val SHA256_REF = Regex("^sha256:[a-f0-9]{64}$")
     }
 }
 
@@ -115,6 +143,14 @@ internal data class SelfChangeCandidate(
         require(proposal.isNotBlank()) { "self_change_proposal_blank" }
         require(surfaces.isNotEmpty()) { "self_change_surface_empty" }
         require(SHA256_REF.matches(observationDigest)) { "self_change_observation_digest_invalid" }
+        require(
+            observationDigest == SelfImprovementHashProfile.observationDigest(
+                changeId = changeId,
+                problem = problem,
+                proposal = proposal,
+                surfaces = surfaces
+            )
+        ) { "self_change_observation_digest_mismatch" }
         require(authorizedBy != SelfChangeActor.MORIMIL) { "self_authorization_forbidden" }
 
         when (stage) {
