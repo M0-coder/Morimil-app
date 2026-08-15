@@ -15,6 +15,7 @@ internal data class SelfPatchArtifact(
     val candidateDigest: String,
     val baseCommitSha: String,
     val changedPaths: List<String>,
+    val patchByteCount: Long,
     val patchRef: String
 ) {
     init {
@@ -28,12 +29,46 @@ internal data class SelfPatchArtifact(
             path.isBlank() || path.startsWith("/") || path.contains("\\") ||
                 path.split('/').any { segment -> segment.isBlank() || segment == "." || segment == ".." }
         }) { "self_patch_changed_path_invalid" }
+        require(patchByteCount in 1..SelfPatchSafetyPolicy.MAX_PATCH_BYTES) {
+            "self_patch_size_out_of_bounds"
+        }
         require(patchRef.isNotBlank()) { "self_patch_ref_blank" }
+        SelfPatchSafetyPolicy.requireSafePaths(changedPaths)
     }
 
     private companion object {
         val SHA256_REF = Regex("^sha256:[a-f0-9]{64}$")
         val COMMIT_SHA = Regex("^[a-f0-9]{40}$")
+    }
+}
+
+/** Fail-closed blast-radius policy for generated code patches. */
+internal object SelfPatchSafetyPolicy {
+    const val MAX_CHANGED_PATHS = 128
+    const val MAX_PATCH_BYTES = 2L * 1024L * 1024L
+
+    private val forbiddenExactPaths = setOf(
+        ".env",
+        "local.properties"
+    )
+
+    private val forbiddenSuffixes = setOf(
+        ".jks",
+        ".keystore",
+        ".p12",
+        ".pfx",
+        ".pem",
+        ".key"
+    )
+
+    fun requireSafePaths(paths: List<String>) {
+        require(paths.size <= MAX_CHANGED_PATHS) { "self_patch_changed_path_count_exceeded" }
+        require(paths.none { path ->
+            path in forbiddenExactPaths ||
+                path.startsWith(".git/") ||
+                path.substringAfterLast('/').startsWith(".env.") ||
+                forbiddenSuffixes.any(path::endsWith)
+        }) { "self_patch_credential_or_git_path_forbidden" }
     }
 }
 
