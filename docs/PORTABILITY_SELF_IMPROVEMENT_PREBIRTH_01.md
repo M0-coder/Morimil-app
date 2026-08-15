@@ -89,9 +89,9 @@ From those bytes the implementation independently derives:
 
 The diff parser rejects non-canonical paths, CR line endings, invalid UTF-8, NUL, binary patches and symbolic-link modes. Credential/Git paths remain forbidden and the candidate stays bounded to 128 changed paths / 2 MiB.
 
-The orchestrator recalculates the digest and rejects any path-derived surface that was not already declared by the content-bound observation. Every production path is classified independently; an otherwise unclassified `app/src/main/**` path becomes `CORE_IMPLEMENTATION` and is HIGH risk.
+The orchestrator recalculates the digest and rejects any path-derived surface that was not already declared by the content-bound observation. Every changed path is classified independently. Root Gradle/wrapper files, `.github/**`, `gradle/**`, all `tools/**`, tests, Android debug/release sources and other build/evidence paths are at least `BUILD_AND_SUPPLY_CHAIN`. Known semantic paths add their corresponding critical/high surfaces. Any repository path that remains otherwise unclassified fails closed to `CORE_IMPLEMENTATION`, which is HIGH risk.
 
-This prevents an observation presented as UI/local work from silently generating a Genesis, security, build, memory or unknown Core change.
+This prevents an observation presented as UI/local work from silently generating a Genesis, security, build, test/evidence, memory, tooling or unknown repository change.
 
 `patchRef` is provenance metadata only. There is still no merge/apply port in this module; a future development-host implementation must prove that the repository candidate it exposes corresponds to the attested patch bytes before any external merge operation.
 
