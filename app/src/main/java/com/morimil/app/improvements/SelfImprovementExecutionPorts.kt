@@ -5,6 +5,9 @@ import java.nio.ByteBuffer
 import java.nio.charset.CodingErrorAction
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
+import java.util.ArrayList
+import java.util.Collections
+import java.util.LinkedHashSet
 import java.util.Locale
 
 /** Request sent to an external sandboxed code executor. */
@@ -65,12 +68,16 @@ internal class SelfPatchArtifact private constructor(
                 "self_patch_size_out_of_bounds"
             }
             val snapshot = patchBytes.copyOf()
-            val changedPaths = SelfPatchSafetyPolicy.extractAndValidateChangedPaths(snapshot)
+            val parsedPaths = SelfPatchSafetyPolicy.extractAndValidateChangedPaths(snapshot)
+            val pathSnapshot: List<String> = Collections.unmodifiableList(ArrayList(parsedPaths))
+            val surfaceSnapshot: Set<SelfChangeSurface> = Collections.unmodifiableSet(
+                LinkedHashSet(SelfPatchSafetyPolicy.inferSurfaces(pathSnapshot))
+            )
             return SelfPatchArtifact(
                 candidateDigest = SelfPatchContentProfile.candidateDigest(baseCommitSha, snapshot),
                 baseCommitSha = baseCommitSha,
-                changedPaths = changedPaths,
-                derivedSurfaces = SelfPatchSafetyPolicy.inferSurfaces(changedPaths),
+                changedPaths = pathSnapshot,
+                derivedSurfaces = surfaceSnapshot,
                 patchByteCount = snapshot.size.toLong(),
                 patchRef = patchRef,
                 patchBytes = snapshot
@@ -345,7 +352,7 @@ internal class SelfImprovementOrchestrator(
                 observationDigest = observation.observationDigest,
                 problem = observation.problem,
                 proposal = observation.proposal,
-                surfaces = observation.surfaces,
+                surfaces = Collections.unmodifiableSet(LinkedHashSet(observation.surfaces)),
                 baseCommitSha = baseCommitSha
             )
         )
