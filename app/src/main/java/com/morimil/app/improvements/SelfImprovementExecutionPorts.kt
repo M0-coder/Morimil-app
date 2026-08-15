@@ -170,44 +170,46 @@ internal object SelfPatchSafetyPolicy {
         val surfaces = linkedSetOf<SelfChangeSurface>()
         paths.forEach { rawPath ->
             val path = rawPath.lowercase(Locale.ROOT)
+            val pathSurfaces = linkedSetOf<SelfChangeSurface>()
             if (
                 path.startsWith(".github/") ||
                 path == "app/build.gradle.kts" ||
                 path.startsWith("gradle/") ||
                 path.startsWith("tools/quality/")
             ) {
-                surfaces += SelfChangeSurface.BUILD_AND_SUPPLY_CHAIN
+                pathSurfaces += SelfChangeSurface.BUILD_AND_SUPPLY_CHAIN
             }
             if (
                 "/security/" in path ||
                 "signed-release" in path ||
                 "/improvements/" in path
             ) {
-                surfaces += SelfChangeSurface.SECURITY_BOUNDARY
+                pathSurfaces += SelfChangeSurface.SECURITY_BOUNDARY
             }
             if ("genesis" in path || "birth" in path) {
-                surfaces += SelfChangeSurface.GENESIS
-                surfaces += SelfChangeSurface.INSTANCE_IDENTITY
+                pathSurfaces += SelfChangeSurface.GENESIS
+                pathSurfaces += SelfChangeSurface.INSTANCE_IDENTITY
             }
             if ("memory" in path || "recall" in path || "restcycle" in path || "migration" in path) {
-                surfaces += SelfChangeSurface.CANONICAL_MEMORY
+                pathSurfaces += SelfChangeSurface.CANONICAL_MEMORY
             }
             if ("body" in path || "writer" in path || "epoch" in path) {
-                surfaces += SelfChangeSurface.WRITER_AUTHORITY
-                surfaces += SelfChangeSurface.BODY_SUCCESSION
+                pathSurfaces += SelfChangeSurface.WRITER_AUTHORITY
+                pathSurfaces += SelfChangeSurface.BODY_SUCCESSION
             }
             if ("recovery" in path) {
-                surfaces += SelfChangeSurface.RECOVERY
+                pathSurfaces += SelfChangeSurface.RECOVERY
             }
             if ("/reasoning/" in path || "/ai/" in path) {
-                surfaces += SelfChangeSurface.REASONING_RUNTIME
+                pathSurfaces += SelfChangeSurface.REASONING_RUNTIME
             }
             if ("/ui/" in path) {
-                surfaces += SelfChangeSurface.PRESENTATION
+                pathSurfaces += SelfChangeSurface.PRESENTATION
             }
-            if (path.startsWith("app/src/main/") && surfaces.isEmpty()) {
-                surfaces += SelfChangeSurface.CORE_IMPLEMENTATION
+            if (path.startsWith("app/src/main/") && pathSurfaces.isEmpty()) {
+                pathSurfaces += SelfChangeSurface.CORE_IMPLEMENTATION
             }
+            surfaces.addAll(pathSurfaces)
         }
         return surfaces
     }
