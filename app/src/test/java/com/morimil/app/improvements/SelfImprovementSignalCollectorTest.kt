@@ -59,19 +59,21 @@ class SelfImprovementSignalCollectorTest {
     }
 
     @Test
-    fun repeatedIdenticalSignalWithinCooldownDoesNotSpamAudit() {
+    fun repeatedIdenticalSignalWithinCooldownDoesNotSpamAuditEvenWhenInterleaved() {
         val root = Files.createTempDirectory("self-signal-dedupe").toFile()
         try {
             val store = SelfImprovementAuditStore(File(root, "audit.log"))
             val collector = SelfImprovementSignalCollector(store, duplicateCooldownMillis = 1_000L)
             val first = collector.captureChatError("backend unavailable", 100L)
+            val interleaved = collector.captureMemoryAttention(300L)
             val duplicate = collector.captureChatError("backend unavailable", 500L)
             val later = collector.captureChatError("backend unavailable", 1_100L)
 
             requireNotNull(first)
+            requireNotNull(interleaved)
             assertNull(duplicate)
             requireNotNull(later)
-            assertEquals(2, store.readVerifiedRecords().size)
+            assertEquals(3, store.readVerifiedRecords().size)
         } finally {
             root.deleteRecursively()
         }
