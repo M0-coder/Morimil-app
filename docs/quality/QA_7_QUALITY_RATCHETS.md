@@ -19,6 +19,7 @@ The baseline protects:
 - Python statement and branch coverage;
 - Kotlin compiler warning fingerprints and multiplicity;
 - Android Lint error ceiling, warning ceiling, and warning fingerprints;
+- the complete frozen set of dependency coordinates already present in `app/build.gradle.kts`;
 - managed-device Android line, branch, and instruction coverage;
 - managed-device source files with zero line coverage.
 
@@ -30,7 +31,39 @@ Existing warnings are debt, not an approval of the warning condition. QA-7 allow
 
 Kotlin warning fingerprints remove absolute checkout paths and source line/column numbers. This keeps the gate stable when unrelated edits move a warning without changing its semantic message.
 
-Android Lint fingerprints use issue ID, repository-relative path, and message. `GradleDependency` is intentionally normalized to issue ID + path + dependency coordinate because the text embeds the newest version currently visible to Lint. A newly published remote version must not make an unchanged repository fail CI; a newly warned dependency coordinate still fails.
+Android Lint fingerprints use issue ID, repository-relative path, and message.
+
+### GradleDependency remote-ageing rule
+
+`GradleDependency` is intentionally normalized to issue ID + path + dependency coordinate because the text embeds the newest version currently visible to Lint.
+
+The baseline also records every dependency coordinate already present in the frozen `app/build.gradle.kts`, regardless of whether that coordinate emitted `GradleDependency` at baseline capture time.
+
+This distinction is required because repository state and remote release state are different evidence domains:
+
+```text
+frozen coordinate exists in baseline
++ remote ecosystem later publishes a newer version
++ unchanged coordinate begins emitting GradleDependency
+= REMOTE AGEING, not repository regression
+```
+
+That warning is allowed only while the total warning ceiling remains satisfied. It does not approve the old dependency version and does not modify the dependency.
+
+By contrast:
+
+```text
+coordinate not present in frozen baseline
++ current candidate introduces it
++ Lint reports GradleDependency
+= NEW REPOSITORY WARNING
+```
+
+That remains a ratchet failure.
+
+A newly published remote version must therefore not make an unchanged repository fail CI, while a newly warned dependency coordinate introduced after the frozen baseline still fails.
+
+The frozen coordinate list is validated as sorted, unique, non-empty canonical strings. QA-7 fails closed if that baseline structure is malformed.
 
 ## Coverage policy
 
@@ -50,7 +83,9 @@ Genesis Body Preparation continues to produce canonical API-30 managed-device co
 2. JVM authored coverage does not regress from the frozen fractions.
 3. Python statement/branch coverage does not regress from the frozen fractions.
 4. Kotlin warnings do not exceed 12 and no warning fingerprint/multiplicity is new.
-5. Android Lint errors remain 0, warnings do not exceed 23, and no warning fingerprint/multiplicity is new.
-6. Canonical API-30 instrumented coverage does not regress and zero-line source count does not exceed 211.
-7. Required machine-readable ratchet result JSON files are uploaded as CI evidence.
-8. No dependency versions, production source, Body, Guardian, Seed, Genesis asset/state, activation, release, or birth operation is changed by QA-7.
+5. Android Lint errors remain 0 and warnings do not exceed 23.
+6. Non-`GradleDependency` lint fingerprints cannot be new or increased.
+7. `GradleDependency` may newly appear only for a coordinate already frozen in the baseline; a newly warned non-baseline coordinate fails.
+8. Canonical API-30 instrumented coverage does not regress and zero-line source count does not exceed 211.
+9. Required machine-readable ratchet result JSON files are uploaded as CI evidence.
+10. No dependency versions, production source, Body, Guardian, Seed, Genesis asset/state, activation, release, or birth operation is changed by QA-7.
