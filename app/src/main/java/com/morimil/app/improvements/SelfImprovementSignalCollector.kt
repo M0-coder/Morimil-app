@@ -64,12 +64,15 @@ internal class SelfImprovementSignalCollector(
         occurredAtMillis: Long
     ): SelfChangeObservation? {
         require(occurredAtMillis >= 0L) { "self_signal_time_invalid" }
-        val latest = auditStore.readVerifiedRecords().lastOrNull()
+        val latestMatching = auditStore.readVerifiedRecords()
+            .asReversed()
+            .firstOrNull { record ->
+                record.observationDigest == observation.observationDigest
+            }
         if (
-            latest != null &&
-            latest.observationDigest == observation.observationDigest &&
-            occurredAtMillis >= latest.recordedAtMillis &&
-            occurredAtMillis - latest.recordedAtMillis < duplicateCooldownMillis
+            latestMatching != null &&
+            occurredAtMillis >= latestMatching.recordedAtMillis &&
+            occurredAtMillis - latestMatching.recordedAtMillis < duplicateCooldownMillis
         ) {
             return null
         }
