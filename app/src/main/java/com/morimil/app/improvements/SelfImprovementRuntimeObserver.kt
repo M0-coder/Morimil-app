@@ -3,6 +3,13 @@ package com.morimil.app.improvements
 import android.content.Context
 import java.io.File
 
+internal enum class SelfImprovementRuntimeStatus {
+    NOT_INITIALIZED,
+    READY,
+    DEGRADED_AUDIT_UNAVAILABLE,
+    DISABLED
+}
+
 /**
  * Process-local bridge from runtime health signals to the durable DETECTED audit.
  *
@@ -16,6 +23,9 @@ internal object SelfImprovementRuntimeObserver {
 
     @Volatile
     private var state: State? = null
+
+    @Volatile
+    private var status: SelfImprovementRuntimeStatus = SelfImprovementRuntimeStatus.NOT_INITIALIZED
 
     fun initialize(context: Context) {
         val appContext = context.applicationContext
@@ -33,18 +43,31 @@ internal object SelfImprovementRuntimeObserver {
     internal fun resetForTest() {
         synchronized(lock) {
             state = null
+            status = SelfImprovementRuntimeStatus.NOT_INITIALIZED
         }
     }
 
+    fun runtimeStatus(): SelfImprovementRuntimeStatus = status
+
     private fun install(auditStore: SelfImprovementAuditStore) {
         synchronized(lock) {
-            if (state != null) return
-            // Fail closed on existing audit corruption before enabling new capture.
-            auditStore.readVerifiedRecords()
-            state = State(
-                auditStore = auditStore,
-                collector = SelfImprovementSignalCollector(auditStore)
-            )
+            if (state != null) {
+                status = SelfImprovementRuntimeStatus.READY
+                return
+            }
+            try {
+                // Fail closed on existing audit corruption/rollback before enabling capture.
+                auditStore.readVerifiedRecords()
+                state = State(
+                    auditStore = auditStore,
+                    collector = SelfImprovementSignalCollector(auditStore)
+                )
+                status = SelfImprovementRuntimeStatus.READY
+            } catch (failure: Throwable) {
+                state = null
+                status = SelfImprovementRuntimeStatus.DEGRADED_AUDIT_UNAVAILABLE
+                throw failure
+            }
         }
     }
 
