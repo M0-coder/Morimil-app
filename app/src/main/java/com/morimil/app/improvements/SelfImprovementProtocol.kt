@@ -5,6 +5,7 @@ internal enum class SelfChangeSurface {
     PRESENTATION,
     LOCAL_ADAPTER,
     PERFORMANCE,
+    CORE_IMPLEMENTATION,
     REASONING_RUNTIME,
     BUILD_AND_SUPPLY_CHAIN,
     SECURITY_BOUNDARY,
@@ -34,6 +35,7 @@ internal enum class SelfChangeStage {
     REJECTED
 }
 
+/** Actor labels are audit metadata only; they are not trusted authorization tokens. */
 internal enum class SelfChangeActor {
     MORIMIL,
     EXTERNAL_EXECUTOR,
@@ -90,38 +92,6 @@ internal data class SelfChangeObservation(
     }
 }
 
-/** Evidence attached to one exact patch candidate and exact repository base. */
-internal data class SelfChangeEvidence(
-    val candidateDigest: String,
-    val baseCommitSha: String,
-    val architectureReviewed: Boolean = false,
-    val compilationPassed: Boolean = false,
-    val unitTestsPassed: Boolean = false,
-    val instrumentedTestsPassed: Boolean = false,
-    val staticAnalysisPassed: Boolean = false,
-    val securityChecksPassed: Boolean = false,
-    val reproducibilityPassed: Boolean = false,
-    val coverageReviewed: Boolean = false,
-    val mutationReviewed: Boolean = false,
-    val crossLanguageVectorsPassed: Boolean = false,
-    val sandboxIsolationPassed: Boolean = false,
-    val secretIsolationPassed: Boolean = false,
-    val blastRadiusReviewed: Boolean = false,
-    val rollbackPlanReviewed: Boolean = false,
-    val auditTrailRecorded: Boolean = false,
-    val exactBaseVerified: Boolean = false
-) {
-    init {
-        require(SHA256_REF.matches(candidateDigest)) { "self_change_evidence_digest_invalid" }
-        require(COMMIT_SHA.matches(baseCommitSha)) { "self_change_evidence_base_sha_invalid" }
-    }
-
-    private companion object {
-        val SHA256_REF = Regex("^sha256:[a-f0-9]{64}$")
-        val COMMIT_SHA = Regex("^[a-f0-9]{40}$")
-    }
-}
-
 internal data class SelfChangeCandidate(
     val changeId: String,
     val problem: String,
@@ -131,8 +101,8 @@ internal data class SelfChangeCandidate(
     val stage: SelfChangeStage,
     val candidateDigest: String? = null,
     val baseCommitSha: String? = null,
-    val evidence: SelfChangeEvidence? = null,
-    val authorizedBy: SelfChangeActor? = null
+    val evidence: SelfVerifiedEvidence? = null,
+    val authorization: SelfAuthorizationEvidence? = null
 ) {
     val risk: SelfChangeRisk
         get() = SelfImprovementPolicy.classify(surfaces)
@@ -151,7 +121,6 @@ internal data class SelfChangeCandidate(
                 surfaces = surfaces
             )
         ) { "self_change_observation_digest_mismatch" }
-        require(authorizedBy != SelfChangeActor.MORIMIL) { "self_authorization_forbidden" }
 
         when (stage) {
             SelfChangeStage.DETECTED,
@@ -160,23 +129,26 @@ internal data class SelfChangeCandidate(
                 require(candidateDigest == null) { "self_change_patch_digest_before_patch" }
                 require(baseCommitSha == null) { "self_change_base_sha_before_patch" }
                 require(evidence == null) { "self_change_evidence_before_verification" }
-                require(authorizedBy == null) { "self_change_authorization_before_verification" }
+                require(authorization == null) { "self_change_authorization_before_verification" }
             }
             SelfChangeStage.PATCH_CANDIDATE -> {
                 requirePatchBinding(candidateDigest, baseCommitSha)
                 require(evidence == null) { "self_change_evidence_before_verification" }
-                require(authorizedBy == null) { "self_change_authorization_before_verification" }
+                require(authorization == null) { "self_change_authorization_before_verification" }
             }
             SelfChangeStage.VERIFIED -> {
                 requirePatchBinding(candidateDigest, baseCommitSha)
                 require(evidence != null) { "self_change_verified_evidence_missing" }
-                require(authorizedBy == null) { "self_change_authorization_before_authorized_stage" }
+                require(authorization == null) { "self_change_authorization_before_authorized_stage" }
             }
             SelfChangeStage.AUTHORIZED,
             SelfChangeStage.MERGE_READY -> {
                 requirePatchBinding(candidateDigest, baseCommitSha)
                 require(evidence != null) { "self_change_verified_evidence_missing" }
-                require(authorizedBy != null) { "self_change_authorization_missing" }
+                require(authorization != null) { "self_change_authorization_missing" }
+                require(authorization.verificationAttestationDigest == evidence.attestationDigest) {
+                    "self_change_authorization_verification_mismatch"
+                }
             }
             SelfChangeStage.REJECTED -> Unit
         }
@@ -200,11 +172,8 @@ internal data class SelfChangeCandidate(
 /**
  * Governance for self-improvement.
  *
- * Morimil may detect, diagnose, propose and generate a patch candidate. It may
- * never certify its own patch. Verification must be independent. Any change
- * that can affect identity, Genesis, memory authority, writer authority,
- * succession, recovery or security requires explicit human authorization after
- * independent verification.
+ * Verification and authorization are based on cryptographically verified
+ * attestations. Actor enums and boolean claims cannot advance trusted stages.
  */
 internal object SelfImprovementPolicy {
     private val criticalSurfaces = setOf(
@@ -217,9 +186,36 @@ internal object SelfImprovementPolicy {
     )
 
     private val highSurfaces = setOf(
+        SelfChangeSurface.CORE_IMPLEMENTATION,
         SelfChangeSurface.SECURITY_BOUNDARY,
         SelfChangeSurface.BUILD_AND_SUPPLY_CHAIN,
         SelfChangeSurface.REASONING_RUNTIME
+    )
+
+    private val baseClaims = setOf(
+        SelfVerificationClaim.PATCH_CONTENT_RECOMPUTED,
+        SelfVerificationClaim.EXACT_BASE,
+        SelfVerificationClaim.ARCHITECTURE_REVIEW,
+        SelfVerificationClaim.COMPILATION,
+        SelfVerificationClaim.UNIT_TESTS,
+        SelfVerificationClaim.STATIC_ANALYSIS
+    )
+
+    private val highClaims = setOf(
+        SelfVerificationClaim.SECURITY_CHECKS,
+        SelfVerificationClaim.REPRODUCIBILITY,
+        SelfVerificationClaim.COVERAGE_REVIEW,
+        SelfVerificationClaim.MUTATION_REVIEW,
+        SelfVerificationClaim.SANDBOX_ISOLATION,
+        SelfVerificationClaim.SECRET_ISOLATION,
+        SelfVerificationClaim.BLAST_RADIUS_REVIEW,
+        SelfVerificationClaim.ROLLBACK_PLAN_REVIEW,
+        SelfVerificationClaim.AUDIT_TRAIL
+    )
+
+    private val criticalClaims = setOf(
+        SelfVerificationClaim.INSTRUMENTED_TESTS,
+        SelfVerificationClaim.CROSS_LANGUAGE_VECTORS
     )
 
     fun classify(surfaces: Set<SelfChangeSurface>): SelfChangeRisk {
@@ -235,37 +231,29 @@ internal object SelfImprovementPolicy {
         return candidate.risk in setOf(SelfChangeRisk.HIGH, SelfChangeRisk.CRITICAL)
     }
 
-    fun requireVerificationEvidence(candidate: SelfChangeCandidate, evidence: SelfChangeEvidence) {
+    fun requireVerificationEvidence(candidate: SelfChangeCandidate, evidence: SelfVerifiedEvidence) {
+        require(evidence.observationDigest == candidate.observationDigest) {
+            "self_change_evidence_observation_mismatch"
+        }
         require(evidence.candidateDigest == candidate.candidateDigest) {
             "self_change_evidence_candidate_mismatch"
         }
         require(evidence.baseCommitSha == candidate.baseCommitSha) {
             "self_change_evidence_base_mismatch"
         }
-        require(evidence.exactBaseVerified) { "self_change_exact_base_not_verified" }
-        require(evidence.architectureReviewed) { "self_change_architecture_not_reviewed" }
-        require(evidence.compilationPassed) { "self_change_compilation_not_passed" }
-        require(evidence.unitTestsPassed) { "self_change_unit_tests_not_passed" }
-        require(evidence.staticAnalysisPassed) { "self_change_static_analysis_not_passed" }
-
-        if (candidate.risk in setOf(SelfChangeRisk.HIGH, SelfChangeRisk.CRITICAL)) {
-            require(evidence.securityChecksPassed) { "self_change_security_checks_not_passed" }
-            require(evidence.reproducibilityPassed) { "self_change_reproducibility_not_passed" }
-            require(evidence.coverageReviewed) { "self_change_coverage_not_reviewed" }
-            require(evidence.mutationReviewed) { "self_change_mutation_not_reviewed" }
-            require(evidence.sandboxIsolationPassed) { "self_change_sandbox_isolation_not_passed" }
-            require(evidence.secretIsolationPassed) { "self_change_secret_isolation_not_passed" }
-            require(evidence.blastRadiusReviewed) { "self_change_blast_radius_not_reviewed" }
-            require(evidence.rollbackPlanReviewed) { "self_change_rollback_plan_not_reviewed" }
-            require(evidence.auditTrailRecorded) { "self_change_audit_trail_not_recorded" }
+        val required = linkedSetOf<SelfVerificationClaim>().apply {
+            addAll(baseClaims)
+            if (candidate.risk in setOf(SelfChangeRisk.HIGH, SelfChangeRisk.CRITICAL)) {
+                addAll(highClaims)
+            }
+            if (candidate.risk == SelfChangeRisk.CRITICAL) {
+                addAll(criticalClaims)
+            }
         }
-        if (candidate.risk == SelfChangeRisk.CRITICAL) {
-            require(evidence.instrumentedTestsPassed) {
-                "self_change_instrumented_tests_not_passed"
-            }
-            require(evidence.crossLanguageVectorsPassed) {
-                "self_change_cross_language_vectors_not_passed"
-            }
+        val missing = required - evidence.claims
+        require(missing.isEmpty()) { "self_change_required_evidence_missing:$missing" }
+        require(SelfVerificationClaim.HUMAN_AUTHORIZATION !in evidence.claims) {
+            "self_change_verifier_human_claim_forbidden"
         }
     }
 }
@@ -318,40 +306,71 @@ internal object SelfImprovementProtocol {
 
     fun verify(
         candidate: SelfChangeCandidate,
-        evidence: SelfChangeEvidence,
-        actor: SelfChangeActor
+        attestation: SelfSignedAuthorityAttestation,
+        authorityVerifier: SelfImprovementAuthorityVerifier
     ): SelfChangeCandidate {
-        require(actor == SelfChangeActor.INDEPENDENT_VERIFIER) {
-            "self_change_independent_verifier_required"
-        }
         require(candidate.stage == SelfChangeStage.PATCH_CANDIDATE) { "self_change_stage_invalid" }
+        val digest = requireNotNull(candidate.candidateDigest)
+        val base = requireNotNull(candidate.baseCommitSha)
+        val evidence = authorityVerifier.verifyIndependent(
+            attestation = attestation,
+            expectedObservationDigest = candidate.observationDigest,
+            expectedCandidateDigest = digest,
+            expectedBaseCommitSha = base
+        )
         SelfImprovementPolicy.requireVerificationEvidence(candidate, evidence)
         return candidate.copy(stage = SelfChangeStage.VERIFIED, evidence = evidence)
     }
 
-    fun authorize(candidate: SelfChangeCandidate, actor: SelfChangeActor): SelfChangeCandidate {
+    /** LOW/MEDIUM changes may rely on the already trusted independent verifier. */
+    fun authorizeLowRiskFromIndependentVerification(candidate: SelfChangeCandidate): SelfChangeCandidate {
         require(candidate.stage == SelfChangeStage.VERIFIED) { "self_change_stage_invalid" }
-        require(actor != SelfChangeActor.MORIMIL) { "self_authorization_forbidden" }
-        if (SelfImprovementPolicy.requiresHumanAuthorization(candidate)) {
-            require(actor == SelfChangeActor.HUMAN_AUTHORIZER) {
-                "self_change_human_authorization_required"
-            }
-        } else {
-            require(
-                actor == SelfChangeActor.HUMAN_AUTHORIZER ||
-                    actor == SelfChangeActor.INDEPENDENT_VERIFIER
-            ) { "self_change_authorizer_invalid" }
+        require(!SelfImprovementPolicy.requiresHumanAuthorization(candidate)) {
+            "self_change_human_authorization_required"
         }
+        val evidence = requireNotNull(candidate.evidence)
+        val authorization = SelfAuthorizationEvidence(
+            role = SelfAuthorityRole.INDEPENDENT_VERIFIER,
+            signerId = evidence.verifierId,
+            signerPublicKeyRef = evidence.verifierPublicKeyRef,
+            authorizationAttestationDigest = evidence.attestationDigest,
+            verificationAttestationDigest = evidence.attestationDigest,
+            issuedAtMillis = evidence.issuedAtMillis
+        )
         return candidate.copy(
             stage = SelfChangeStage.AUTHORIZED,
-            authorizedBy = actor
+            authorization = authorization
+        )
+    }
+
+    /** HIGH/CRITICAL changes require a separate signed human authorization. */
+    fun authorizeHighRisk(
+        candidate: SelfChangeCandidate,
+        attestation: SelfSignedAuthorityAttestation,
+        authorityVerifier: SelfImprovementAuthorityVerifier
+    ): SelfChangeCandidate {
+        require(candidate.stage == SelfChangeStage.VERIFIED) { "self_change_stage_invalid" }
+        require(SelfImprovementPolicy.requiresHumanAuthorization(candidate)) {
+            "self_change_human_authorization_not_required_for_low_risk"
+        }
+        val evidence = requireNotNull(candidate.evidence)
+        val authorization = authorityVerifier.verifyHumanAuthorization(
+            attestation = attestation,
+            expectedObservationDigest = candidate.observationDigest,
+            expectedCandidateDigest = requireNotNull(candidate.candidateDigest),
+            expectedBaseCommitSha = requireNotNull(candidate.baseCommitSha),
+            expectedVerificationAttestationDigest = evidence.attestationDigest
+        )
+        return candidate.copy(
+            stage = SelfChangeStage.AUTHORIZED,
+            authorization = authorization
         )
     }
 
     fun markMergeReady(candidate: SelfChangeCandidate): SelfChangeCandidate {
         require(candidate.stage == SelfChangeStage.AUTHORIZED) { "self_change_stage_invalid" }
         require(candidate.evidence != null) { "self_change_verified_evidence_missing" }
-        require(candidate.authorizedBy != SelfChangeActor.MORIMIL) { "self_authorization_forbidden" }
+        require(candidate.authorization != null) { "self_change_authorization_missing" }
         return candidate.copy(stage = SelfChangeStage.MERGE_READY)
     }
 
