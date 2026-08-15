@@ -1,5 +1,6 @@
 package com.morimil.app.improvements
 
+import com.google.crypto.tink.subtle.Ed25519Sign
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
@@ -7,106 +8,108 @@ import org.junit.Test
 
 class SelfImprovementProtocolTest {
     @Test
-    fun criticalIdentityChangeRequiresIndependentEvidenceAndHumanAuthorization() {
-        var candidate = detected(
-            surfaces = setOf(
-                SelfChangeSurface.INSTANCE_IDENTITY,
-                SelfChangeSurface.GENESIS
-            )
+    fun criticalIdentityChangeRequiresSignedIndependentEvidenceAndSignedHumanAuthorization() {
+        val authority = authorityVerifier()
+        val observation = observation(
+            setOf(SelfChangeSurface.INSTANCE_IDENTITY, SelfChangeSurface.GENESIS)
         )
+        var candidate = patchCandidate(observation)
         assertEquals(SelfChangeRisk.CRITICAL, candidate.risk)
-
-        candidate = SelfImprovementProtocol.diagnose(candidate, SelfChangeActor.MORIMIL)
-        candidate = SelfImprovementProtocol.propose(candidate, SelfChangeActor.MORIMIL)
-        candidate = SelfImprovementProtocol.registerPatchCandidate(
-            candidate = candidate,
-            candidateDigest = PATCH_DIGEST,
-            baseCommitSha = BASE_SHA,
-            actor = SelfChangeActor.MORIMIL
-        )
-
-        assertThrows(IllegalArgumentException::class.java) {
-            SelfImprovementProtocol.verify(
-                candidate,
-                fullCriticalEvidence(),
-                SelfChangeActor.MORIMIL
-            )
-        }
 
         candidate = SelfImprovementProtocol.verify(
             candidate,
-            fullCriticalEvidence(),
-            SelfChangeActor.INDEPENDENT_VERIFIER
+            signedVerifierAttestation(observation, candidate, fullCriticalClaims()),
+            authority
         )
+        assertEquals(SelfChangeStage.VERIFIED, candidate.stage)
 
         assertThrows(IllegalArgumentException::class.java) {
-            SelfImprovementProtocol.authorize(candidate, SelfChangeActor.INDEPENDENT_VERIFIER)
-        }
-        assertThrows(IllegalArgumentException::class.java) {
-            SelfImprovementProtocol.authorize(candidate, SelfChangeActor.MORIMIL)
+            SelfImprovementProtocol.authorizeLowRiskFromIndependentVerification(candidate)
         }
 
-        candidate = SelfImprovementProtocol.authorize(
+        val humanAttestation = signedHumanAuthorization(
+            observation = observation,
+            candidate = candidate,
+            verificationDigest = requireNotNull(candidate.evidence).attestationDigest
+        )
+        candidate = SelfImprovementProtocol.authorizeHighRisk(
             candidate,
-            SelfChangeActor.HUMAN_AUTHORIZER
+            humanAttestation,
+            authority
         )
         candidate = SelfImprovementProtocol.markMergeReady(candidate)
 
         assertEquals(SelfChangeStage.MERGE_READY, candidate.stage)
-        assertEquals(SelfChangeActor.HUMAN_AUTHORIZER, candidate.authorizedBy)
+        assertEquals(SelfAuthorityRole.HUMAN_AUTHORIZER, candidate.authorization?.role)
+        assertEquals(HUMAN_ID, candidate.authorization?.signerId)
     }
 
     @Test
-    fun criticalChangeRejectsEvidenceWithoutCrossLanguageVectors() {
-        var candidate = detected(setOf(SelfChangeSurface.CANONICAL_MEMORY))
-        candidate = SelfImprovementProtocol.diagnose(candidate, SelfChangeActor.MORIMIL)
-        candidate = SelfImprovementProtocol.propose(candidate, SelfChangeActor.MORIMIL)
-        candidate = SelfImprovementProtocol.registerPatchCandidate(
-            candidate = candidate,
-            candidateDigest = PATCH_DIGEST,
-            baseCommitSha = BASE_SHA,
-            actor = SelfChangeActor.EXTERNAL_EXECUTOR
-        )
+    fun criticalChangeRejectsSignedEvidenceWithoutCrossLanguageVectors() {
+        val authority = authorityVerifier()
+        val observation = observation(setOf(SelfChangeSurface.CANONICAL_MEMORY))
+        val candidate = patchCandidate(observation)
+        val claims = fullCriticalClaims() - SelfVerificationClaim.CROSS_LANGUAGE_VECTORS
 
         val failure = assertThrows(IllegalArgumentException::class.java) {
             SelfImprovementProtocol.verify(
                 candidate,
-                fullCriticalEvidence().copy(crossLanguageVectorsPassed = false),
-                SelfChangeActor.INDEPENDENT_VERIFIER
+                signedVerifierAttestation(observation, candidate, claims),
+                authority
             )
         }
-        assertTrue(failure.message.orEmpty().contains("cross_language"))
+        assertTrue(failure.message.orEmpty().contains("required_evidence_missing"))
     }
 
     @Test
-    fun highRiskChangeRejectsMissingSandboxAndRollbackEvidence() {
-        var candidate = detected(setOf(SelfChangeSurface.SECURITY_BOUNDARY))
-        candidate = SelfImprovementProtocol.diagnose(candidate, SelfChangeActor.MORIMIL)
-        candidate = SelfImprovementProtocol.propose(candidate, SelfChangeActor.MORIMIL)
-        candidate = SelfImprovementProtocol.registerPatchCandidate(
+    fun forgedOrTamperedVerifierSignatureCannotAdvanceStage() {
+        val authority = authorityVerifier()
+        val observation = observation(setOf(SelfChangeSurface.SECURITY_BOUNDARY))
+        val candidate = patchCandidate(observation)
+        val signed = signedVerifierAttestation(observation, candidate, fullHighClaims())
+        val tampered = signed.copy(evidenceBundleDigest = "sha256:" + "f".repeat(64))
+
+        val failure = assertThrows(IllegalArgumentException::class.java) {
+            SelfImprovementProtocol.verify(candidate, tampered, authority)
+        }
+        assertTrue(failure.message.orEmpty().contains("signature"))
+    }
+
+    @Test
+    fun humanAuthorizationMustReferenceExactVerificationAttestation() {
+        val authority = authorityVerifier()
+        val observation = observation(setOf(SelfChangeSurface.SECURITY_BOUNDARY))
+        var candidate = patchCandidate(observation)
+        candidate = SelfImprovementProtocol.verify(
             candidate,
-            PATCH_DIGEST,
-            BASE_SHA,
-            SelfChangeActor.EXTERNAL_EXECUTOR
+            signedVerifierAttestation(observation, candidate, fullHighClaims()),
+            authority
         )
+        val wrongVerification = "sha256:" + "9".repeat(64)
+        val wrong = signedHumanAuthorization(observation, candidate, wrongVerification)
 
-        val missingSandbox = assertThrows(IllegalArgumentException::class.java) {
-            SelfImprovementProtocol.verify(
-                candidate,
-                fullCriticalEvidence().copy(sandboxIsolationPassed = false),
-                SelfChangeActor.INDEPENDENT_VERIFIER
-            )
+        val failure = assertThrows(IllegalArgumentException::class.java) {
+            SelfImprovementProtocol.authorizeHighRisk(candidate, wrong, authority)
         }
-        assertTrue(missingSandbox.message.orEmpty().contains("sandbox"))
+        assertTrue(failure.message.orEmpty().contains("authorization_not_bound"))
+    }
 
-        val missingRollback = assertThrows(IllegalArgumentException::class.java) {
-            SelfImprovementProtocol.verify(
-                candidate,
-                fullCriticalEvidence().copy(rollbackPlanReviewed = false),
-                SelfChangeActor.INDEPENDENT_VERIFIER
-            )
-        }
-        assertTrue(missingRollback.message.orEmpty().contains("rollback"))
+    @Test
+    fun lowRiskChangeCanUseAlreadyTrustedIndependentVerifierWithoutSelfAuthorization() {
+        val authority = authorityVerifier()
+        val observation = observation(setOf(SelfChangeSurface.PRESENTATION))
+        var candidate = patchCandidate(observation)
+        assertEquals(SelfChangeRisk.LOW, candidate.risk)
+        candidate = SelfImprovementProtocol.verify(
+            candidate,
+            signedVerifierAttestation(observation, candidate, baseClaims()),
+            authority
+        )
+        candidate = SelfImprovementProtocol.authorizeLowRiskFromIndependentVerification(candidate)
+
+        assertEquals(SelfChangeStage.AUTHORIZED, candidate.stage)
+        assertEquals(SelfAuthorityRole.INDEPENDENT_VERIFIER, candidate.authorization?.role)
+        assertEquals(VERIFIER_ID, candidate.authorization?.signerId)
     }
 
     @Test
@@ -130,96 +133,157 @@ class SelfImprovementProtocolTest {
     }
 
     @Test
-    fun presentationChangeStillCannotSelfAuthorize() {
-        var candidate = detected(setOf(SelfChangeSurface.PRESENTATION))
-        assertEquals(SelfChangeRisk.LOW, candidate.risk)
-        candidate = SelfImprovementProtocol.diagnose(candidate, SelfChangeActor.MORIMIL)
-        candidate = SelfImprovementProtocol.propose(candidate, SelfChangeActor.MORIMIL)
-        candidate = SelfImprovementProtocol.registerPatchCandidate(
-            candidate = candidate,
-            candidateDigest = PATCH_DIGEST,
-            baseCommitSha = BASE_SHA,
-            actor = SelfChangeActor.MORIMIL
-        )
-        candidate = SelfImprovementProtocol.verify(
-            candidate,
-            SelfChangeEvidence(
-                candidateDigest = PATCH_DIGEST,
-                baseCommitSha = BASE_SHA,
-                architectureReviewed = true,
-                compilationPassed = true,
-                unitTestsPassed = true,
-                staticAnalysisPassed = true,
-                exactBaseVerified = true
-            ),
-            SelfChangeActor.INDEPENDENT_VERIFIER
+    fun signedEvidenceForAnotherBaseCannotBeAttached() {
+        val authority = authorityVerifier()
+        val observation = observation(setOf(SelfChangeSurface.INSTANCE_IDENTITY))
+        val candidate = patchCandidate(observation)
+        val wrongBaseCandidate = candidate.copy(baseCommitSha = "b".repeat(40))
+        val attestation = signedVerifierAttestation(
+            observation,
+            wrongBaseCandidate,
+            fullCriticalClaims()
         )
 
-        assertThrows(IllegalArgumentException::class.java) {
-            SelfImprovementProtocol.authorize(candidate, SelfChangeActor.MORIMIL)
+        val failure = assertThrows(IllegalArgumentException::class.java) {
+            SelfImprovementProtocol.verify(candidate, attestation, authority)
         }
+        assertTrue(failure.message.orEmpty().contains("base_mismatch"))
     }
 
-    @Test
-    fun patchEvidenceCannotBeAttachedBeforePatchExistsOrToAnotherBase() {
-        val detected = detected(setOf(SelfChangeSurface.INSTANCE_IDENTITY))
-        assertEquals(null, detected.candidateDigest)
-        assertEquals(null, detected.baseCommitSha)
+    private fun observation(surfaces: Set<SelfChangeSurface>): SelfChangeObservation {
+        return SelfChangeObservation.create(
+            changeId = "change_portability_001",
+            problem = "Instance and Body boundaries must remain separable.",
+            proposal = "Generate a verified candidate change without self-authorization.",
+            surfaces = surfaces
+        )
+    }
 
-        var candidate = SelfImprovementProtocol.diagnose(detected, SelfChangeActor.MORIMIL)
+    private fun patchCandidate(observation: SelfChangeObservation): SelfChangeCandidate {
+        var candidate = SelfImprovementProtocol.detect(observation)
+        candidate = SelfImprovementProtocol.diagnose(candidate, SelfChangeActor.MORIMIL)
         candidate = SelfImprovementProtocol.propose(candidate, SelfChangeActor.MORIMIL)
-        candidate = SelfImprovementProtocol.registerPatchCandidate(
+        return SelfImprovementProtocol.registerPatchCandidate(
             candidate,
             PATCH_DIGEST,
             BASE_SHA,
             SelfChangeActor.EXTERNAL_EXECUTOR
         )
-
-        assertThrows(IllegalArgumentException::class.java) {
-            SelfImprovementProtocol.verify(
-                candidate,
-                fullCriticalEvidence().copy(baseCommitSha = "b".repeat(40)),
-                SelfChangeActor.INDEPENDENT_VERIFIER
-            )
-        }
     }
 
-    private fun detected(surfaces: Set<SelfChangeSurface>): SelfChangeCandidate {
-        return SelfImprovementProtocol.detect(
-            SelfChangeObservation.create(
-                changeId = "change_portability_001",
-                problem = "Instance and Body boundaries must remain separable.",
-                proposal = "Generate a verified candidate change without self-authorization.",
-                surfaces = surfaces
+    private fun authorityVerifier(): SelfImprovementAuthorityVerifier {
+        val verifier = verifierKeyPair()
+        val human = humanKeyPair()
+        return SelfImprovementAuthorityVerifier(
+            listOf(
+                SelfImprovementTrustedAuthorityKey(
+                    SelfAuthorityRole.INDEPENDENT_VERIFIER,
+                    VERIFIER_ID,
+                    SelfImprovementAuthorityProfile.sha256(verifier.publicKey),
+                    verifier.publicKey
+                ),
+                SelfImprovementTrustedAuthorityKey(
+                    SelfAuthorityRole.HUMAN_AUTHORIZER,
+                    HUMAN_ID,
+                    SelfImprovementAuthorityProfile.sha256(human.publicKey),
+                    human.publicKey
+                )
             )
         )
     }
 
-    private fun fullCriticalEvidence(): SelfChangeEvidence {
-        return SelfChangeEvidence(
-            candidateDigest = PATCH_DIGEST,
-            baseCommitSha = BASE_SHA,
-            architectureReviewed = true,
-            compilationPassed = true,
-            unitTestsPassed = true,
-            instrumentedTestsPassed = true,
-            staticAnalysisPassed = true,
-            securityChecksPassed = true,
-            reproducibilityPassed = true,
-            coverageReviewed = true,
-            mutationReviewed = true,
-            crossLanguageVectorsPassed = true,
-            sandboxIsolationPassed = true,
-            secretIsolationPassed = true,
-            blastRadiusReviewed = true,
-            rollbackPlanReviewed = true,
-            auditTrailRecorded = true,
-            exactBaseVerified = true
+    private fun signedVerifierAttestation(
+        observation: SelfChangeObservation,
+        candidate: SelfChangeCandidate,
+        claims: Set<SelfVerificationClaim>
+    ): SelfSignedAuthorityAttestation {
+        val pair = verifierKeyPair()
+        val draft = SelfSignedAuthorityAttestation(
+            role = SelfAuthorityRole.INDEPENDENT_VERIFIER,
+            signerId = VERIFIER_ID,
+            publicKeyRef = SelfImprovementAuthorityProfile.sha256(pair.publicKey),
+            observationDigest = observation.observationDigest,
+            candidateDigest = requireNotNull(candidate.candidateDigest),
+            baseCommitSha = requireNotNull(candidate.baseCommitSha),
+            evidenceBundleDigest = "sha256:" + "e".repeat(64),
+            claims = claims,
+            issuedAtMillis = 1000L,
+            nonce = "verify-nonce-001",
+            signatureValue = "0".repeat(128)
         )
+        return sign(draft, pair)
     }
+
+    private fun signedHumanAuthorization(
+        observation: SelfChangeObservation,
+        candidate: SelfChangeCandidate,
+        verificationDigest: String
+    ): SelfSignedAuthorityAttestation {
+        val pair = humanKeyPair()
+        val draft = SelfSignedAuthorityAttestation(
+            role = SelfAuthorityRole.HUMAN_AUTHORIZER,
+            signerId = HUMAN_ID,
+            publicKeyRef = SelfImprovementAuthorityProfile.sha256(pair.publicKey),
+            observationDigest = observation.observationDigest,
+            candidateDigest = requireNotNull(candidate.candidateDigest),
+            baseCommitSha = requireNotNull(candidate.baseCommitSha),
+            evidenceBundleDigest = verificationDigest,
+            claims = setOf(SelfVerificationClaim.HUMAN_AUTHORIZATION),
+            issuedAtMillis = 1100L,
+            nonce = "human-nonce-001",
+            signatureValue = "0".repeat(128)
+        )
+        return sign(draft, pair)
+    }
+
+    private fun sign(
+        draft: SelfSignedAuthorityAttestation,
+        pair: Ed25519Sign.KeyPair
+    ): SelfSignedAuthorityAttestation {
+        val signature = Ed25519Sign(pair.privateKey)
+            .sign(SelfImprovementAuthorityProfile.signingBytes(draft))
+        return draft.copy(signatureValue = signature.toLowerHex())
+    }
+
+    private fun baseClaims(): Set<SelfVerificationClaim> = setOf(
+        SelfVerificationClaim.PATCH_CONTENT_RECOMPUTED,
+        SelfVerificationClaim.EXACT_BASE,
+        SelfVerificationClaim.ARCHITECTURE_REVIEW,
+        SelfVerificationClaim.COMPILATION,
+        SelfVerificationClaim.UNIT_TESTS,
+        SelfVerificationClaim.STATIC_ANALYSIS
+    )
+
+    private fun fullHighClaims(): Set<SelfVerificationClaim> = baseClaims() + setOf(
+        SelfVerificationClaim.SECURITY_CHECKS,
+        SelfVerificationClaim.REPRODUCIBILITY,
+        SelfVerificationClaim.COVERAGE_REVIEW,
+        SelfVerificationClaim.MUTATION_REVIEW,
+        SelfVerificationClaim.SANDBOX_ISOLATION,
+        SelfVerificationClaim.SECRET_ISOLATION,
+        SelfVerificationClaim.BLAST_RADIUS_REVIEW,
+        SelfVerificationClaim.ROLLBACK_PLAN_REVIEW,
+        SelfVerificationClaim.AUDIT_TRAIL
+    )
+
+    private fun fullCriticalClaims(): Set<SelfVerificationClaim> = fullHighClaims() + setOf(
+        SelfVerificationClaim.INSTRUMENTED_TESTS,
+        SelfVerificationClaim.CROSS_LANGUAGE_VECTORS
+    )
+
+    private fun verifierKeyPair(): Ed25519Sign.KeyPair =
+        Ed25519Sign.KeyPair.newKeyPairFromSeed(ByteArray(32) { 0x41.toByte() })
+
+    private fun humanKeyPair(): Ed25519Sign.KeyPair =
+        Ed25519Sign.KeyPair.newKeyPairFromSeed(ByteArray(32) { 0x42.toByte() })
+
+    private fun ByteArray.toLowerHex(): String =
+        joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
 
     private companion object {
         val PATCH_DIGEST = "sha256:" + "a".repeat(64)
         const val BASE_SHA = "2a9171874e4539de5ee8b8808f45fcc5a0e651b8"
+        const val VERIFIER_ID = "verifier-01"
+        const val HUMAN_ID = "human-authorizer-01"
     }
 }
