@@ -47,7 +47,7 @@ internal enum class SelfChangeActor {
 }
 
 /** Stable immutable description of the observed problem before any patch exists. */
-internal data class SelfChangeObservation private constructor(
+internal class SelfChangeObservation private constructor(
     val changeId: String,
     val problem: String,
     val proposal: String,
