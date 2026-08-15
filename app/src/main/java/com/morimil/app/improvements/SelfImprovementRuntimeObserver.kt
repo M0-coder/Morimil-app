@@ -64,8 +64,7 @@ internal object SelfImprovementRuntimeObserver {
                 )
                 status = SelfImprovementRuntimeStatus.READY
             } catch (failure: Throwable) {
-                state = null
-                status = SelfImprovementRuntimeStatus.DEGRADED_AUDIT_UNAVAILABLE
+                degrade()
                 throw failure
             }
         }
@@ -77,24 +76,55 @@ internal object SelfImprovementRuntimeObserver {
         failureCount: Int,
         occurredAtMillis: Long
     ) {
-        state?.collector?.captureInternalRuntimeIssue(
-            component = component,
-            message = message,
-            failureCount = failureCount,
-            occurredAtMillis = occurredAtMillis
-        )
+        withReadyState { current ->
+            current.collector.captureInternalRuntimeIssue(
+                component = component,
+                message = message,
+                failureCount = failureCount,
+                occurredAtMillis = occurredAtMillis
+            )
+        }
     }
 
     fun reportChatError(error: String, occurredAtMillis: Long = System.currentTimeMillis()) {
-        state?.collector?.captureChatError(error, occurredAtMillis)
+        withReadyState { current ->
+            current.collector.captureChatError(error, occurredAtMillis)
+        }
     }
 
     fun reportMemoryAttention(occurredAtMillis: Long = System.currentTimeMillis()) {
-        state?.collector?.captureMemoryAttention(occurredAtMillis)
+        withReadyState { current ->
+            current.collector.captureMemoryAttention(occurredAtMillis)
+        }
     }
 
     fun readVerifiedAuditForDiagnostics(): List<SelfChangeAuditRecord> {
-        return state?.auditStore?.readVerifiedRecords().orEmpty()
+        val current = state ?: return emptyList()
+        return try {
+            current.auditStore.readVerifiedRecords()
+        } catch (failure: Throwable) {
+            synchronized(lock) {
+                if (state === current) degrade()
+            }
+            throw failure
+        }
+    }
+
+    private inline fun withReadyState(block: (State) -> Unit) {
+        val current = state ?: return
+        try {
+            block(current)
+        } catch (failure: Throwable) {
+            synchronized(lock) {
+                if (state === current) degrade()
+            }
+            throw failure
+        }
+    }
+
+    private fun degrade() {
+        state = null
+        status = SelfImprovementRuntimeStatus.DEGRADED_AUDIT_UNAVAILABLE
     }
 
     private data class State(
