@@ -29,7 +29,7 @@ internal data class SelfPatchArtifact(
             path.isBlank() || path.startsWith("/") || path.contains("\\") ||
                 path.split('/').any { segment -> segment.isBlank() || segment == "." || segment == ".." }
         }) { "self_patch_changed_path_invalid" }
-        require(patchByteCount in 1..SelfPatchSafetyPolicy.MAX_PATCH_BYTES) {
+        require(patchByteCount in 1L..SelfPatchSafetyPolicy.MAX_PATCH_BYTES) {
             "self_patch_size_out_of_bounds"
         }
         require(patchRef.isNotBlank()) { "self_patch_ref_blank" }
