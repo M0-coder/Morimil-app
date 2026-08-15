@@ -121,6 +121,35 @@ RECOVERY
 
 High surfaces include security, build/supply-chain and reasoning-runtime changes.
 
+## Autonomous runtime observation
+
+`SelfImprovementRuntimeObserver` is initialized from `MorimilApplication` with app-private storage only. It is not given Git, release-signing, install, merge or protected-main authority.
+
+Current source-level autonomous producers include:
+
+- chat/reasoning errors at `MorimilChatCoordinator`;
+- memory-signing / Android Keystore failures at `MemorySigningRuntimeIssues`.
+
+Each signal is converted to a content-bound `SelfChangeObservation`, classified conservatively across all matching risk surfaces, recorded only at `DETECTED`, and also fed into the existing local Improvements proposal store. Repeated identical observations are deduplicated within a bounded cooldown.
+
+A failure or corruption in this auxiliary self-improvement control plane disables its capture path rather than taking the primary Morimil runtime down. It does not become availability authority.
+
+## Durable self-change audit
+
+`SelfImprovementAuditStore` persists local operational control-plane evidence as an append-only hash chain under app-private storage.
+
+Properties:
+
+- monotonically increasing sequence;
+- previous-record digest chaining;
+- observation, stage, actor, candidate/base binding when present;
+- SHA-256 record digest;
+- fsync after every append;
+- full-chain re-verification after append and on recovery;
+- truncation, tampering, malformed fields, digest mismatch and sequence gaps fail closed.
+
+This audit is **not canonical living memory**, does not define Instance identity, and does not become writer or Guardian authority.
+
 ## External execution and independent verification ports
 
 `SelfPatchExecutorPort` is the sandbox code-generation boundary. It can return only a patch artifact bound to an exact base commit and canonical changed paths.
@@ -131,7 +160,7 @@ High surfaces include security, build/supply-chain and reasoning-runtime changes
 
 There is intentionally **no merge port**, release port, production-signing port, install port or protected-main mutation method in the self-improvement orchestrator.
 
-The current Android Body has no production implementation of the external patch executor/verifier ports. They are intended for a separately controlled development host/Body and must not be represented as already operational.
+The current Android Body still has no production implementation of the external patch executor/verifier ports. They are intended for a separately controlled development host/Body and must not be represented as already operational.
 
 ## Adversarial safety envelope
 
@@ -141,7 +170,7 @@ Generated patches are fail-closed before independent verification:
 - a candidate is limited to 128 changed paths;
 - patch representation is limited to 2 MiB;
 - `.git` paths are forbidden;
-- `.env`, `local.properties`, keystores, PKCS containers, PEM and private-key paths are forbidden;
+- root or nested `.env*`, `local.properties`, keystores, PKCS containers, PEM and private-key paths are forbidden, case-insensitively;
 - a patch executor receives no merge, release, production-signing or install capability from this port.
 
 High/critical verification additionally requires affirmative evidence for:
@@ -162,6 +191,14 @@ Critical changes additionally require instrumented tests and cross-language vect
 
 These controls exist to prevent a self-improvement mechanism from acquiring authority by editing its own trust boundary, stealing release material, silently widening scope, or declaring its own patch correct.
 
+## QA-7 remote-ageing correction discovered during this work
+
+The candidate exposed a pre-existing QA-7 mismatch: its doctrine said a newly published remote dependency version must not make an unchanged repository fail, but the algorithm only remembered dependency coordinates that already emitted a warning at baseline capture.
+
+The ratchet now freezes the complete dependency-coordinate inventory already present in the baseline `app/build.gradle.kts`. A coordinate that later becomes outdated due only to remote publication is distinguished from a new dependency coordinate introduced by the candidate. Warning ceilings and all non-dependency warning fingerprints remain enforced.
+
+This QA-7 correction does not update dependency versions or disable `GradleDependency` globally.
+
 ## Evidence requirements
 
 Every verified patch is bound to one exact `candidateDigest` and exact `baseCommitSha`.
@@ -181,10 +218,9 @@ Known remaining work includes:
 3. Production Body and Guardian trust stores are Android implementations. Provider-neutral interfaces exist in portions of the signing protocol, but the complete Birth composition is not yet platform-neutral.
 4. External patch-executor and independent-verifier ports are defined, but no production development-host implementation is connected yet.
 5. Executor/verifier identity separation in this candidate is an application governance invariant, not yet a cryptographically attested remote identity protocol.
-6. The existing Improvements signal scan remains UI-triggered; runtime-autonomous observation/capture is not yet wired to this new protocol.
-7. `auditTrailRecorded` is verifier evidence; a dedicated durable self-change audit store/port is not yet integrated.
-8. Morimil cannot claim successful self-repair merely because it generated a patch. Independent evidence and the applicable authorization boundary remain mandatory.
-9. There is no direct self-merge capability by design.
+6. Autonomous runtime capture currently covers connected error producers; it is not represented as omniscient detection of every possible architectural defect.
+7. Morimil cannot claim successful self-repair merely because it generated or requested a patch. Independent evidence and the applicable authorization boundary remain mandatory.
+8. There is no direct self-merge capability by design.
 
 ## Required next gates
 
@@ -206,13 +242,14 @@ Before returning to `BIRTH-PROVENANCE-00`:
 PORT_001_INSTANCE_ID_BODY_COUPLING=CORRECTED_IN_CANDIDATE
 SELF_IMPROVEMENT_GOVERNANCE=IMPLEMENTED_IN_CANDIDATE
 SELF_OBSERVATION_CONTENT_BINDING=IMPLEMENTED_IN_CANDIDATE
+SELF_RUNTIME_SIGNAL_AUTONOMY=IMPLEMENTED_FOR_CONNECTED_PRODUCERS_IN_CANDIDATE
+SELF_DURABLE_AUDIT_STORE=IMPLEMENTED_IN_CANDIDATE
 SELF_PATCH_EXECUTOR_PORT=DEFINED
 SELF_INDEPENDENT_VERIFIER_PORT=DEFINED
 SELF_PATCH_SCOPE_LIMITS=IMPLEMENTED_IN_CANDIDATE
 SELF_SECRET_PATH_MUTATION=FORBIDDEN
 SELF_PATCH_PRODUCTION_EXECUTOR=NOT_IMPLEMENTED
-SELF_RUNTIME_SIGNAL_AUTONOMY=OPEN
-SELF_DURABLE_AUDIT_STORE=OPEN
+SELF_INDEPENDENT_VERIFIER_CONNECTION=NOT_IMPLEMENTED
 SELF_MERGE_PORT=ABSENT_BY_DESIGN
 SELF_AUTHORIZATION=FORBIDDEN
 F5_BODY_SUCCESSION=OPEN
