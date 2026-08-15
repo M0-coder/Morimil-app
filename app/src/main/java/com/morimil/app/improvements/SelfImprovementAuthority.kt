@@ -6,6 +6,8 @@ import java.nio.charset.StandardCharsets
 import java.security.GeneralSecurityException
 import java.security.MessageDigest
 import java.text.Normalizer
+import java.util.Collections
+import java.util.LinkedHashSet
 
 /** External authority roles that Morimil cannot satisfy by merely naming itself as the actor. */
 internal enum class SelfAuthorityRole {
@@ -166,32 +168,33 @@ internal class SelfImprovementAuthorityVerifier(
         expectedCandidateDigest: String,
         expectedBaseCommitSha: String
     ): SelfVerifiedEvidence {
-        require(attestation.role == SelfAuthorityRole.INDEPENDENT_VERIFIER) {
+        val snapshot = immutableSnapshot(attestation)
+        require(snapshot.role == SelfAuthorityRole.INDEPENDENT_VERIFIER) {
             "self_authority_independent_verifier_required"
         }
-        require(SelfVerificationClaim.HUMAN_AUTHORIZATION !in attestation.claims) {
+        require(SelfVerificationClaim.HUMAN_AUTHORIZATION !in snapshot.claims) {
             "self_authority_verifier_cannot_claim_human_authorization"
         }
-        require(attestation.observationDigest == expectedObservationDigest) {
+        require(snapshot.observationDigest == expectedObservationDigest) {
             "self_authority_observation_mismatch"
         }
-        require(attestation.candidateDigest == expectedCandidateDigest) {
+        require(snapshot.candidateDigest == expectedCandidateDigest) {
             "self_authority_candidate_mismatch"
         }
-        require(attestation.baseCommitSha == expectedBaseCommitSha) {
+        require(snapshot.baseCommitSha == expectedBaseCommitSha) {
             "self_authority_base_mismatch"
         }
-        val attestationDigest = requireValidSignature(attestation)
+        val attestationDigest = requireValidSignature(snapshot)
         return SelfVerifiedEvidence(
-            observationDigest = attestation.observationDigest,
-            candidateDigest = attestation.candidateDigest,
-            baseCommitSha = attestation.baseCommitSha,
-            verifierId = attestation.signerId,
-            verifierPublicKeyRef = attestation.publicKeyRef,
-            evidenceBundleDigest = attestation.evidenceBundleDigest,
-            claims = attestation.claims.toSet(),
+            observationDigest = snapshot.observationDigest,
+            candidateDigest = snapshot.candidateDigest,
+            baseCommitSha = snapshot.baseCommitSha,
+            verifierId = snapshot.signerId,
+            verifierPublicKeyRef = snapshot.publicKeyRef,
+            evidenceBundleDigest = snapshot.evidenceBundleDigest,
+            claims = snapshot.claims,
             attestationDigest = attestationDigest,
-            issuedAtMillis = attestation.issuedAtMillis
+            issuedAtMillis = snapshot.issuedAtMillis
         )
     }
 
@@ -204,39 +207,49 @@ internal class SelfImprovementAuthorityVerifier(
         expectedVerifierId: String,
         expectedVerifierPublicKeyRef: String
     ): SelfAuthorizationEvidence {
-        require(attestation.role == SelfAuthorityRole.HUMAN_AUTHORIZER) {
+        val snapshot = immutableSnapshot(attestation)
+        require(snapshot.role == SelfAuthorityRole.HUMAN_AUTHORIZER) {
             "self_authority_human_authorizer_required"
         }
-        require(attestation.claims == setOf(SelfVerificationClaim.HUMAN_AUTHORIZATION)) {
+        require(snapshot.claims == setOf(SelfVerificationClaim.HUMAN_AUTHORIZATION)) {
             "self_authority_human_claim_set_invalid"
         }
-        require(attestation.signerId != expectedVerifierId) {
+        require(snapshot.signerId != expectedVerifierId) {
             "self_authority_human_verifier_identity_separation_required"
         }
-        require(attestation.publicKeyRef != expectedVerifierPublicKeyRef) {
+        require(snapshot.publicKeyRef != expectedVerifierPublicKeyRef) {
             "self_authority_human_verifier_key_separation_required"
         }
-        require(attestation.observationDigest == expectedObservationDigest) {
+        require(snapshot.observationDigest == expectedObservationDigest) {
             "self_authority_observation_mismatch"
         }
-        require(attestation.candidateDigest == expectedCandidateDigest) {
+        require(snapshot.candidateDigest == expectedCandidateDigest) {
             "self_authority_candidate_mismatch"
         }
-        require(attestation.baseCommitSha == expectedBaseCommitSha) {
+        require(snapshot.baseCommitSha == expectedBaseCommitSha) {
             "self_authority_base_mismatch"
         }
-        require(attestation.evidenceBundleDigest == expectedVerificationAttestationDigest) {
+        require(snapshot.evidenceBundleDigest == expectedVerificationAttestationDigest) {
             "self_authority_authorization_not_bound_to_verification"
         }
-        val attestationDigest = requireValidSignature(attestation)
+        val attestationDigest = requireValidSignature(snapshot)
         return SelfAuthorizationEvidence(
             role = SelfAuthorityRole.HUMAN_AUTHORIZER,
-            signerId = attestation.signerId,
-            signerPublicKeyRef = attestation.publicKeyRef,
+            signerId = snapshot.signerId,
+            signerPublicKeyRef = snapshot.publicKeyRef,
             authorizationAttestationDigest = attestationDigest,
             verificationAttestationDigest = expectedVerificationAttestationDigest,
-            issuedAtMillis = attestation.issuedAtMillis
+            issuedAtMillis = snapshot.issuedAtMillis
         )
+    }
+
+    private fun immutableSnapshot(
+        attestation: SelfSignedAuthorityAttestation
+    ): SelfSignedAuthorityAttestation {
+        val claimsSnapshot: Set<SelfVerificationClaim> = Collections.unmodifiableSet(
+            LinkedHashSet(attestation.claims)
+        )
+        return attestation.copy(claims = claimsSnapshot)
     }
 
     private fun requireValidSignature(attestation: SelfSignedAuthorityAttestation): String {
