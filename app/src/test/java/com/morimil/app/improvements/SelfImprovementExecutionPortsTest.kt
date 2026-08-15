@@ -97,14 +97,23 @@ class SelfImprovementExecutionPortsTest {
 
     @Test
     fun patchCannotContainCredentialMaterialOrUnboundedDiff() {
-        assertThrows(IllegalArgumentException::class.java) {
-            SelfPatchArtifact(
-                candidateDigest = PATCH_DIGEST,
-                baseCommitSha = BASE_SHA,
-                changedPaths = listOf("release/morimil-production.jks"),
-                patchByteCount = 128,
-                patchRef = "branch:credential-write"
-            )
+        listOf(
+            "release/morimil-production.jks",
+            "release/MORIMIL-PRODUCTION.JKS",
+            "config/.env",
+            "config/.env.production",
+            "nested/local.properties",
+            ".git/config"
+        ).forEach { forbiddenPath ->
+            assertThrows(IllegalArgumentException::class.java) {
+                SelfPatchArtifact(
+                    candidateDigest = PATCH_DIGEST,
+                    baseCommitSha = BASE_SHA,
+                    changedPaths = listOf(forbiddenPath),
+                    patchByteCount = 128,
+                    patchRef = "branch:credential-write"
+                )
+            }
         }
         assertThrows(IllegalArgumentException::class.java) {
             SelfPatchArtifact(
