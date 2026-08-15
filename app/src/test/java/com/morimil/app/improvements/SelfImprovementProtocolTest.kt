@@ -48,11 +48,23 @@ class SelfImprovementProtocolTest {
     }
 
     @Test
-    fun candidateHasNoPublicConstructorOrGeneratedCopyEscape() {
+    fun candidateHasNoSourceVisibleConstructorOrGeneratedCopyEscape() {
+        val sourceConstructors = SelfChangeCandidate::class.java.declaredConstructors
+            .filterNot { constructor -> constructor.isSynthetic }
+        assertTrue(sourceConstructors.isNotEmpty())
         assertTrue(
-            SelfChangeCandidate::class.java.declaredConstructors.all { constructor ->
+            sourceConstructors.all { constructor ->
                 Modifier.isPrivate(constructor.modifiers)
             }
+        )
+        assertTrue(
+            SelfChangeCandidate::class.java.declaredConstructors
+                .filter { constructor -> constructor.isSynthetic }
+                .all { constructor ->
+                    constructor.parameterTypes.any { parameter ->
+                        parameter.name == "kotlin.jvm.internal.DefaultConstructorMarker"
+                    }
+                }
         )
         assertFalse(
             SelfChangeCandidate::class.java.declaredMethods.any { method -> method.name == "copy" }
