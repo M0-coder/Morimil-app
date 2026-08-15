@@ -25,6 +25,7 @@ internal object SelfImprovementRuntimeObserver {
             // Fail closed on existing audit corruption before enabling new capture.
             auditStore.readVerifiedRecords()
             state = State(
+                auditStore = auditStore,
                 collector = SelfImprovementSignalCollector(auditStore),
                 proposalStore = ImprovementProposalStore(appContext)
             )
@@ -75,18 +76,12 @@ internal object SelfImprovementRuntimeObserver {
     }
 
     fun readVerifiedAuditForDiagnostics(): List<SelfChangeAuditRecord> {
-        val active = state ?: return emptyList()
-        return active.auditStore().readVerifiedRecords()
+        return state?.auditStore?.readVerifiedRecords().orEmpty()
     }
 
     private data class State(
+        val auditStore: SelfImprovementAuditStore,
         val collector: SelfImprovementSignalCollector,
         val proposalStore: ImprovementProposalStore
-    ) {
-        fun auditStore(): SelfImprovementAuditStore {
-            val field = SelfImprovementSignalCollector::class.java.getDeclaredField("auditStore")
-            field.isAccessible = true
-            return field.get(collector) as SelfImprovementAuditStore
-        }
-    }
+    )
 }
