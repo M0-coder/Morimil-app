@@ -53,7 +53,9 @@ The default `platformProfile = android-kotlin` therefore describes the first Bod
 
 `tools/genesis/verify_instance_id_v02.py` independently implements the framing and SHA-256 procedure in Python and must produce the identical identifier.
 
-This is the first explicit portability proof for the revised Instance-id profile. Future implementations in another runtime must consume the same golden vectors before they can claim compatibility.
+`Reference Checks` executes the Python verifier in CI, so the cross-language vector is not documentation-only.
+
+Future implementations in another runtime must consume the same golden vectors before they can claim compatibility.
 
 ## Self-improvement capability model
 
@@ -69,13 +71,22 @@ DETECTED
 -> MERGE_READY
 ```
 
+The pre-patch stages are bound to an `observationDigest`. No `candidateDigest` exists until an actual patch has been generated. `PATCH_CANDIDATE` then binds:
+
+```text
+candidateDigest
++ exact baseCommitSha
+```
+
+Independent evidence must match both values exactly.
+
 Morimil may participate directly in:
 
 ```text
 detect
 diagnose
 propose
-generate/register patch candidate
+request/generate a sandbox patch candidate
 ```
 
 Morimil may not perform its own independent verification or authorization.
@@ -84,6 +95,8 @@ Morimil may not perform its own independent verification or authorization.
 MORIMIL_AS_INDEPENDENT_VERIFIER = FORBIDDEN
 MORIMIL_SELF_AUTHORIZATION = FORBIDDEN
 ```
+
+Risk is computed from affected surfaces and cannot be supplied by a caller to downgrade a critical change.
 
 High/critical changes require explicit human authorization after independent verification.
 
@@ -100,9 +113,21 @@ RECOVERY
 
 High surfaces include security, build/supply-chain and reasoning-runtime changes.
 
+## External execution and independent verification ports
+
+`SelfPatchExecutorPort` is the sandbox code-generation boundary. It can return only a patch artifact bound to an exact base commit and canonical changed paths.
+
+`SelfIndependentVerifierPort` is a separate evidence-producing boundary.
+
+`SelfImprovementOrchestrator` requires different executor and verifier identities and stops at `VERIFIED`.
+
+There is intentionally **no merge port**, release port, production-signing port, install port or protected-main mutation method in the self-improvement orchestrator.
+
+The current Android Body has no production implementation of the external patch executor/verifier ports. They are intended for a separately controlled development host/Body and must not be represented as already operational.
+
 ## Evidence requirements
 
-Every verified candidate is bound to one exact `candidateDigest` and exact-main base evidence.
+Every verified patch is bound to one exact `candidateDigest` and exact `baseCommitSha`.
 
 Baseline verification requires architecture review, compilation, unit tests and static analysis.
 
@@ -121,8 +146,10 @@ Known remaining work includes:
 1. Canonical post-Birth memory verification currently assumes the supplied active Body/key epoch for the recovered chain. Multi-Body historical verification and writer-epoch succession remain F5 work.
 2. Atomic Birth persistence is implemented directly on Android Room/`MorimilDatabase`; a portable persistence port is not yet the production boundary.
 3. Production Body and Guardian trust stores are Android implementations. Provider-neutral interfaces exist in portions of the signing protocol, but the complete Birth composition is not yet platform-neutral.
-4. There is no production external code executor connected to `SelfImprovementProtocol`; the protocol governs self-change candidates but does not grant Git/GitHub, filesystem, build-host or merge authority to the Android Body.
-5. Morimil cannot claim successful self-repair merely because it generated a patch. Independent evidence and the applicable authorization boundary remain mandatory.
+4. External patch-executor and independent-verifier ports are defined, but no production development-host implementation is connected yet.
+5. Executor/verifier identity separation in this candidate is an application governance invariant, not yet a cryptographically attested remote identity protocol.
+6. Morimil cannot claim successful self-repair merely because it generated a patch. Independent evidence and the applicable authorization boundary remain mandatory.
+7. There is no direct self-merge capability by design.
 
 ## Required next gates
 
@@ -143,8 +170,10 @@ Before returning to `BIRTH-PROVENANCE-00`:
 ```text
 PORT_001_INSTANCE_ID_BODY_COUPLING=CORRECTED_IN_CANDIDATE
 SELF_IMPROVEMENT_GOVERNANCE=IMPLEMENTED_IN_CANDIDATE
-SELF_PATCH_EXTERNAL_EXECUTOR=NOT_IMPLEMENTED
-SELF_INDEPENDENT_VERIFICATION_BYPASS=FORBIDDEN
+SELF_PATCH_EXECUTOR_PORT=DEFINED
+SELF_INDEPENDENT_VERIFIER_PORT=DEFINED
+SELF_PATCH_PRODUCTION_EXECUTOR=NOT_IMPLEMENTED
+SELF_MERGE_PORT=ABSENT_BY_DESIGN
 SELF_AUTHORIZATION=FORBIDDEN
 F5_BODY_SUCCESSION=OPEN
 F6_PHYSICAL_CONTINUITY=OPEN
