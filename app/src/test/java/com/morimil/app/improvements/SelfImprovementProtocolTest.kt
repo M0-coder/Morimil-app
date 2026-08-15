@@ -110,6 +110,26 @@ class SelfImprovementProtocolTest {
     }
 
     @Test
+    fun observationDigestCannotBeDetachedFromProblemStatement() {
+        val observation = SelfChangeObservation.create(
+            changeId = "change_portability_001",
+            problem = "Instance and Body boundaries must remain separable.",
+            proposal = "Generate a verified candidate change without self-authorization.",
+            surfaces = setOf(SelfChangeSurface.INSTANCE_IDENTITY)
+        )
+
+        assertThrows(IllegalArgumentException::class.java) {
+            SelfChangeObservation(
+                changeId = observation.changeId,
+                problem = "A different problem statement.",
+                proposal = observation.proposal,
+                surfaces = observation.surfaces,
+                observationDigest = observation.observationDigest
+            )
+        }
+    }
+
+    @Test
     fun presentationChangeStillCannotSelfAuthorize() {
         var candidate = detected(setOf(SelfChangeSurface.PRESENTATION))
         assertEquals(SelfChangeRisk.LOW, candidate.risk)
@@ -166,12 +186,11 @@ class SelfImprovementProtocolTest {
 
     private fun detected(surfaces: Set<SelfChangeSurface>): SelfChangeCandidate {
         return SelfImprovementProtocol.detect(
-            SelfChangeObservation(
+            SelfChangeObservation.create(
                 changeId = "change_portability_001",
                 problem = "Instance and Body boundaries must remain separable.",
                 proposal = "Generate a verified candidate change without self-authorization.",
-                surfaces = surfaces,
-                observationDigest = OBSERVATION_DIGEST
+                surfaces = surfaces
             )
         )
     }
@@ -200,7 +219,6 @@ class SelfImprovementProtocolTest {
     }
 
     private companion object {
-        val OBSERVATION_DIGEST = "sha256:" + "9".repeat(64)
         val PATCH_DIGEST = "sha256:" + "a".repeat(64)
         const val BASE_SHA = "2a9171874e4539de5ee8b8808f45fcc5a0e651b8"
     }
