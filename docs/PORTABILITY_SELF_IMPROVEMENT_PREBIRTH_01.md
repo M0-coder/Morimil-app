@@ -71,7 +71,15 @@ DETECTED
 -> MERGE_READY
 ```
 
-The pre-patch stages are bound to an `observationDigest`. No `candidateDigest` exists until an actual patch has been generated. `PATCH_CANDIDATE` then binds:
+The pre-patch stages are bound to a content-derived `observationDigest` under:
+
+```text
+morimil.self_improvement.observation.v1
+```
+
+That digest commits to the change id, exact problem, exact proposal and canonically ordered affected surfaces. Editing any of those fields invalidates the observation identity.
+
+No `candidateDigest` exists until an actual patch has been generated. `PATCH_CANDIDATE` then binds:
 
 ```text
 candidateDigest
@@ -119,11 +127,40 @@ High surfaces include security, build/supply-chain and reasoning-runtime changes
 
 `SelfIndependentVerifierPort` is a separate evidence-producing boundary.
 
-`SelfImprovementOrchestrator` requires different executor and verifier identities and stops at `VERIFIED`.
+`SelfImprovementOrchestrator` requires different executor and verifier identities, rejects an executor that substitutes another base SHA, and stops at `VERIFIED`.
 
 There is intentionally **no merge port**, release port, production-signing port, install port or protected-main mutation method in the self-improvement orchestrator.
 
 The current Android Body has no production implementation of the external patch executor/verifier ports. They are intended for a separately controlled development host/Body and must not be represented as already operational.
+
+## Adversarial safety envelope
+
+Generated patches are fail-closed before independent verification:
+
+- changed paths must be canonical, unique and sorted;
+- a candidate is limited to 128 changed paths;
+- patch representation is limited to 2 MiB;
+- `.git` paths are forbidden;
+- `.env`, `local.properties`, keystores, PKCS containers, PEM and private-key paths are forbidden;
+- a patch executor receives no merge, release, production-signing or install capability from this port.
+
+High/critical verification additionally requires affirmative evidence for:
+
+```text
+security checks
+reproducibility
+coverage review
+mutation review
+sandbox isolation
+secret isolation
+blast-radius review
+rollback-plan review
+audit-trail recording
+```
+
+Critical changes additionally require instrumented tests and cross-language vectors.
+
+These controls exist to prevent a self-improvement mechanism from acquiring authority by editing its own trust boundary, stealing release material, silently widening scope, or declaring its own patch correct.
 
 ## Evidence requirements
 
@@ -131,13 +168,9 @@ Every verified patch is bound to one exact `candidateDigest` and exact `baseComm
 
 Baseline verification requires architecture review, compilation, unit tests and static analysis.
 
-High/critical candidates additionally require security checks, reproducibility review, coverage review and mutation review.
-
-Critical candidates additionally require instrumented tests and cross-language vectors.
-
 Passing a check does not imply a stronger guarantee than the evidence actually executed.
 
-## Residual portability debt — not silently declared solved
+## Residual portability and autonomy debt — not silently declared solved
 
 This candidate does **not** complete F5 or F6.
 
@@ -148,8 +181,10 @@ Known remaining work includes:
 3. Production Body and Guardian trust stores are Android implementations. Provider-neutral interfaces exist in portions of the signing protocol, but the complete Birth composition is not yet platform-neutral.
 4. External patch-executor and independent-verifier ports are defined, but no production development-host implementation is connected yet.
 5. Executor/verifier identity separation in this candidate is an application governance invariant, not yet a cryptographically attested remote identity protocol.
-6. Morimil cannot claim successful self-repair merely because it generated a patch. Independent evidence and the applicable authorization boundary remain mandatory.
-7. There is no direct self-merge capability by design.
+6. The existing Improvements signal scan remains UI-triggered; runtime-autonomous observation/capture is not yet wired to this new protocol.
+7. `auditTrailRecorded` is verifier evidence; a dedicated durable self-change audit store/port is not yet integrated.
+8. Morimil cannot claim successful self-repair merely because it generated a patch. Independent evidence and the applicable authorization boundary remain mandatory.
+9. There is no direct self-merge capability by design.
 
 ## Required next gates
 
@@ -170,9 +205,14 @@ Before returning to `BIRTH-PROVENANCE-00`:
 ```text
 PORT_001_INSTANCE_ID_BODY_COUPLING=CORRECTED_IN_CANDIDATE
 SELF_IMPROVEMENT_GOVERNANCE=IMPLEMENTED_IN_CANDIDATE
+SELF_OBSERVATION_CONTENT_BINDING=IMPLEMENTED_IN_CANDIDATE
 SELF_PATCH_EXECUTOR_PORT=DEFINED
 SELF_INDEPENDENT_VERIFIER_PORT=DEFINED
+SELF_PATCH_SCOPE_LIMITS=IMPLEMENTED_IN_CANDIDATE
+SELF_SECRET_PATH_MUTATION=FORBIDDEN
 SELF_PATCH_PRODUCTION_EXECUTOR=NOT_IMPLEMENTED
+SELF_RUNTIME_SIGNAL_AUTONOMY=OPEN
+SELF_DURABLE_AUDIT_STORE=OPEN
 SELF_MERGE_PORT=ABSENT_BY_DESIGN
 SELF_AUTHORIZATION=FORBIDDEN
 F5_BODY_SUCCESSION=OPEN
