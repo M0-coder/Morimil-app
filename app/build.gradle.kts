@@ -388,12 +388,20 @@ val verifyReleaseUnsignedBoundary = tasks.register("verifyReleaseUnsignedBoundar
             "releaseUnsigned must retain the release fallback"
         }
 
+        val allowedReleaseUnsignedDebugMetadataTasks = setOf(
+            "mergeReleaseUnsignedNativeDebugMetadata",
+            "stripReleaseUnsignedDebugSymbols"
+        )
         val debugTasks = gradle.taskGraph.allTasks
-            .filter { task -> task.project == project && task.name.contains("debug", ignoreCase = true) }
+            .filter { task ->
+                task.project == project &&
+                    task.name.contains("debug", ignoreCase = true) &&
+                    task.name !in allowedReleaseUnsignedDebugMetadataTasks
+            }
             .map { task -> task.path }
             .sorted()
         check(debugTasks.isEmpty()) {
-            "Unsigned release flow must not include debug tasks: $debugTasks"
+            "Unsigned release flow must not include debug-variant tasks: $debugTasks"
         }
     }
 }

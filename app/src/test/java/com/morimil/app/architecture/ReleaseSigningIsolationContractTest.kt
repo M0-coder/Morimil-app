@@ -62,7 +62,7 @@ class ReleaseSigningIsolationContractTest {
     }
 
     @Test
-    fun wholeSecretsObjectInsideAnotherStepIsRejectedWhileNamedCountRemainsFive() {
+    fun wholeSecretsObjectInsideAnotherStepIsRejectedWhileNamedCountStillFive() {
         val mutated = workflow.replaceFirst(
             "        env:\n          EXPECTED_UNSIGNED_SHA256:",
             "        env:\n          LEAK: ${'$'}{{ toJSON(secrets) }}\n          EXPECTED_UNSIGNED_SHA256:"
@@ -479,7 +479,7 @@ internal object ReleaseWorkflowPolicy {
     )
 
     private const val expectedNormalizedGradleSha256 =
-        "f6ed90f22c7a6256db04c4f81f3b17992bb4bc3a33bda1a2bac76f727ecb3d27"
+        "52efac11c59ad696fce8506649ec4a419ba34d64782351aff457d5211535c38b"
 
     fun validate(source: String): Boolean = runCatching {
         validateOrThrow(source)
